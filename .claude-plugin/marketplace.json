@@ -9,6 +9,12 @@
       "source": "./plugins/marksman-lsp",
       "description": "Markdown LSP - 링크 완성, 정의 이동, 참조 찾기, 진단",
       "version": "1.0.0"
+    },
+    {
+      "name": "smart-lsp",
+      "source": "./plugins/smart-lsp",
+      "description": "Smart LSP usage with safe operations and intelligent guidance",
+      "version": "0.1.0"
     }
   ]
 }
