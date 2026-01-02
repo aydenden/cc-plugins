@@ -1,0 +1,17 @@
+{
+  "name": "marksman-lsp",
+  "description": "Markdown language server for enhanced markdown editing - links, references, diagnostics",
+  "version": "1.0.0",
+  "author": {
+    "name": "aydenden"
+  },
+  "lspServers": {
+    "marksman": {
+      "command": "marksman",
+      "args": ["server"],
+      "extensionToLanguage": {
+        ".md": "markdown"
+      }
+    }
+  }
+}

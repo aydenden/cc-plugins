@@ -1,0 +1,14 @@
+{
+  "name": "aydenden-plugins",
+  "owner": {
+    "name": "aydenden"
+  },
+  "plugins": [
+    {
+      "name": "marksman-lsp",
+      "source": "./plugins/marksman-lsp",
+      "description": "Markdown LSP - 링크 완성, 정의 이동, 참조 찾기, 진단",
+      "version": "1.0.0"
+    }
+  ]
+}
