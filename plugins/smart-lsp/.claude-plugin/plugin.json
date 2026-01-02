@@ -1,8 +1,0 @@
-{
-  "name": "smart-lsp",
-  "description": "Smart LSP usage with safe operations and intelligent guidance",
-  "version": "0.1.0",
-  "author": {
-    "name": "aydenden"
-  }
-}
