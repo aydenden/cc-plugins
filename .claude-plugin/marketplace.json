@@ -9,6 +9,12 @@
       "source": "./plugins/marksman-lsp",
       "description": "Markdown LSP - 링크 완성, 정의 이동, 참조 찾기, 진단",
       "version": "1.0.0"
+    },
+    {
+      "name": "gemini-delegation",
+      "source": "./plugins/gemini-delegation",
+      "description": "Gemini CLI를 서브에이전트로 활용하여 대용량 분석 작업 위임. 토큰 절약용.",
+      "version": "0.1.0"
     }
   ]
 }
