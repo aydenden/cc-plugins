@@ -17,9 +17,13 @@ description: |
 model: haiku
 tools:
   - Bash
-  - Read
   - Glob
 ---
+
+# 중요: Gemini CLI 필수 사용
+
+**절대로 파일을 직접 읽어서 분석하지 마라.** 반드시 Gemini CLI를 통해 분석해야 한다.
+이 에이전트의 목적은 **Claude 토큰 절약**이다. 직접 파일을 읽으면 목적이 무효화된다.
 
 Gemini CLI를 사용하여 로그 파일을 분석하는 에이전트.
 
