@@ -40,27 +40,27 @@ PR, 커밋, 특정 파일의 코드 변경사항을 Gemini CLI로 리뷰하고 �
 
 ### PR/브랜치 리뷰
 ```bash
-git diff origin/main...HEAD | gemini -p "이 코드 변경사항을 리뷰해줘. 버그, 보안 취약점, 코드 품질 문제를 찾고, 각 이슈에 대해 심각도(Critical/Major/Minor)와 수정 제안을 해줘." --output-format json
+git diff origin/main...HEAD | gemini "이 코드 변경사항을 리뷰해줘. 버그, 보안 취약점, 코드 품질 문제를 찾고, 각 이슈에 대해 심각도(Critical/Major/Minor)와 수정 제안을 해줘." --output-format json
 ```
 
 ### 스테이징된 변경사항 리뷰
 ```bash
-git diff --cached | gemini -p "커밋 예정인 변경사항을 리뷰해줘. 잠재적 버그, 누락된 에러 처리, 성능 문제를 찾아줘." --output-format json
+git diff --cached | gemini "커밋 예정인 변경사항을 리뷰해줘. 잠재적 버그, 누락된 에러 처리, 성능 문제를 찾아줘." --output-format json
 ```
 
 ### 특정 파일 보안 리뷰
 ```bash
-gemini -p "이 코드의 보안 취약점을 분석해줘. SQL 인젝션, XSS, 인증 우회, 민감 정보 노출 등 OWASP Top 10 기준으로 검토해줘." @./src/auth.ts --output-format json
+gemini "이 코드의 보안 취약점을 분석해줘. SQL 인젝션, XSS, 인증 우회, 민감 정보 노출 등 OWASP Top 10 기준으로 검토해줘. @./src/auth.ts" --output-format json
 ```
 
 ### 특정 커밋 리뷰
 ```bash
-git show HEAD --format="" | gemini -p "이 커밋의 변경사항을 리뷰해줘. 변경 의도가 명확한지, 버그가 있는지, 테스트가 충분한지 평가해줘." --output-format json
+git show HEAD --format="" | gemini "이 커밋의 변경사항을 리뷰해줘. 변경 의도가 명확한지, 버그가 있는지, 테스트가 충분한지 평가해줘." --output-format json
 ```
 
 ### 코드 품질 리뷰
 ```bash
-gemini -p "이 코드의 품질을 평가해줘. 가독성, 유지보수성, 설계 패턴 준수 여부를 검토하고 개선점을 제안해줘." @./src/service.ts --output-format json
+gemini "이 코드의 품질을 평가해줘. 가독성, 유지보수성, 설계 패턴 준수 여부를 검토하고 개선점을 제안해줘. @./src/service.ts" --output-format json
 ```
 
 ## 결과 포맷
@@ -97,3 +97,11 @@ gemini -p "이 코드의 품질을 평가해줘. 가독성, 유지보수성, 설
 - 대규모 diff는 파일별로 나누어 리뷰
 - 보안 리뷰 결과는 민감 정보로 취급
 - 리뷰 결과 기반 수정은 Claude Code가 직접 수행
+- `DeprecationWarning: punycode` 경고는 무시 (Node.js 내부 경고)
+
+## Gemini CLI 실행 시
+
+stderr 경고를 숨기려면 `2>/dev/null` 사용:
+```bash
+git diff | gemini "프롬프트" --output-format json 2>/dev/null
+```

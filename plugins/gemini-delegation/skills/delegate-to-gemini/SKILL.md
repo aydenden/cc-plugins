@@ -44,13 +44,13 @@ description: "대용량 코드/로그 분석 시 자동 트리거. Gemini CLI로
 
 ```bash
 # 파일 분석
-gemini -p "분석 요청" @./파일경로 --output-format json
+gemini "분석 요청 @./파일경로" --output-format json
 
 # 파이프 입력
-cat 파일.log | gemini -p "분석 요청" --output-format json
+cat 파일.log | gemini "분석 요청" --output-format json
 
 # git diff 분석
-git diff origin/main...HEAD | gemini -p "리뷰 요청" --output-format json
+git diff origin/main...HEAD | gemini "리뷰 요청" --output-format json
 ```
 
 ## 제한사항

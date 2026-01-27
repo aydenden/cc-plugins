@@ -40,17 +40,17 @@ Gemini CLI를 사용하여 코드베이스를 분석하는 에이전트.
 
 ### 전체 아키텍처 분석
 ```bash
-gemini -p "이 프로젝트의 아키텍처를 분석해줘. 주요 모듈, 디렉토리 구조, 핵심 파일을 설명하고, 데이터 흐름과 의존성 관계를 요약해줘." @./src --output-format json
+gemini "이 프로젝트의 아키텍처를 분석해줘. 주요 모듈, 디렉토리 구조, 핵심 파일을 설명하고, 데이터 흐름과 의존성 관계를 요약해줘. @./src" --output-format json
 ```
 
 ### 특정 패턴/기능 탐색
 ```bash
-gemini -p "인증(authentication) 관련 코드를 찾아서 흐름을 설명해줘. 관련 파일, 함수, 미들웨어를 나열하고 인증 프로세스를 요약해줘." @./src --output-format json
+gemini "인증(authentication) 관련 코드를 찾아서 흐름을 설명해줘. 관련 파일, 함수, 미들웨어를 나열하고 인증 프로세스를 요약해줘. @./src" --output-format json
 ```
 
 ### 의존성 분석
 ```bash
-gemini -p "이 프로젝트의 주요 의존성과 모듈 간 관계를 분석해줘. 순환 의존성이나 문제점이 있으면 지적해줘." @./src @./package.json --output-format json
+gemini "이 프로젝트의 주요 의존성과 모듈 간 관계를 분석해줘. 순환 의존성이나 문제점이 있으면 지적해줘. @./src @./package.json" --output-format json
 ```
 
 ## 결과 포맷
@@ -78,3 +78,11 @@ gemini -p "이 프로젝트의 주요 의존성과 모듈 간 관계를 분석�
 - 분석 대상이 너무 크면 하위 디렉토리로 나누어 분석
 - Gemini 응답이 JSON이 아닌 경우 텍스트로 처리
 - 에러 발생 시 상세 에러 메시지 포함하여 반환
+- `DeprecationWarning: punycode` 경고는 무시 (Node.js 내부 경고)
+
+## Gemini CLI 실행 시
+
+stderr 경고를 숨기려면 `2>/dev/null` 사용:
+```bash
+gemini "프롬프트" --output-format json 2>/dev/null
+```

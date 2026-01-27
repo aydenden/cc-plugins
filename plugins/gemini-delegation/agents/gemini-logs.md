@@ -40,27 +40,27 @@ Gemini CLI를 사용하여 로그 파일을 분석하는 에이전트.
 
 ### 에러 로그 분석
 ```bash
-cat error.log | gemini -p "이 에러 로그를 분석해줘. 에러 유형별로 분류하고, 빈도를 파악하고, 가장 심각한 에러의 원인과 해결책을 제안해줘." --output-format json
+cat error.log | gemini "이 에러 로그를 분석해줘. 에러 유형별로 분류하고, 빈도를 파악하고, 가장 심각한 에러의 원인과 해결책을 제안해줘." --output-format json
 ```
 
 ### 최근 에러만 분석
 ```bash
-tail -500 error.log | gemini -p "최근 에러들을 분석해줘. 반복되는 패턴이 있는지, 특정 시간대에 집중되는지 확인하고 원인을 추론해줘." --output-format json
+tail -500 error.log | gemini "최근 에러들을 분석해줘. 반복되는 패턴이 있는지, 특정 시간대에 집중되는지 확인하고 원인을 추론해줘." --output-format json
 ```
 
 ### 특정 에러 필터링 분석
 ```bash
-grep -i "error\|exception\|fatal" app.log | tail -200 | gemini -p "이 에러들의 패턴을 분석하고 근본 원인을 추론해줘." --output-format json
+grep -i "error\|exception\|fatal" app.log | tail -200 | gemini "이 에러들의 패턴을 분석하고 근본 원인을 추론해줘." --output-format json
 ```
 
 ### 성능 로그 분석
 ```bash
-cat perf.log | gemini -p "성능 로그를 분석해줘. 응답 시간이 느린 요청, 병목 지점, 리소스 사용량 이상을 찾아서 최적화 방안을 제안해줘." --output-format json
+cat perf.log | gemini "성능 로그를 분석해줘. 응답 시간이 느린 요청, 병목 지점, 리소스 사용량 이상을 찾아서 최적화 방안을 제안해줘." --output-format json
 ```
 
 ### 보안 로그 분석
 ```bash
-cat security.log | gemini -p "보안 로그를 분석해줘. 의심스러운 접근 시도, 실패한 인증, 비정상적인 패턴을 찾아서 보안 위험을 평가해줘." --output-format json
+cat security.log | gemini "보안 로그를 분석해줘. 의심스러운 접근 시도, 실패한 인증, 비정상적인 패턴을 찾아서 보안 위험을 평가해줘." --output-format json
 ```
 
 ## 결과 포맷
@@ -93,3 +93,11 @@ cat security.log | gemini -p "보안 로그를 분석해줘. 의심스러운 접
 - 로그 파일이 매우 큰 경우 tail/head로 범위 제한
 - 민감한 정보(비밀번호, 토큰 등)가 포함된 로그 주의
 - JSON 파싱 실패 시 텍스트 응답 그대로 반환
+- `DeprecationWarning: punycode` 경고는 무시 (Node.js 내부 경고)
+
+## Gemini CLI 실행 시
+
+stderr 경고를 숨기려면 `2>/dev/null` 사용:
+```bash
+cat log.log | gemini "프롬프트" --output-format json 2>/dev/null
+```
