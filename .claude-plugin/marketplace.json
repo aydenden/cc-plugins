@@ -11,9 +11,9 @@
       "version": "1.0.0"
     },
     {
-      "name": "gemini-delegation",
-      "source": "./plugins/gemini-delegation",
-      "description": "Gemini CLI를 서브에이전트로 활용하여 대용량 분석 작업 위임. 토큰 절약용.",
+      "name": "workflow",
+      "source": "./plugins/workflow",
+      "description": "beads 작업 생성 워크플로우 자동화 - 자연어 프롬프트를 epic/task 구조로 변환",
       "version": "0.1.0"
     }
   ]
