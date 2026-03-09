@@ -7,23 +7,44 @@ description: 종목 스크리닝 워크플로우. 여러 종목의 핵심 지표
 
 ## Workflow
 
-### Step 1: 대상 종목 확인
+### Step 1: 시장 전체 랭킹 조회 (선택적)
 
-사용자가 제공한 종목코드 목록을 파싱. 공백으로 구분.
+사용자가 특정 종목을 지정하지 않았거나 "오늘 뭐가 좋아?" 류의 질문인 경우, 랭킹 API로 후보를 선정:
 
-### Step 2: 데이터 수집 (종목별 병렬)
+```bash
+# 거래량 상위 — 시장 관심 종목 파악
+bun run plugins/korean-trading/scripts/kis/volume-rank.ts
+
+# 등락률 상위 — 모멘텀 종목 파악
+bun run plugins/korean-trading/scripts/kis/fluctuation-rank.ts
+
+# 시가총액 상위 — 대형주 중심 안정 후보
+bun run plugins/korean-trading/scripts/kis/market-cap-rank.ts
+
+# 외국인/기관 순매수 상위 — 스마트머니 흐름
+bun run plugins/korean-trading/scripts/kis/foreign-institution-total.ts
+```
+
+위 결과에서 2개 이상 랭킹에 중복 등장하는 종목을 우선 후보로 선정.
+
+### Step 2: 대상 종목 확인
+
+사용자가 제공한 종목코드 목록을 파싱하거나, Step 1에서 선정된 후보 목록을 사용.
+
+### Step 3: 데이터 수집 (종목별 병렬)
 
 각 종목에 대해 아래 스크립트를 **동시에** 실행:
 
 ```bash
 # 각 종목마다:
+bun run plugins/korean-trading/scripts/kis/current-price.ts {ticker}   # 현재가, 시총, PER/PBR, 52주 고저
 bun run plugins/korean-trading/scripts/kis/ohlcv.ts {ticker}
 bun run plugins/korean-trading/scripts/kis/investor-trend.ts {ticker}
 bun run plugins/korean-trading/scripts/kis/financial-ratio.ts {ticker}
 bun run plugins/korean-trading/scripts/market/sector.ts {ticker}
 ```
 
-### Step 3: 비교 테이블 작성
+### Step 4: 비교 테이블 작성
 
 수집된 데이터에서 핵심 지표를 추출하여 비교:
 
@@ -31,6 +52,8 @@ bun run plugins/korean-trading/scripts/market/sector.ts {ticker}
 | 항목 | {종목1} | {종목2} | ... |
 |------|---------|---------|-----|
 | 현재가 | | | |
+| 시가총액 | | | |
+| 52주 고점 대비 | | | |
 | 등락률 (1일) | | | |
 | 등락률 (1주) | | | |
 | 등락률 (1개월) | | | |
@@ -43,14 +66,14 @@ bun run plugins/korean-trading/scripts/market/sector.ts {ticker}
 | 섹터 | | | |
 ```
 
-### Step 4: 매력도 평가
+### Step 5: 매력도 평가
 
 3개 축으로 점수화:
 - **수급 (40%)**: 외국인+기관 순매수 강도
 - **모멘텀 (30%)**: 1주/1개월 수익률 + 거래량 추세
 - **밸류에이션 (30%)**: PER/PBR 대비 ROE 효율
 
-### Step 5: 순위 출력
+### Step 6: 순위 출력
 
 ```
 ## 종합 순위

@@ -75,6 +75,41 @@ await test("KIS", ["KIS_APP_KEY", "KIS_APP_SECRET"], async () => {
   if (!json.access_token) throw new Error("No token returned");
 });
 
+await test("KIS_CURRENT_PRICE", ["KIS_APP_KEY", "KIS_APP_SECRET"], async () => {
+  const { kisGet } = await import("./common/kis-auth.ts");
+  const json = await kisGet<{ output?: { stck_prpr?: string } }>(
+    "/uapi/domestic-stock/v1/quotations/inquire-price",
+    "FHKST01010100",
+    { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: "005930" },
+  );
+  if (!json.output?.stck_prpr) throw new Error("No price data");
+});
+
+await test("KIS_VOLUME_RANK", ["KIS_APP_KEY", "KIS_APP_SECRET"], async () => {
+  const { kisGet } = await import("./common/kis-auth.ts");
+  const json = await kisGet<{ output?: unknown[] }>(
+    "/uapi/domestic-stock/v1/quotations/volume-rank",
+    "FHPST01710000",
+    {
+      FID_COND_MRKT_DIV_CODE: "J", FID_COND_SCR_DIV_CODE: "20171",
+      FID_INPUT_ISCD: "0001", FID_DIV_CLS_CODE: "0", FID_BLNG_CLS_CODE: "0",
+      FID_TRGT_CLS_CODE: "111111111", FID_TRGT_EXLS_CLS_CODE: "0000000000",
+      FID_INPUT_PRICE_1: "", FID_INPUT_PRICE_2: "", FID_VOL_CNT: "", FID_INPUT_DATE_1: "",
+    },
+  );
+  if (!json.output) throw new Error("No ranking data");
+});
+
+await test("KIS_OVERSEAS", ["KIS_APP_KEY", "KIS_APP_SECRET"], async () => {
+  const { kisGet } = await import("./common/kis-auth.ts");
+  const json = await kisGet<{ output?: { last?: string } }>(
+    "/uapi/overseas-price/v1/quotations/price",
+    "HHDFS00000300",
+    { AUTH: "", EXCD: "NAS", SYMB: "AAPL" },
+  );
+  if (!json.output?.last) throw new Error("No overseas price");
+});
+
 await test("DART", ["DART_API_KEY"], async () => {
   const resp = await fetch(
     `https://opendart.fss.or.kr/api/company.json?crtfc_key=${Bun.env.DART_API_KEY}&corp_code=00126380`,
@@ -93,6 +128,33 @@ await test("NAVER_NEWS", ["NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET"], async () =>
     },
   );
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+});
+
+await test("KOREAEXIM", ["KOREAEXIM_API_KEY"], async () => {
+  const resp = await fetch(
+    `https://oapi.koreaexim.go.kr/site/program/financial/exchangeJSON?authkey=${Bun.env.KOREAEXIM_API_KEY}&data=AP01`,
+  );
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const json = await resp.json() as Array<{ result?: number }>;
+  if (!json.length || json[0].result !== 1) throw new Error("No exchange rate data");
+});
+
+await test("DATA_GO_KR", ["DATA_GO_KR_API_KEY"], async () => {
+  const resp = await fetch(
+    `https://apis.data.go.kr/1160100/service/GetMarketIndexInfoService/getStockMarketIndex?serviceKey=${Bun.env.DATA_GO_KR_API_KEY}&resultType=json&numOfRows=1&pageNo=1`,
+  );
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const json = await resp.json() as { response?: { header?: { resultCode?: string } } };
+  if (json.response?.header?.resultCode !== "00") throw new Error("API error");
+});
+
+await test("ALPHA_VANTAGE", ["ALPHA_VANTAGE_API_KEY"], async () => {
+  const resp = await fetch(
+    `https://www.alphavantage.co/query?function=WTI&interval=monthly&apikey=${Bun.env.ALPHA_VANTAGE_API_KEY}`,
+  );
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const json = await resp.json() as { name?: string; data?: unknown[] };
+  if (!json.data) throw new Error("No commodity data");
 });
 
 // --- Output ---

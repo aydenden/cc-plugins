@@ -40,3 +40,18 @@ bun run plugins/korean-trading/scripts/ecos/indicators.ts all
 ### 장단기 스프레드
 - `bond_10y - bond_2y > 0`: 정상 — 경제 확장 기대
 - `bond_10y - bond_2y < 0`: 역전 — 경기침체 시그널 (6~18개월 선행)
+
+## 보충 데이터 소스
+
+ECOS 외 채권/지수 데이터가 필요한 경우 아래 스크립트를 추가로 활용:
+
+```bash
+# 채권 시세 상세 (국고채, 회사채, 신용스프레드 등)
+bun run plugins/korean-trading/scripts/fsc/bond-price.ts
+
+# 채권 지수 (KIS 채권지수, 종합채권지수 등)
+bun run plugins/korean-trading/scripts/fsc/market-index.ts bond
+```
+
+- `bond-price.ts`: 금융투자협회 기반 개별 채권 시세, 신용등급별 금리 비교에 유용
+- `market-index.ts bond`: 채권 지수 추이, ECOS의 국고채 금리와 교차 검증 가능

@@ -9,7 +9,7 @@ description: 장 전 모닝 브리핑 워크플로우. 글로벌 오버나이트
 
 ### Step 1: 데이터 수집 (병렬)
 
-아래 4개 스크립트를 **동시에** 실행하여 수집:
+아래 스크립트를 **동시에** 실행하여 수집:
 
 ```bash
 # 글로벌 오버나이트 (VIX, 달러, 환율, 금리)
@@ -23,6 +23,15 @@ bun run plugins/korean-trading/scripts/kis/index-price.ts
 
 # 한국 매크로 (기준금리, 국고채, CPI, 실업률)
 bun run plugins/korean-trading/scripts/ecos/indicators.ts all
+
+# 해외 주요 ETF 현재가 (글로벌 시장 흐름)
+bun run plugins/korean-trading/scripts/kis/overseas-price.ts NAS SPY    # S&P500
+bun run plugins/korean-trading/scripts/kis/overseas-price.ts NAS QQQ    # NASDAQ
+bun run plugins/korean-trading/scripts/kis/overseas-price.ts NYS EWY    # Korea ETF
+
+# 해외 ETF 추세 확인 (일봉)
+bun run plugins/korean-trading/scripts/kis/overseas-daily.ts NAS SPY
+bun run plugins/korean-trading/scripts/kis/overseas-daily.ts NAS QQQ
 ```
 
 ### Step 2: 레짐 판단
@@ -50,6 +59,14 @@ bun run plugins/korean-trading/scripts/ecos/indicators.ts all
 - 달러지수: {값}
 - 원/달러: {값} ({전일 대비})
 - 미 10년물: {값}
+
+## 글로벌 시장
+| 지수 | 종가 | 등락률 | 5일 추세 |
+|------|------|--------|---------|
+| S&P500 (SPY) | ${값} | {등락률}% | {추세} |
+| NASDAQ (QQQ) | ${값} | {등락률}% | {추세} |
+| Korea ETF (EWY) | ${값} | {등락률}% | {추세} |
+- EWY 등락률 vs KOSPI 등락률 괴리 → 외국인 자금 유출입 시그널
 
 ## 한국 시장
 - KOSPI: {값} ({등락률})

@@ -1,6 +1,6 @@
 ---
 name: kis-market-data
-description: KIS(한국투자증권) API를 통한 국내 주식 시장 데이터 조회. 일봉, 투자자동향, 공매도, 신용잔고, 재무비율, 지수, 프로그램매매, 컨센서스, 선물 데이터 조회 시 자동 활성화.
+description: KIS(한국투자증권) API를 통한 국내/해외 주식 시장 데이터 조회. 일봉, 투자자동향, 공매도, 신용잔고, 재무비율, 지수, 프로그램매매, 컨센서스, 선물, 현재가, 거래량순위, 등락률순위, 시총순위, 외국인/기관순매수, 분봉, 해외주식 데이터 조회 시 자동 활성화.
 ---
 
 # KIS 시장 데이터
@@ -44,6 +44,44 @@ bun run plugins/korean-trading/scripts/kis/consensus.ts 005930
 
 # 선물/옵션 (KOSPI200)
 bun run plugins/korean-trading/scripts/kis/futures.ts
+
+# --- Phase 6: 현재가/랭킹/분봉/해외주식 ---
+
+# 종목 현재가 (가격, 시총, PER/PBR, 52주 고저, 외국인순매수)
+bun run plugins/korean-trading/scripts/kis/current-price.ts 005930
+
+# 거래량 순위 (코스피/코스닥)
+bun run plugins/korean-trading/scripts/kis/volume-rank.ts              # 코스피 기본
+bun run plugins/korean-trading/scripts/kis/volume-rank.ts kosdaq       # 코스닥
+
+# 등락률 순위 (상승/하락)
+bun run plugins/korean-trading/scripts/kis/fluctuation-rank.ts         # 상승 상위
+bun run plugins/korean-trading/scripts/kis/fluctuation-rank.ts down    # 하락 상위
+
+# 시가총액 순위
+bun run plugins/korean-trading/scripts/kis/market-cap-rank.ts          # 코스피 기본
+bun run plugins/korean-trading/scripts/kis/market-cap-rank.ts kosdaq   # 코스닥
+
+# 외국인/기관 순매수 상위
+bun run plugins/korean-trading/scripts/kis/foreign-institution-total.ts          # 외국인 순매수 상위
+bun run plugins/korean-trading/scripts/kis/foreign-institution-total.ts sell     # 외국인 순매도 상위
+bun run plugins/korean-trading/scripts/kis/foreign-institution-total.ts buy inst # 기관 순매수 상위
+
+# 당일 분봉 (장중만 유효)
+bun run plugins/korean-trading/scripts/kis/minute-chart.ts 005930      # 1분봉 기본
+bun run plugins/korean-trading/scripts/kis/minute-chart.ts 005930 5    # 5분봉
+bun run plugins/korean-trading/scripts/kis/minute-chart.ts 005930 30   # 30분봉
+
+# 해외주식 현재가 (NAS/NYS/AMS/HKS/TSE)
+bun run plugins/korean-trading/scripts/kis/overseas-price.ts NAS AAPL   # 나스닥 애플
+bun run plugins/korean-trading/scripts/kis/overseas-price.ts NYS SPY    # NYSE SPY
+bun run plugins/korean-trading/scripts/kis/overseas-price.ts HKS 00700  # 홍콩 텐센트
+bun run plugins/korean-trading/scripts/kis/overseas-price.ts TSE 7203   # 도쿄 도요타
+
+# 해외주식 일봉/주봉/월봉
+bun run plugins/korean-trading/scripts/kis/overseas-daily.ts NAS AAPL          # 일봉 기본
+bun run plugins/korean-trading/scripts/kis/overseas-daily.ts NAS AAPL W        # 주봉
+bun run plugins/korean-trading/scripts/kis/overseas-daily.ts NYS SPY M         # 월봉
 ```
 
 ## 해석 가이드
@@ -69,6 +107,26 @@ bun run plugins/korean-trading/scripts/kis/futures.ts
 ### 컨센서스
 - 목표가 상향 조정 추세 → 긍정적
 - "매수" → "중립" 하향 → 경고 시그널
+
+### 현재가 데이터
+- 52주 고점 대비 -20% 이상 → 과매도 구간 가능
+- 외국인 순매수 양수 + 기관 순매수 양수 → 수급 우호적
+- PER/PBR이 현재가 기준 실시간 → 재무비율 스크립트보다 최신
+
+### 랭킹 데이터
+- 거래량 상위 = 시장 관심 종목, 변동성 큼
+- 등락률 상위 = 테마/이슈 관련 가능성, 추격매수 주의
+- 시총 상위 = 대형주 중심, 안정적 수급
+- 외국인/기관 순매수 상위 = 스마트머니 흐름, 중기 추세 참고
+
+### 분봉 (장중 전용)
+- 장 시작 직후(09:00~09:30) 분봉은 변동성 과대 → 해석 주의
+- 거래량 동반 가격 이탈 시 의미 있는 돌파
+
+### 해외주식
+- 거래소 코드: NAS(나스닥), NYS(뉴욕), AMS(아멕스), HKS(홍콩), TSE(도쿄)
+- 해외 시간대 주의: 미국장 09:30~16:00 ET, 한국시간 23:30~06:00
+- 해외 현재가는 해당 거래소 영업시간 외 조회 시 전일 종가 반환
 
 ## 주요 종목코드
 

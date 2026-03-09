@@ -26,7 +26,10 @@ claude --plugin-dir ./plugins/korean-trading
     "FRED_API_KEY": "your-fred-api-key",
     "DART_API_KEY": "your-dart-api-key",
     "NAVER_CLIENT_ID": "your-naver-client-id",
-    "NAVER_CLIENT_SECRET": "your-naver-client-secret"
+    "NAVER_CLIENT_SECRET": "your-naver-client-secret",
+    "KOREAEXIM_API_KEY": "your-koreaexim-api-key",
+    "DATA_GO_KR_API_KEY": "your-data-go-kr-api-key",
+    "ALPHA_VANTAGE_API_KEY": "your-alpha-vantage-api-key"
   }
 }
 ```
@@ -41,6 +44,9 @@ claude --plugin-dir ./plugins/korean-trading
 | **FRED** | https://fred.stlouisfed.org/docs/api/api_key.html | VIX, 달러지수, 미 국채, 환율 |
 | **DART** | https://opendart.fss.or.kr | 기업 공시, 재무제표 |
 | **Naver** | https://developers.naver.com/apps | 뉴스 검색 |
+| **한국수출입은행** | https://www.koreaexim.go.kr/ir/HPHKIR020M01?apino=2 | 환율 |
+| **공공데이터포털** | https://www.data.go.kr/ | FSC 채권시세, 시장지수 |
+| **Alpha Vantage** | https://www.alphavantage.co/support/#api-key | 원자재 시세 (WTI, 구리 등) |
 
 > 모든 키가 필요하지는 않습니다. 필요한 데이터 소스의 키만 등록하면 해당 기능만 사용할 수 있습니다.
 
@@ -101,6 +107,11 @@ curl -fsSL https://bun.sh/install | bash
 | `krx-index` | "VKOSPI 얼마야?" |
 | `dart-disclosure` | "삼성전자 최근 공시 뭐 있어?" |
 | `risk-sizing` | "10만원 투자하면 몇 주 사야 돼?" |
+| `global-commodities` | "원유 가격 어때?", "구리 시세 확인해줘" |
+| `dcf-valuation` | "삼성전자 DCF 분석해줘" |
+| `peer-comps` | "반도체 섹터 밸류에이션 비교해줘" |
+| `earnings-analysis` | "삼성전자 실적 분석해줘" |
+| `3-statements` | "삼성전자 재무제표 보여줘" |
 
 ## 스크립트 직접 실행
 
@@ -130,6 +141,16 @@ bun run plugins/korean-trading/scripts/kis/credit.ts 005930
 bun run plugins/korean-trading/scripts/kis/program-trade.ts 005930
 bun run plugins/korean-trading/scripts/kis/futures.ts
 
+# KIS Phase 6 — 현재가/랭킹/분봉/해외주식
+bun run plugins/korean-trading/scripts/kis/current-price.ts 005930
+bun run plugins/korean-trading/scripts/kis/volume-rank.ts
+bun run plugins/korean-trading/scripts/kis/fluctuation-rank.ts
+bun run plugins/korean-trading/scripts/kis/market-cap-rank.ts
+bun run plugins/korean-trading/scripts/kis/foreign-institution-total.ts
+bun run plugins/korean-trading/scripts/kis/minute-chart.ts 005930
+bun run plugins/korean-trading/scripts/kis/overseas-price.ts NAS AAPL
+bun run plugins/korean-trading/scripts/kis/overseas-daily.ts NAS AAPL
+
 # DART
 bun run plugins/korean-trading/scripts/dart/corp-codes.ts 005930
 bun run plugins/korean-trading/scripts/dart/disclosure.ts 005930 disclosures
@@ -143,6 +164,17 @@ bun run plugins/korean-trading/scripts/market/overnight.ts
 
 # WICS 섹터
 bun run plugins/korean-trading/scripts/market/sector.ts 005930
+
+# 환율 (한국수출입은행)
+bun run plugins/korean-trading/scripts/koreaexim/exchange-rate.ts
+
+# FSC 채권/지수 (공공데이터포털)
+bun run plugins/korean-trading/scripts/fsc/bond-price.ts
+bun run plugins/korean-trading/scripts/fsc/market-index.ts bond
+
+# 원자재 시세 (Alpha Vantage)
+bun run plugins/korean-trading/scripts/alphavantage/commodities.ts WTI daily
+bun run plugins/korean-trading/scripts/alphavantage/commodities.ts COPPER daily
 
 # 통합 검증 (모든 API 연결 테스트)
 bun run plugins/korean-trading/scripts/test-all.ts
@@ -215,6 +247,11 @@ plugins/korean-trading/
 │   ├── dart-disclosure/SKILL.md
 │   ├── ecos-macro/SKILL.md
 │   ├── fred-macro/SKILL.md
+│   ├── global-commodities/SKILL.md
+│   ├── dcf-valuation/SKILL.md
+│   ├── peer-comps/SKILL.md
+│   ├── earnings-analysis/SKILL.md
+│   ├── 3-statements/SKILL.md
 │   └── risk-sizing/
 │       ├── SKILL.md
 │       └── references/position-sizing.md
@@ -226,9 +263,12 @@ plugins/korean-trading/
     ├── fred/indicators.ts
     ├── ecos/indicators.ts
     ├── krx/vkospi.ts, sector-index.ts
-    ├── kis/ohlcv.ts, investor-trend.ts, ...  (9개)
+    ├── kis/ohlcv.ts, investor-trend.ts, ...  (17개)
     ├── dart/corp-codes.ts, disclosure.ts
     ├── news/search.ts
     ├── market/overnight.ts, sector.ts
+    ├── koreaexim/exchange-rate.ts
+    ├── fsc/bond-price.ts, market-index.ts
+    ├── alphavantage/commodities.ts
     └── test-all.ts
 ```

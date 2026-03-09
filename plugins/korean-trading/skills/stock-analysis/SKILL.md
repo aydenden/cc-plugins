@@ -12,6 +12,9 @@ description: 종목 종합 분석 워크플로우. 가격, 수급, 재무, 공�
 대상 종목코드를 확인한 뒤, 아래 스크립트를 **동시에** 실행:
 
 ```bash
+# 현재가 (가격, 시총, PER/PBR, 52주 고저, 외국인순매수)
+bun run plugins/korean-trading/scripts/kis/current-price.ts {ticker}
+
 # 가격 데이터 (3개월 일봉)
 bun run plugins/korean-trading/scripts/kis/ohlcv.ts {ticker}
 
@@ -65,7 +68,7 @@ bun run plugins/korean-trading/scripts/market/sector.ts {ticker}
 
 ```
 ## 기본 정보
-종목: {종목명} ({ticker}) | 섹터: {섹터} | 현재가: {가격}원
+종목: {종목명} ({ticker}) | 섹터: {섹터} | 현재가: {가격}원 | 시총: {시총}억
 
 ## 기술적 분석
 - 추세: {상승/하락/횡보} (이동평균 기준)
@@ -82,6 +85,7 @@ bun run plugins/korean-trading/scripts/market/sector.ts {ticker}
 
 ## 펀더멘탈
 - PER: {값} | PBR: {값} | ROE: {값}%
+- 52주 고점/저점: {고점}원 / {저점}원 (현재가 위치: {백분율}%)
 - 컨센서스: {목표가}원 (현재가 대비 {괴리율}%)
 
 ## 주요 이벤트

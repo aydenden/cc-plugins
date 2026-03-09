@@ -24,6 +24,9 @@ const RATE_LIMITS: Record<string, number> = {
   "opendart.fss.or.kr": 1000,
   "ecos.bok.or.kr": 1000,
   "api.stlouisfed.org": 500,
+  "oapi.koreaexim.go.kr": 1000,
+  "apis.data.go.kr": 1000,
+  "www.alphavantage.co": 12000,
 };
 
 function getDelayForHost(url: string): number {
