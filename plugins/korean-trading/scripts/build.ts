@@ -48,6 +48,7 @@ for (const entry of entrypoints) {
     outdir: outDir,
     target: "node",
     format: "esm",
+    minify: true,
   });
 
   if (!result.success) {
