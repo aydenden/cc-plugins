@@ -21,5 +21,8 @@ Thumbs.db
 .memsearch
 .beads
 
+# Environment
+.env
+
 # Korean Trading Plugin
 plugins/korean-trading/scripts/dart/corp_codes.json

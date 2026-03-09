@@ -60,23 +60,10 @@ await test("KRX", ["KRX_API_KEY"], async () => {
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 });
 
-await test("KIS", ["KIS_APP_KEY", "KIS_APP_SECRET"], async () => {
-  const resp = await fetch("https://openapi.koreainvestment.com:9443/oauth2/tokenP", {
-    method: "POST",
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({
-      grant_type: "client_credentials",
-      appkey: Bun.env.KIS_APP_KEY,
-      appsecret: Bun.env.KIS_APP_SECRET,
-    }),
-  });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  const json = await resp.json() as { access_token?: string };
-  if (!json.access_token) throw new Error("No token returned");
-});
+// KIS: 토큰 1회 발급 후 캐시 재사용 (1분당 1회 제한)
+import { kisGet } from "./common/kis-auth.ts";
 
-await test("KIS_CURRENT_PRICE", ["KIS_APP_KEY", "KIS_APP_SECRET"], async () => {
-  const { kisGet } = await import("./common/kis-auth.ts");
+await test("KIS_TOKEN_AND_PRICE", ["KIS_APP_KEY", "KIS_APP_SECRET"], async () => {
   const json = await kisGet<{ output?: { stck_prpr?: string } }>(
     "/uapi/domestic-stock/v1/quotations/inquire-price",
     "FHKST01010100",
@@ -86,7 +73,6 @@ await test("KIS_CURRENT_PRICE", ["KIS_APP_KEY", "KIS_APP_SECRET"], async () => {
 });
 
 await test("KIS_VOLUME_RANK", ["KIS_APP_KEY", "KIS_APP_SECRET"], async () => {
-  const { kisGet } = await import("./common/kis-auth.ts");
   const json = await kisGet<{ output?: unknown[] }>(
     "/uapi/domestic-stock/v1/quotations/volume-rank",
     "FHPST01710000",
@@ -101,7 +87,6 @@ await test("KIS_VOLUME_RANK", ["KIS_APP_KEY", "KIS_APP_SECRET"], async () => {
 });
 
 await test("KIS_OVERSEAS", ["KIS_APP_KEY", "KIS_APP_SECRET"], async () => {
-  const { kisGet } = await import("./common/kis-auth.ts");
   const json = await kisGet<{ output?: { last?: string } }>(
     "/uapi/overseas-price/v1/quotations/price",
     "HHDFS00000300",
@@ -140,8 +125,9 @@ await test("KOREAEXIM", ["KOREAEXIM_API_KEY"], async () => {
 });
 
 await test("DATA_GO_KR", ["DATA_GO_KR_API_KEY"], async () => {
+  const serviceKey = encodeURIComponent(Bun.env.DATA_GO_KR_API_KEY!);
   const resp = await fetch(
-    `https://apis.data.go.kr/1160100/service/GetMarketIndexInfoService/getStockMarketIndex?serviceKey=${Bun.env.DATA_GO_KR_API_KEY}&resultType=json&numOfRows=1&pageNo=1`,
+    `https://apis.data.go.kr/1160100/service/GetMarketIndexInfoService/getStockMarketIndex?serviceKey=${serviceKey}&resultType=json&numOfRows=1&pageNo=1`,
   );
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   const json = await resp.json() as { response?: { header?: { resultCode?: string } } };
