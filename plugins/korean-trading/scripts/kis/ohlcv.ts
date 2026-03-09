@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KIS 일봉/분봉 OHLCV ---
 // Usage: bun run scripts/kis/ohlcv.ts <ticker> [period] [start_date] [end_date]
 // period: D(일봉), W(주봉), M(월봉) — 기본값 D
@@ -19,16 +19,16 @@ interface OhlcvRow {
 }
 
 async function main() {
-  const ticker = Bun.argv[2];
+  const ticker = process.argv[2];
   if (!ticker) {
     output(fail("INVALID_ARGS", "사용법: bun run ohlcv.ts <종목코드> [D|W|M] [시작일] [종료일]"));
     return;
   }
 
-  const period = (Bun.argv[3] ?? "D").toUpperCase();
+  const period = (process.argv[3] ?? "D").toUpperCase();
   const now = new Date();
-  const endDate = Bun.argv[5] ?? `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-  const startDate = Bun.argv[4] ?? (() => {
+  const endDate = process.argv[5] ?? `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  const startDate = process.argv[4] ?? (() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 3);
     return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;

@@ -44,7 +44,7 @@ async function rateLimit(url: string): Promise<void> {
   const last = lastCallByHost.get(host) ?? 0;
   const elapsed = Date.now() - last;
   if (elapsed < delay) {
-    await Bun.sleep(delay - elapsed);
+    await new Promise(r => setTimeout(r, delay - elapsed));
   }
   lastCallByHost.set(host, Date.now());
 }
@@ -77,7 +77,7 @@ export async function fetchWithRetry(
 
       if (resp.status === 429) {
         log(`Rate limited (429), retry ${attempt + 1}/${maxRetries}`);
-        await Bun.sleep(delay);
+        await new Promise(r => setTimeout(r, delay));
         delay *= 2;
         continue;
       }
@@ -88,7 +88,7 @@ export async function fetchWithRetry(
       lastError = err as Error;
       if (attempt < maxRetries) {
         log(`Fetch error: ${lastError.message}, retry ${attempt + 1}/${maxRetries}`);
-        await Bun.sleep(delay);
+        await new Promise(r => setTimeout(r, delay));
         delay *= 2;
       }
     }
@@ -130,7 +130,7 @@ function loadEnvFile(): void {
   envFileLoaded = true;
 
   const { existsSync, readFileSync, readdirSync } = require("fs");
-  const searchRoots = ["/mnt", `${Bun.env.HOME}/mnt`];
+  const searchRoots = ["/mnt", `${process.env.HOME}/mnt`];
   const skip = new Set([".claude", ".local-plugins", ".skills", "outputs", "uploads"]);
 
   for (const root of searchRoots) {
@@ -142,7 +142,7 @@ function loadEnvFile(): void {
       try {
         const env = JSON.parse(readFileSync(candidate, "utf-8"));
         for (const [k, v] of Object.entries(env)) {
-          if (v && !Bun.env[k]) Bun.env[k] = v as string;
+          if (v && !process.env[k]) process.env[k] = v as string;
         }
       } catch { /* ignore */ }
       return;
@@ -151,10 +151,10 @@ function loadEnvFile(): void {
 }
 
 export function requireEnv(name: string): string {
-  let val = Bun.env[name];
+  let val = process.env[name];
   if (!val) {
     loadEnvFile();
-    val = Bun.env[name];
+    val = process.env[name];
   }
   if (!val) {
     output(fail("ENV_MISSING", `환경변수 ${name}이(가) 설정되지 않았습니다`));

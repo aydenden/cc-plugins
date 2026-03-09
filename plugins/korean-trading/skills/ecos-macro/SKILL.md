@@ -13,11 +13,11 @@ description: ECOS(한국은행 경제통계) 한국 매크로 경제 지표 조�
 
 ```bash
 # 단일 지표
-bun run plugins/korean-trading/scripts/ecos/indicators.ts base_rate
-bun run plugins/korean-trading/scripts/ecos/indicators.ts bond_10y 20240101
+node plugins/korean-trading/dist/ecos/indicators.js base_rate
+node plugins/korean-trading/dist/ecos/indicators.js bond_10y 20240101
 
 # 전체 지표
-bun run plugins/korean-trading/scripts/ecos/indicators.ts all
+node plugins/korean-trading/dist/ecos/indicators.js all
 ```
 
 ## 사용 가능한 지표
@@ -47,10 +47,10 @@ ECOS 외 채권/지수 데이터가 필요한 경우 아래 스크립트를 추�
 
 ```bash
 # 채권 시세 상세 (국고채, 회사채, 신용스프레드 등)
-bun run plugins/korean-trading/scripts/fsc/bond-price.ts
+node plugins/korean-trading/dist/fsc/bond-price.js
 
 # 채권 지수 (KIS 채권지수, 종합채권지수 등)
-bun run plugins/korean-trading/scripts/fsc/market-index.ts bond
+node plugins/korean-trading/dist/fsc/market-index.js bond
 ```
 
 - `bond-price.ts`: 금융투자협회 기반 개별 채권 시세, 신용등급별 금리 비교에 유용

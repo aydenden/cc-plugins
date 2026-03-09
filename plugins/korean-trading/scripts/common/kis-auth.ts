@@ -94,8 +94,8 @@ export async function getKisToken(): Promise<KisToken> {
 }
 
 export function buildKisHeaders(token: KisToken, trId: string): Record<string, string> {
-  const appKey = Bun.env.KIS_APP_KEY!;
-  const appSecret = Bun.env.KIS_APP_SECRET!;
+  const appKey = process.env.KIS_APP_KEY!;
+  const appSecret = process.env.KIS_APP_SECRET!;
   return {
     authorization: `Bearer ${token.access_token}`,
     appkey: appKey,

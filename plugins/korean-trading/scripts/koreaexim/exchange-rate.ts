@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- 한국수출입은행 환율 조회 ---
 // Usage: bun run scripts/koreaexim/exchange-rate.ts [date]
 // date: YYYYMMDD 형식, 생략 시 오늘 날짜
@@ -36,7 +36,7 @@ function todayYYYYMMDD(): string {
 
 async function main() {
   const apiKey = requireEnv("KOREAEXIM_API_KEY");
-  const date = Bun.argv[2] ?? todayYYYYMMDD();
+  const date = process.argv[2] ?? todayYYYYMMDD();
 
   const params = new URLSearchParams({
     authkey: apiKey,

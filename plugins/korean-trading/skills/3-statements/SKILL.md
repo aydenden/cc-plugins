@@ -10,15 +10,15 @@ description: 3-Statement(재무3표) 연결 모델 분석. "재무제표", "3-st
 ### Step 1: 데이터 수집 (병렬)
 ```bash
 # 요약재무제표 (매출, 영업이익, 총자산, 총부채)
-bun run plugins/korean-trading/scripts/fsc/financial-statements.ts {crno} {year} summary
+node plugins/korean-trading/dist/fsc/financial-statements.js {crno} {year} summary
 # 재무상태표 (계정과목별)
-bun run plugins/korean-trading/scripts/fsc/financial-statements.ts {crno} {year} bs
+node plugins/korean-trading/dist/fsc/financial-statements.js {crno} {year} bs
 # 손익계산서 (계정과목별)
-bun run plugins/korean-trading/scripts/fsc/financial-statements.ts {crno} {year} income
+node plugins/korean-trading/dist/fsc/financial-statements.js {crno} {year} income
 # DART 재무공시 (연간 사업보고서)
-bun run plugins/korean-trading/scripts/dart/disclosure.ts {ticker} financial {year}
+node plugins/korean-trading/dist/dart/disclosure.js {ticker} financial {year}
 # 재무비율
-bun run plugins/korean-trading/scripts/kis/financial-ratio.ts {ticker}
+node plugins/korean-trading/dist/kis/financial-ratio.js {ticker}
 ```
 
 ### Step 2: 손익계산서 (Income Statement) 분석

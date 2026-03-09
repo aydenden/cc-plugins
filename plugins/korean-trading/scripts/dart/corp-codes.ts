@@ -1,11 +1,12 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- DART 종목코드 → corp_code 매핑 ---
 // Usage: bun run scripts/dart/corp-codes.ts <ticker>
 // ZIP 다운로드 후 캐시, ticker(6자리) → corp_code(8자리) 변환
 
 import { fetchWithRetry, requireEnv, success, fail, output, log } from "../common/http.ts";
 import { getCachePath, readCache, writeCache } from "../common/cache.ts";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
+import { execSync } from "child_process";
 
 const CORP_CODE_URL = "https://opendart.fss.or.kr/api/corpCode.xml";
 const CACHE_PATH = getCachePath("dart", "corp_codes.json");
@@ -32,12 +33,10 @@ async function downloadCorpCodes(apiKey: string): Promise<CorpCodeMap> {
   const blob = new Blob([buffer]);
 
   // ZIP에서 XML 추출 (단일 파일)
-  // Bun.file로 임시 저장 후 unzip
+  // 임시 저장 후 unzip
   const tmpZip = getCachePath("dart", "corpCode.zip");
-  await Bun.write(tmpZip, blob);
-
-  const proc = Bun.spawnSync(["unzip", "-o", "-p", tmpZip], { stdout: "pipe" });
-  const xml = proc.stdout.toString();
+  writeFileSync(tmpZip, Buffer.from(await blob.arrayBuffer()));
+  const xml = execSync(`unzip -o -p ${tmpZip}`, { encoding: "utf-8" });
 
   if (!xml.includes("<list>")) {
     throw new Error("Invalid corpCode XML");
@@ -82,7 +81,7 @@ export async function tickerToCorpCode(ticker: string): Promise<{ corp_code: str
 // --- Main (직접 실행 시) ---
 
 async function main() {
-  const ticker = Bun.argv[2];
+  const ticker = process.argv[2];
   if (!ticker) {
     output(fail("INVALID_ARGS", "사용법: bun run corp-codes.ts <종목코드(6자리)>"));
     return;

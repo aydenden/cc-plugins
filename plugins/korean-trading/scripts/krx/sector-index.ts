@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KRX 섹터별 지수 ---
 // Usage: bun run scripts/krx/sector-index.ts [date]
 // KRX 파생상품 일별 거래 데이터에서 전체 지수 목록 조회
@@ -68,7 +68,7 @@ async function parseIndices(resp: Response, basDd: string): Promise<IndexData[]>
 
 async function main() {
   const apiKey = requireEnv("KRX_API_KEY");
-  const argDate = Bun.argv[2];
+  const argDate = process.argv[2];
   const baseDate = argDate ?? formatDate(new Date());
 
   for (let i = 0; i <= 2; i++) {

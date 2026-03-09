@@ -10,13 +10,13 @@ description: DCF(Discounted Cash Flow) 밸류에이션 분석. "DCF", "적정가
 ### Step 1: 기업 데이터 수집 (병렬)
 ```bash
 # 재무비율 (PER/PBR/ROE/EPS)
-bun run plugins/korean-trading/scripts/kis/financial-ratio.ts {ticker}
+node plugins/korean-trading/dist/kis/financial-ratio.js {ticker}
 # 현재가 (시총, 상장주수)
-bun run plugins/korean-trading/scripts/kis/current-price.ts {ticker}
+node plugins/korean-trading/dist/kis/current-price.js {ticker}
 # 기업재무정보 (매출액, 영업이익, 순이익, 총자산, 총부채)
-bun run plugins/korean-trading/scripts/fsc/financial-statements.ts {crno} {year} summary
+node plugins/korean-trading/dist/fsc/financial-statements.js {crno} {year} summary
 # 한국 금리 (10년 국고채 = 무위험수익률)
-bun run plugins/korean-trading/scripts/ecos/indicators.ts bond_10y
+node plugins/korean-trading/dist/ecos/indicators.js bond_10y
 ```
 
 ### Step 2: FCFF(Free Cash Flow to Firm) 추정
@@ -103,6 +103,6 @@ bun run plugins/korean-trading/scripts/ecos/indicators.ts bond_10y
 - 한국 기업 특수요소: 재벌 할인, 지배구조 리스크
 
 ## Important Notes
-- crno(법인등록번호)가 없으면 DART corp-codes에서 조회 필요: `bun run plugins/korean-trading/scripts/dart/corp-codes.ts` → ticker로 검색
+- crno(법인등록번호)가 없으면 DART corp-codes에서 조회 필요: `node plugins/korean-trading/dist/dart/corp-codes.js` → ticker로 검색
 - 재무제표 데이터가 없으면 financial-ratio의 EPS/BPS 기반 간이 DCF로 대체
 - 매매 추천이 아님, 투자 판단은 사용자 책임

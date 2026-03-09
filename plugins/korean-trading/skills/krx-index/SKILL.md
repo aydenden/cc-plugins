@@ -13,12 +13,12 @@ description: KRX(한국거래소) 지수 데이터 조회. VKOSPI 변동성지�
 
 ```bash
 # VKOSPI (변동성지수)
-bun run plugins/korean-trading/scripts/krx/vkospi.ts              # 최근 영업일
-bun run plugins/korean-trading/scripts/krx/vkospi.ts 20240315     # 특정 날짜
+node plugins/korean-trading/dist/krx/vkospi.js              # 최근 영업일
+node plugins/korean-trading/dist/krx/vkospi.js 20240315     # 특정 날짜
 
 # 섹터별 지수
-bun run plugins/korean-trading/scripts/krx/sector-index.ts        # 최근 영업일
-bun run plugins/korean-trading/scripts/krx/sector-index.ts 20240315
+node plugins/korean-trading/dist/krx/sector-index.js        # 최근 영업일
+node plugins/korean-trading/dist/krx/sector-index.js 20240315
 ```
 
 ## VKOSPI 해석

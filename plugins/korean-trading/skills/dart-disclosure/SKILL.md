@@ -13,14 +13,14 @@ description: DART(전자공시시스템) 공시 및 재무제표 조회. 기업 
 
 ```bash
 # 종목코드 → DART corp_code 변환
-bun run plugins/korean-trading/scripts/dart/corp-codes.ts 005930
+node plugins/korean-trading/dist/dart/corp-codes.js 005930
 
 # 공시 10종 일괄 조회
-bun run plugins/korean-trading/scripts/dart/disclosure.ts 005930 disclosures
+node plugins/korean-trading/dist/dart/disclosure.js 005930 disclosures
 
 # 재무제표
-bun run plugins/korean-trading/scripts/dart/disclosure.ts 005930 financial 2024 annual
-bun run plugins/korean-trading/scripts/dart/disclosure.ts 005930 financial 2024 1Q
+node plugins/korean-trading/dist/dart/disclosure.js 005930 financial 2024 annual
+node plugins/korean-trading/dist/dart/disclosure.js 005930 financial 2024 1Q
 ```
 
 ## 공시 유형별 트레이딩 의미

@@ -11,22 +11,22 @@ description: 시장 레짐 판단 워크플로우. VKOSPI, VIX, 금리, 환율 �
 
 ```bash
 # VKOSPI
-bun run plugins/korean-trading/scripts/krx/vkospi.ts
+node plugins/korean-trading/dist/krx/vkospi.js
 
 # 글로벌 (VIX, 달러, 환율, 금리)
-bun run plugins/korean-trading/scripts/market/overnight.ts
+node plugins/korean-trading/dist/market/overnight.js
 
 # KOSPI/KOSDAQ 지수
-bun run plugins/korean-trading/scripts/kis/index-price.ts
+node plugins/korean-trading/dist/kis/index-price.js
 
 # 한국 매크로 (기준금리, 국고채)
-bun run plugins/korean-trading/scripts/ecos/indicators.ts all
+node plugins/korean-trading/dist/ecos/indicators.js all
 
 # 미국 장단기 스프레드
-bun run plugins/korean-trading/scripts/fred/indicators.ts T10Y2Y
+node plugins/korean-trading/dist/fred/indicators.js T10Y2Y
 
 # 연방기금금리
-bun run plugins/korean-trading/scripts/fred/indicators.ts FEDFUNDS
+node plugins/korean-trading/dist/fred/indicators.js FEDFUNDS
 ```
 
 ### Step 2: 레짐 판단

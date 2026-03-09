@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- FRED Economic Indicators ---
 // Usage: bun run scripts/fred/indicators.ts <SERIES_ID|all> [start_date]
 // Examples:
@@ -62,14 +62,14 @@ async function fetchSeries(
 
 async function main() {
   const apiKey = requireEnv("FRED_API_KEY");
-  const arg = Bun.argv[2];
+  const arg = process.argv[2];
 
   if (!arg) {
     output(fail("INVALID_ARGS", `사용법: bun run indicators.ts <SERIES_ID|all> [start_date]\n가능한 시리즈: ${Object.keys(SERIES).join(", ")}`));
     return;
   }
 
-  const startDate = Bun.argv[3] ?? "2024-01-01";
+  const startDate = process.argv[3] ?? "2024-01-01";
   const isAll = arg.toLowerCase() === "all";
   const seriesIds = isAll ? Object.keys(SERIES) : [arg.toUpperCase()];
 

@@ -11,17 +11,17 @@ description: 글로벌 원자재 시세 분석. "원자재", "유가", "원유",
 
 ```bash
 # 에너지
-bun run plugins/korean-trading/scripts/alphavantage/commodities.ts WTI daily
-bun run plugins/korean-trading/scripts/alphavantage/commodities.ts BRENT daily
-bun run plugins/korean-trading/scripts/alphavantage/commodities.ts NATURAL_GAS daily
+node plugins/korean-trading/dist/alphavantage/commodities.js WTI daily
+node plugins/korean-trading/dist/alphavantage/commodities.js BRENT daily
+node plugins/korean-trading/dist/alphavantage/commodities.js NATURAL_GAS daily
 
 # 금속
-bun run plugins/korean-trading/scripts/alphavantage/commodities.ts COPPER daily
-bun run plugins/korean-trading/scripts/alphavantage/commodities.ts ALUMINUM daily
+node plugins/korean-trading/dist/alphavantage/commodities.js COPPER daily
+node plugins/korean-trading/dist/alphavantage/commodities.js ALUMINUM daily
 
 # 농산물
-bun run plugins/korean-trading/scripts/alphavantage/commodities.ts WHEAT daily
-bun run plugins/korean-trading/scripts/alphavantage/commodities.ts CORN daily
+node plugins/korean-trading/dist/alphavantage/commodities.js WHEAT daily
+node plugins/korean-trading/dist/alphavantage/commodities.js CORN daily
 ```
 
 **주의**: Alpha Vantage 무료 계정은 일 25회, 분 5회 제한. 필요한 원자재만 선택적으로 조회.
@@ -48,7 +48,7 @@ bun run plugins/korean-trading/scripts/alphavantage/commodities.ts CORN daily
 
 ```bash
 # 환율 데이터
-bun run plugins/korean-trading/scripts/koreaexim/exchange-rate.ts
+node plugins/korean-trading/dist/koreaexim/exchange-rate.js
 ```
 
 - 원자재는 달러 표시 → 원/달러 환율에 따라 실질 영향 변동

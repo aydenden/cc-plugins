@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KIS 등락률 순위 ---
 // Usage: bun run scripts/kis/fluctuation-rank.ts [up|down] [kospi|kosdaq|all]
 // Examples:
@@ -30,8 +30,8 @@ function resolveMarketCode(market?: string): string {
 }
 
 async function main() {
-  const direction = Bun.argv[2]?.toLowerCase() ?? "up";
-  const market = Bun.argv[3];
+  const direction = process.argv[2]?.toLowerCase() ?? "up";
+  const market = process.argv[3];
 
   if (direction !== "up" && direction !== "down") {
     output(fail("INVALID_ARGS", "사용법: bun run fluctuation-rank.ts [up|down] [kospi|kosdaq|all]"));

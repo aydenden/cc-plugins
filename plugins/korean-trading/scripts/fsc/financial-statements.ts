@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- 금융위원회 재무제표 조회 ---
 // Usage: bun run scripts/fsc/financial-statements.ts <crno> [year] [summary|bs|income]
 // crno: 법인등록번호
@@ -51,15 +51,15 @@ function mapBsOrIncome(item: Record<string, string>) {
 
 async function main() {
   const serviceKey = requireEnv("DATA_GO_KR_API_KEY");
-  const crno = Bun.argv[2];
+  const crno = process.argv[2];
 
   if (!crno) {
     output(fail("INVALID_ARGS", "사용법: bun run financial-statements.ts <crno> [year] [summary|bs|income]"));
     return;
   }
 
-  const year = Bun.argv[3] ?? String(new Date().getFullYear() - 1);
-  const type = (Bun.argv[4] ?? "summary") as keyof typeof ENDPOINTS;
+  const year = process.argv[3] ?? String(new Date().getFullYear() - 1);
+  const type = (process.argv[4] ?? "summary") as keyof typeof ENDPOINTS;
 
   if (!ENDPOINTS[type]) {
     output(fail("INVALID_ARGS", `유효하지 않은 유형: ${type}. 가능: summary, bs, income`));

@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- Alpha Vantage 원자재 가격 조회 ---
 // Usage: bun run scripts/alphavantage/commodities.ts <WTI|BRENT|NATURAL_GAS|...> [daily|weekly|monthly]
 // WARNING: Alpha Vantage 무료 API는 일 25건, 분당 5건으로 매우 제한적
@@ -29,8 +29,8 @@ interface CommodityPrice {
 
 async function main() {
   const apiKey = requireEnv("ALPHA_VANTAGE_API_KEY");
-  const commodity = Bun.argv[2]?.toUpperCase() as Commodity | undefined;
-  const interval = (Bun.argv[3] ?? "monthly") as Interval;
+  const commodity = process.argv[2]?.toUpperCase() as Commodity | undefined;
+  const interval = (process.argv[3] ?? "monthly") as Interval;
 
   if (!commodity || !VALID_COMMODITIES.includes(commodity)) {
     output(fail("INVALID_ARGS", `사용법: bun run commodities.ts <commodity> [interval]\n가능한 원자재: ${VALID_COMMODITIES.join(", ")}`));

@@ -13,34 +13,34 @@ description: 종목 종합 분석 워크플로우. 가격, 수급, 재무, 공�
 
 ```bash
 # 현재가 (가격, 시총, PER/PBR, 52주 고저, 외국인순매수)
-bun run plugins/korean-trading/scripts/kis/current-price.ts {ticker}
+node plugins/korean-trading/dist/kis/current-price.js {ticker}
 
 # 가격 데이터 (3개월 일봉)
-bun run plugins/korean-trading/scripts/kis/ohlcv.ts {ticker}
+node plugins/korean-trading/dist/kis/ohlcv.js {ticker}
 
 # 투자자별 매매동향
-bun run plugins/korean-trading/scripts/kis/investor-trend.ts {ticker}
+node plugins/korean-trading/dist/kis/investor-trend.js {ticker}
 
 # 공매도
-bun run plugins/korean-trading/scripts/kis/short-sale.ts {ticker}
+node plugins/korean-trading/dist/kis/short-sale.js {ticker}
 
 # 신용잔고
-bun run plugins/korean-trading/scripts/kis/credit.ts {ticker}
+node plugins/korean-trading/dist/kis/credit.js {ticker}
 
 # 재무비율 (PER/PBR/ROE)
-bun run plugins/korean-trading/scripts/kis/financial-ratio.ts {ticker}
+node plugins/korean-trading/dist/kis/financial-ratio.js {ticker}
 
 # 증권사 컨센서스
-bun run plugins/korean-trading/scripts/kis/consensus.ts {ticker}
+node plugins/korean-trading/dist/kis/consensus.js {ticker}
 
 # DART 공시
-bun run plugins/korean-trading/scripts/dart/disclosure.ts {ticker} disclosures
+node plugins/korean-trading/dist/dart/disclosure.js {ticker} disclosures
 
 # 뉴스
-bun run plugins/korean-trading/scripts/news/search.ts "{ticker} 주식" 5
+node plugins/korean-trading/dist/news/search.js "{ticker} 주식" 5
 
 # WICS 섹터
-bun run plugins/korean-trading/scripts/market/sector.ts {ticker}
+node plugins/korean-trading/dist/market/sector.js {ticker}
 ```
 
 ### Step 2: 기술적 분석

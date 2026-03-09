@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KIS 선물/옵션 P/C Ratio ---
 // Usage: bun run scripts/kis/futures.ts
 

@@ -21,16 +21,16 @@ description: 매매 복기 워크플로우. 과거 매매를 데이터 기반으
 
 ```bash
 # 매매 기간 전후 일봉 (매수 1개월 전 ~ 매도 1주 후)
-bun run plugins/korean-trading/scripts/kis/ohlcv.ts {ticker} D {매수일-30일} {매도일+7일}
+node plugins/korean-trading/dist/kis/ohlcv.js {ticker} D {매수일-30일} {매도일+7일}
 
 # 투자자동향
-bun run plugins/korean-trading/scripts/kis/investor-trend.ts {ticker}
+node plugins/korean-trading/dist/kis/investor-trend.js {ticker}
 
 # 재무비율 (매수 시점 기준)
-bun run plugins/korean-trading/scripts/kis/financial-ratio.ts {ticker}
+node plugins/korean-trading/dist/kis/financial-ratio.js {ticker}
 
 # 매수일 시장 레짐
-bun run plugins/korean-trading/scripts/krx/vkospi.ts {매수일}
+node plugins/korean-trading/dist/krx/vkospi.js {매수일}
 ```
 
 ### Step 3: 분석

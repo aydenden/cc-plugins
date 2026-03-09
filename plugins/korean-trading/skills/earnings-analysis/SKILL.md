@@ -10,15 +10,15 @@ description: 실적 발표 분석 워크플로우. "실적", "어닝", "earnings
 ### Step 1: 데이터 수집 (병렬)
 ```bash
 # 증권사 컨센서스 (목표가, 투자의견)
-bun run plugins/korean-trading/scripts/kis/consensus.ts {ticker}
+node plugins/korean-trading/dist/kis/consensus.js {ticker}
 # 공시 데이터 (실적 공시)
-bun run plugins/korean-trading/scripts/dart/disclosure.ts {ticker} financial {year}
+node plugins/korean-trading/dist/dart/disclosure.js {ticker} financial {year}
 # 재무비율 (PER/EPS 추이)
-bun run plugins/korean-trading/scripts/kis/financial-ratio.ts {ticker}
+node plugins/korean-trading/dist/kis/financial-ratio.js {ticker}
 # 주가 데이터 (실적 발표 전후 주가)
-bun run plugins/korean-trading/scripts/kis/ohlcv.ts {ticker}
+node plugins/korean-trading/dist/kis/ohlcv.js {ticker}
 # 현재가 (최신 시세)
-bun run plugins/korean-trading/scripts/kis/current-price.ts {ticker}
+node plugins/korean-trading/dist/kis/current-price.js {ticker}
 ```
 
 ### Step 2: 실적 서프라이즈 판단

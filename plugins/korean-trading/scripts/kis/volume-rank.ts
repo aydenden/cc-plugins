@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KIS 거래량 순위 ---
 // Usage: bun run scripts/kis/volume-rank.ts [kospi|kosdaq|all] [min_volume]
 // Examples:
@@ -30,8 +30,8 @@ function resolveMarketCode(market?: string): string {
 }
 
 async function main() {
-  const market = Bun.argv[2];
-  const minVolume = Bun.argv[3] ?? "";
+  const market = process.argv[2];
+  const minVolume = process.argv[3] ?? "";
 
   try {
     const json = await kisGet<{

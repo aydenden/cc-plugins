@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KRX VKOSPI (변동성지수) ---
 // Usage: bun run scripts/krx/vkospi.ts [date]
 // 2-stage fallback: 정식 API → 샘플 API, 날짜 미지정 시 오늘부터 3일 역추적
@@ -81,7 +81,7 @@ async function parseVkospi(resp: Response, basDd: string): Promise<VkospiData | 
 
 async function main() {
   const apiKey = requireEnv("KRX_API_KEY");
-  const argDate = Bun.argv[2];
+  const argDate = process.argv[2];
   const baseDate = argDate ?? formatDate(new Date());
 
   // 최대 3일 역추적 (휴일/비영업일 대응)

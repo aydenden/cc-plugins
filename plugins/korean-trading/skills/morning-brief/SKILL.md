@@ -13,25 +13,25 @@ description: 장 전 모닝 브리핑 워크플로우. 글로벌 오버나이트
 
 ```bash
 # 글로벌 오버나이트 (VIX, 달러, 환율, 금리)
-bun run plugins/korean-trading/scripts/market/overnight.ts
+node plugins/korean-trading/dist/market/overnight.js
 
 # VKOSPI 변동성지수
-bun run plugins/korean-trading/scripts/krx/vkospi.ts
+node plugins/korean-trading/dist/krx/vkospi.js
 
 # KOSPI/KOSDAQ 지수
-bun run plugins/korean-trading/scripts/kis/index-price.ts
+node plugins/korean-trading/dist/kis/index-price.js
 
 # 한국 매크로 (기준금리, 국고채, CPI, 실업률)
-bun run plugins/korean-trading/scripts/ecos/indicators.ts all
+node plugins/korean-trading/dist/ecos/indicators.js all
 
 # 해외 주요 ETF 현재가 (글로벌 시장 흐름)
-bun run plugins/korean-trading/scripts/kis/overseas-price.ts NAS SPY    # S&P500
-bun run plugins/korean-trading/scripts/kis/overseas-price.ts NAS QQQ    # NASDAQ
-bun run plugins/korean-trading/scripts/kis/overseas-price.ts NYS EWY    # Korea ETF
+node plugins/korean-trading/dist/kis/overseas-price.js NAS SPY    # S&P500
+node plugins/korean-trading/dist/kis/overseas-price.js NAS QQQ    # NASDAQ
+node plugins/korean-trading/dist/kis/overseas-price.js NYS EWY    # Korea ETF
 
 # 해외 ETF 추세 확인 (일봉)
-bun run plugins/korean-trading/scripts/kis/overseas-daily.ts NAS SPY
-bun run plugins/korean-trading/scripts/kis/overseas-daily.ts NAS QQQ
+node plugins/korean-trading/dist/kis/overseas-daily.js NAS SPY
+node plugins/korean-trading/dist/kis/overseas-daily.js NAS QQQ
 ```
 
 ### Step 2: 레짐 판단

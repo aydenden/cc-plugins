@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KIS 해외주식 현재가 ---
 // Usage: bun run scripts/kis/overseas-price.ts <exchange> <ticker>
 // Exchange codes: NAS(나스닥), NYS(뉴욕), AMS(아멕스), HKS(홍콩), TSE(도쿄)
@@ -23,8 +23,8 @@ interface OverseasPrice {
 }
 
 async function main() {
-  const exchange = Bun.argv[2]?.toUpperCase();
-  const ticker = Bun.argv[3]?.toUpperCase();
+  const exchange = process.argv[2]?.toUpperCase();
+  const ticker = process.argv[3]?.toUpperCase();
 
   if (!exchange || !ticker) {
     output(fail("INVALID_ARGS", "사용법: bun run overseas-price.ts <거래소코드> <종목코드>\n거래소: NAS, NYS, AMS, HKS, TSE"));

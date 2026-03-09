@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KIS 외국인/기관 종합 순위 ---
 // Usage: bun run scripts/kis/foreign-institution-total.ts [foreign|institution] [buy|sell] [kospi|kosdaq|all]
 // Examples:
@@ -28,9 +28,9 @@ function resolveMarketCode(market?: string): string {
 }
 
 async function main() {
-  const entityArg = Bun.argv[2]?.toLowerCase() ?? "foreign";
-  const directionArg = Bun.argv[3]?.toLowerCase() ?? "buy";
-  const market = Bun.argv[4];
+  const entityArg = process.argv[2]?.toLowerCase() ?? "foreign";
+  const directionArg = process.argv[3]?.toLowerCase() ?? "buy";
+  const market = process.argv[4];
 
   if (entityArg !== "foreign" && entityArg !== "institution") {
     output(fail("INVALID_ARGS", "사용법: bun run foreign-institution-total.ts [foreign|institution] [buy|sell] [kospi|kosdaq|all]"));

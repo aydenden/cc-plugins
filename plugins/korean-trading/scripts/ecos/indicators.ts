@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- ECOS (한국은행 경제통계) ---
 // Usage: bun run scripts/ecos/indicators.ts <INDICATOR|all> [start_period]
 // Examples:
@@ -72,14 +72,14 @@ async function fetchIndicator(
 
 async function main() {
   const apiKey = requireEnv("ECOS_API_KEY");
-  const arg = Bun.argv[2];
+  const arg = process.argv[2];
 
   if (!arg) {
     output(fail("INVALID_ARGS", `사용법: bun run indicators.ts <INDICATOR|all> [start_period]\n가능한 지표: ${Object.keys(INDICATORS).join(", ")}`));
     return;
   }
 
-  const startPeriod = Bun.argv[3];
+  const startPeriod = process.argv[3];
   const isAll = arg.toLowerCase() === "all";
   const keys = isAll ? Object.keys(INDICATORS) : [arg.toLowerCase()];
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KIS 분봉 차트 ---
 // Usage: bun run scripts/kis/minute-chart.ts <ticker> [from_time]
 // 당일 데이터만 조회 가능, 장중(09:00~15:30) 유효
@@ -20,13 +20,13 @@ interface MinuteCandle {
 }
 
 async function main() {
-  const ticker = Bun.argv[2];
+  const ticker = process.argv[2];
   if (!ticker) {
     output(fail("INVALID_ARGS", "사용법: bun run minute-chart.ts <종목코드> [from_time]"));
     return;
   }
 
-  const fromTime = Bun.argv[3] ?? "155000";
+  const fromTime = process.argv[3] ?? "155000";
 
   try {
     const json = await kisGet<{

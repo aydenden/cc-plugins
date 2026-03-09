@@ -10,13 +10,13 @@ description: 동종업체 비교(Comparable Companies) 분석. "비교", "동종
 ### Step 1: 대상 기업 데이터 수집
 ```bash
 # 대상 기업 현재가 + 밸류에이션
-bun run plugins/korean-trading/scripts/kis/current-price.ts {ticker}
-bun run plugins/korean-trading/scripts/kis/financial-ratio.ts {ticker}
+node plugins/korean-trading/dist/kis/current-price.js {ticker}
+node plugins/korean-trading/dist/kis/financial-ratio.js {ticker}
 ```
 
 ### Step 2: 비교군 선정
 1. **업종 확인**: current-price 응답의 `sector` (업종 한글명) 확인
-2. **WICS 섹터 매핑**: `bun run plugins/korean-trading/scripts/market/sector.ts` 에서 동일 섹터 종목 추출
+2. **WICS 섹터 매핑**: `node plugins/korean-trading/dist/market/sector.js` 에서 동일 섹터 종목 추출
 3. **비교군 선정 기준**:
    - 동일 WICS 대분류 (최소 3개, 최대 8개)
    - 시가총액 유사 범위 (0.2x ~ 5x)
@@ -25,8 +25,8 @@ bun run plugins/korean-trading/scripts/kis/financial-ratio.ts {ticker}
 ### Step 3: 비교군 데이터 수집 (병렬)
 각 비교 대상 종목에 대해:
 ```bash
-bun run plugins/korean-trading/scripts/kis/current-price.ts {peer_ticker}
-bun run plugins/korean-trading/scripts/kis/financial-ratio.ts {peer_ticker}
+node plugins/korean-trading/dist/kis/current-price.js {peer_ticker}
+node plugins/korean-trading/dist/kis/financial-ratio.js {peer_ticker}
 ```
 
 ### Step 4: 핵심 배수(Multiple) 비교

@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- 통합 검증 스크립트 ---
 // Usage: bun run scripts/test-all.ts
 // 모든 API 소스의 환경변수 확인 + 간단한 호출 테스트
@@ -15,7 +15,7 @@ interface TestResult {
 const results: TestResult[] = [];
 
 async function test(source: string, envVars: string[], fn: () => Promise<void>) {
-  const missing = envVars.filter((v) => !Bun.env[v]);
+  const missing = envVars.filter((v) => !process.env[v]);
   if (missing.length > 0) {
     results.push({ source, status: "skip", message: `환경변수 없음: ${missing.join(", ")}` });
     return;
@@ -34,7 +34,7 @@ async function test(source: string, envVars: string[], fn: () => Promise<void>) 
 
 await test("FRED", ["FRED_API_KEY"], async () => {
   const resp = await fetch(
-    `https://api.stlouisfed.org/fred/series/observations?series_id=FEDFUNDS&api_key=${Bun.env.FRED_API_KEY}&file_type=json&observation_start=2024-01-01&limit=1`,
+    `https://api.stlouisfed.org/fred/series/observations?series_id=FEDFUNDS&api_key=${process.env.FRED_API_KEY}&file_type=json&observation_start=2024-01-01&limit=1`,
   );
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   const json = await resp.json() as { observations?: unknown[] };
@@ -43,7 +43,7 @@ await test("FRED", ["FRED_API_KEY"], async () => {
 
 await test("ECOS", ["ECOS_API_KEY"], async () => {
   const resp = await fetch(
-    `https://ecos.bok.or.kr/api/StatisticSearch/${Bun.env.ECOS_API_KEY}/json/kr/1/1/722Y001/M/202401/202412/0101000`,
+    `https://ecos.bok.or.kr/api/StatisticSearch/${process.env.ECOS_API_KEY}/json/kr/1/1/722Y001/M/202401/202412/0101000`,
   );
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   const json = await resp.json() as { StatisticSearch?: { row?: unknown[] } };
@@ -55,7 +55,7 @@ await test("KRX", ["KRX_API_KEY"], async () => {
   const dateStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
   const resp = await fetch(
     `https://data-dbg.krx.co.kr/svc/apis/idx/drvprod_dd_trd?basDd=${dateStr}`,
-    { headers: { AUTH_KEY: Bun.env.KRX_API_KEY! } },
+    { headers: { AUTH_KEY: process.env.KRX_API_KEY! } },
   );
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 });
@@ -97,7 +97,7 @@ await test("KIS_OVERSEAS", ["KIS_APP_KEY", "KIS_APP_SECRET"], async () => {
 
 await test("DART", ["DART_API_KEY"], async () => {
   const resp = await fetch(
-    `https://opendart.fss.or.kr/api/company.json?crtfc_key=${Bun.env.DART_API_KEY}&corp_code=00126380`,
+    `https://opendart.fss.or.kr/api/company.json?crtfc_key=${process.env.DART_API_KEY}&corp_code=00126380`,
   );
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 });
@@ -107,8 +107,8 @@ await test("NAVER_NEWS", ["NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET"], async () =>
     "https://openapi.naver.com/v1/search/news.json?query=삼성전자&display=1",
     {
       headers: {
-        "X-Naver-Client-Id": Bun.env.NAVER_CLIENT_ID!,
-        "X-Naver-Client-Secret": Bun.env.NAVER_CLIENT_SECRET!,
+        "X-Naver-Client-Id": process.env.NAVER_CLIENT_ID!,
+        "X-Naver-Client-Secret": process.env.NAVER_CLIENT_SECRET!,
       },
     },
   );
@@ -117,7 +117,7 @@ await test("NAVER_NEWS", ["NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET"], async () =>
 
 await test("KOREAEXIM", ["KOREAEXIM_API_KEY"], async () => {
   const resp = await fetch(
-    `https://oapi.koreaexim.go.kr/site/program/financial/exchangeJSON?authkey=${Bun.env.KOREAEXIM_API_KEY}&data=AP01`,
+    `https://oapi.koreaexim.go.kr/site/program/financial/exchangeJSON?authkey=${process.env.KOREAEXIM_API_KEY}&data=AP01`,
   );
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   const json = await resp.json() as Array<{ result?: number }>;
@@ -125,7 +125,7 @@ await test("KOREAEXIM", ["KOREAEXIM_API_KEY"], async () => {
 });
 
 await test("DATA_GO_KR", ["DATA_GO_KR_API_KEY"], async () => {
-  const serviceKey = encodeURIComponent(Bun.env.DATA_GO_KR_API_KEY!);
+  const serviceKey = encodeURIComponent(process.env.DATA_GO_KR_API_KEY!);
   const resp = await fetch(
     `https://apis.data.go.kr/1160100/service/GetMarketIndexInfoService/getStockMarketIndex?serviceKey=${serviceKey}&resultType=json&numOfRows=1&pageNo=1`,
   );
@@ -136,7 +136,7 @@ await test("DATA_GO_KR", ["DATA_GO_KR_API_KEY"], async () => {
 
 await test("ALPHA_VANTAGE", ["ALPHA_VANTAGE_API_KEY"], async () => {
   const resp = await fetch(
-    `https://www.alphavantage.co/query?function=WTI&interval=monthly&apikey=${Bun.env.ALPHA_VANTAGE_API_KEY}`,
+    `https://www.alphavantage.co/query?function=WTI&interval=monthly&apikey=${process.env.ALPHA_VANTAGE_API_KEY}`,
   );
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   const json = await resp.json() as { name?: string; data?: unknown[] };

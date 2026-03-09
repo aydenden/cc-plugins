@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- 금융위원회 시장지수 조회 ---
 // Usage: bun run scripts/fsc/market-index.ts [stock|bond|derivative] [date] [index_name]
 // type: 기본 stock
@@ -58,9 +58,9 @@ function mapBondIndex(item: Record<string, string>) {
 
 async function main() {
   const serviceKey = requireEnv("DATA_GO_KR_API_KEY");
-  const type = Bun.argv[2] ?? "stock";
-  const date = Bun.argv[3] ?? "";
-  const indexName = Bun.argv[4] ?? "";
+  const type = process.argv[2] ?? "stock";
+  const date = process.argv[3] ?? "";
+  const indexName = process.argv[4] ?? "";
 
   if (!ENDPOINTS[type]) {
     output(fail("INVALID_ARGS", `유효하지 않은 유형: ${type}. 가능: stock, bond, derivative`));

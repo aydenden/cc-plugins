@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- 글로벌 오버나이트 지수 ---
 // Usage: bun run scripts/market/overnight.ts
 // FRED에서 주요 글로벌 지표 일괄 조회 (전일 기준)

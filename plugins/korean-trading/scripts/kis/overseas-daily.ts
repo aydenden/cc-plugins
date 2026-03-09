@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KIS 해외주식 일봉/주봉/월봉 ---
 // Usage: bun run scripts/kis/overseas-daily.ts <exchange> <ticker> [D|W|M]
 // Exchange codes: NAS(나스닥), NYS(뉴욕), AMS(아멕스), HKS(홍콩), TSE(도쿄)
@@ -30,9 +30,9 @@ function resolveGubn(period?: string): string {
 }
 
 async function main() {
-  const exchange = Bun.argv[2]?.toUpperCase();
-  const ticker = Bun.argv[3]?.toUpperCase();
-  const period = Bun.argv[4]?.toUpperCase() ?? "D";
+  const exchange = process.argv[2]?.toUpperCase();
+  const ticker = process.argv[3]?.toUpperCase();
+  const period = process.argv[4]?.toUpperCase() ?? "D";
 
   if (!exchange || !ticker) {
     output(fail("INVALID_ARGS", "사용법: bun run overseas-daily.ts <거래소코드> <종목코드> [D|W|M]\n거래소: NAS, NYS, AMS, HKS, TSE"));

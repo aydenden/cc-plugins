@@ -13,16 +13,16 @@ description: 종목 스크리닝 워크플로우. 여러 종목의 핵심 지표
 
 ```bash
 # 거래량 상위 — 시장 관심 종목 파악
-bun run plugins/korean-trading/scripts/kis/volume-rank.ts
+node plugins/korean-trading/dist/kis/volume-rank.js
 
 # 등락률 상위 — 모멘텀 종목 파악
-bun run plugins/korean-trading/scripts/kis/fluctuation-rank.ts
+node plugins/korean-trading/dist/kis/fluctuation-rank.js
 
 # 시가총액 상위 — 대형주 중심 안정 후보
-bun run plugins/korean-trading/scripts/kis/market-cap-rank.ts
+node plugins/korean-trading/dist/kis/market-cap-rank.js
 
 # 외국인/기관 순매수 상위 — 스마트머니 흐름
-bun run plugins/korean-trading/scripts/kis/foreign-institution-total.ts
+node plugins/korean-trading/dist/kis/foreign-institution-total.js
 ```
 
 위 결과에서 2개 이상 랭킹에 중복 등장하는 종목을 우선 후보로 선정.
@@ -37,11 +37,11 @@ bun run plugins/korean-trading/scripts/kis/foreign-institution-total.ts
 
 ```bash
 # 각 종목마다:
-bun run plugins/korean-trading/scripts/kis/current-price.ts {ticker}   # 현재가, 시총, PER/PBR, 52주 고저
-bun run plugins/korean-trading/scripts/kis/ohlcv.ts {ticker}
-bun run plugins/korean-trading/scripts/kis/investor-trend.ts {ticker}
-bun run plugins/korean-trading/scripts/kis/financial-ratio.ts {ticker}
-bun run plugins/korean-trading/scripts/market/sector.ts {ticker}
+node plugins/korean-trading/dist/kis/current-price.js {ticker}   # 현재가, 시총, PER/PBR, 52주 고저
+node plugins/korean-trading/dist/kis/ohlcv.js {ticker}
+node plugins/korean-trading/dist/kis/investor-trend.js {ticker}
+node plugins/korean-trading/dist/kis/financial-ratio.js {ticker}
+node plugins/korean-trading/dist/market/sector.js {ticker}
 ```
 
 ### Step 4: 비교 테이블 작성

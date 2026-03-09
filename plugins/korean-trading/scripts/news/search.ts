@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- 네이버 뉴스 검색 ---
 // Usage: bun run scripts/news/search.ts <query> [count]
 // count: 검색 결과 수 (기본 10, 최대 100)
@@ -15,13 +15,13 @@ interface NewsItem {
 }
 
 async function main() {
-  const query = Bun.argv[2];
+  const query = process.argv[2];
   if (!query) {
     output(fail("INVALID_ARGS", "사용법: bun run search.ts <검색어> [결과수]"));
     return;
   }
 
-  const count = Math.min(parseInt(Bun.argv[3] ?? "10"), 100);
+  const count = Math.min(parseInt(process.argv[3] ?? "10"), 100);
   const clientId = requireEnv("NAVER_CLIENT_ID");
   const clientSecret = requireEnv("NAVER_CLIENT_SECRET");
 

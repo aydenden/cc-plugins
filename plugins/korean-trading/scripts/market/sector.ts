@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- WICS 섹터 분류 ---
 // Usage: bun run scripts/market/sector.ts <ticker>
 // WICS(Wise Industry Classification Standard) 기준 섹터 조회
@@ -31,7 +31,7 @@ const SECTOR_MAP: Record<string, { sector: string; industry: string }> = {
 };
 
 async function main() {
-  const ticker = Bun.argv[2];
+  const ticker = process.argv[2];
   if (!ticker) {
     output(fail("INVALID_ARGS", "사용법: bun run sector.ts <종목코드>"));
     return;

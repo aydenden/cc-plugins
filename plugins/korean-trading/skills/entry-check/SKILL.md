@@ -19,22 +19,22 @@ description: 매수 진입 5단 체크리스트 워크플로우. 시장 레짐, 
 
 ```bash
 # 일봉 OHLCV
-bun run plugins/korean-trading/scripts/kis/ohlcv.ts {ticker}
+node plugins/korean-trading/dist/kis/ohlcv.js {ticker}
 
 # 투자자별 수급
-bun run plugins/korean-trading/scripts/kis/investor-trend.ts {ticker}
+node plugins/korean-trading/dist/kis/investor-trend.js {ticker}
 
 # VKOSPI (시장 레짐)
-bun run plugins/korean-trading/scripts/krx/vkospi.ts
+node plugins/korean-trading/dist/krx/vkospi.js
 
 # 재무비율
-bun run plugins/korean-trading/scripts/kis/financial-ratio.ts {ticker}
+node plugins/korean-trading/dist/kis/financial-ratio.js {ticker}
 
 # 신용잔고
-bun run plugins/korean-trading/scripts/kis/credit.ts {ticker}
+node plugins/korean-trading/dist/kis/credit.js {ticker}
 
 # 공매도
-bun run plugins/korean-trading/scripts/kis/short-sale.ts {ticker}
+node plugins/korean-trading/dist/kis/short-sale.js {ticker}
 ```
 
 ### Step 3: 5단 체크

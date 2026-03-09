@@ -6,7 +6,7 @@ import { join, dirname } from "path";
 
 // 플러그인 루트 기준 .cache/ 디렉토리 (scripts/common/cache.ts → ../../.cache/)
 const PLUGIN_ROOT = join(dirname(new URL(import.meta.url).pathname), "..", "..");
-const CACHE_ROOT = Bun.env.KOREAN_TRADING_CACHE_DIR ?? join(PLUGIN_ROOT, ".cache");
+const CACHE_ROOT = process.env.KOREAN_TRADING_CACHE_DIR ?? join(PLUGIN_ROOT, ".cache");
 
 export function getCacheDir(...segments: string[]): string {
   const dir = join(CACHE_ROOT, ...segments);
@@ -83,7 +83,7 @@ export async function withLock<T>(
         mkdirSync(lockDir);
         break;
       }
-      await Bun.sleep(200);
+      await new Promise(r => setTimeout(r, 200));
     }
   }
 

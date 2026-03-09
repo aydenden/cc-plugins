@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- DART 공시 + 재무제표 ---
 // Usage:
 //   bun run scripts/dart/disclosure.ts <ticker> disclosures
@@ -87,8 +87,8 @@ async function fetchFinancial(apiKey: string, corpCode: string, year: string, qu
 // --- Main ---
 
 async function main() {
-  const ticker = Bun.argv[2];
-  const command = Bun.argv[3];
+  const ticker = process.argv[2];
+  const command = process.argv[3];
 
   if (!ticker || !command) {
     output(fail("INVALID_ARGS", "사용법:\n  bun run disclosure.ts <종목코드> disclosures\n  bun run disclosure.ts <종목코드> financial [year] [quarter]"));
@@ -109,8 +109,8 @@ async function main() {
       const data = await fetchDisclosures(apiKey, corp.corp_code);
       output(success({ ticker, corp_code: corp.corp_code, corp_name: corp.corp_name, disclosures: data }, "dart"));
     } else if (command === "financial") {
-      const year = Bun.argv[4] ?? String(new Date().getFullYear() - 1);
-      const quarter = Bun.argv[5] ?? "annual";
+      const year = process.argv[4] ?? String(new Date().getFullYear() - 1);
+      const quarter = process.argv[5] ?? "annual";
       const data = await fetchFinancial(apiKey, corp.corp_code, year, quarter);
       output(success({ ticker, corp_code: corp.corp_code, corp_name: corp.corp_name, year, quarter, financial: data }, "dart"));
     } else {

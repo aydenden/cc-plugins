@@ -9,13 +9,13 @@ description: FRED(미국 연방준비은행) 매크로 경제 지표를 조회�
 
 ```bash
 # 단일 시리즈
-bun run plugins/korean-trading/scripts/fred/indicators.ts FEDFUNDS
+node plugins/korean-trading/dist/fred/indicators.js FEDFUNDS
 
 # 전체 시리즈
-bun run plugins/korean-trading/scripts/fred/indicators.ts all
+node plugins/korean-trading/dist/fred/indicators.js all
 
 # 기간 지정
-bun run plugins/korean-trading/scripts/fred/indicators.ts T10Y2Y 2024-01-01
+node plugins/korean-trading/dist/fred/indicators.js T10Y2Y 2024-01-01
 ```
 
 ## 필요 환경변수

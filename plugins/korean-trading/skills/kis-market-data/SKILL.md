@@ -16,72 +16,72 @@ description: KIS(한국투자증권) API를 통한 국내/해외 주식 시장 �
 
 ```bash
 # 일봉/주봉/월봉 OHLCV
-bun run plugins/korean-trading/scripts/kis/ohlcv.ts 005930          # 삼성전자 3개월 일봉
-bun run plugins/korean-trading/scripts/kis/ohlcv.ts 005930 W        # 주봉
-bun run plugins/korean-trading/scripts/kis/ohlcv.ts 005930 D 20240101 20241231  # 기간지정
+node plugins/korean-trading/dist/kis/ohlcv.js 005930          # 삼성전자 3개월 일봉
+node plugins/korean-trading/dist/kis/ohlcv.js 005930 W        # 주봉
+node plugins/korean-trading/dist/kis/ohlcv.js 005930 D 20240101 20241231  # 기간지정
 
 # 투자자별 매매동향 (외국인/기관/개인)
-bun run plugins/korean-trading/scripts/kis/investor-trend.ts 005930
+node plugins/korean-trading/dist/kis/investor-trend.js 005930
 
 # 공매도 현황
-bun run plugins/korean-trading/scripts/kis/short-sale.ts 005930
+node plugins/korean-trading/dist/kis/short-sale.js 005930
 
 # 신용잔고
-bun run plugins/korean-trading/scripts/kis/credit.ts 005930
+node plugins/korean-trading/dist/kis/credit.js 005930
 
 # 재무비율 (PER/PBR/ROE/EPS)
-bun run plugins/korean-trading/scripts/kis/financial-ratio.ts 005930
+node plugins/korean-trading/dist/kis/financial-ratio.js 005930
 
 # KOSPI/KOSDAQ 지수
-bun run plugins/korean-trading/scripts/kis/index-price.ts          # 전체
-bun run plugins/korean-trading/scripts/kis/index-price.ts 0001     # KOSPI만
+node plugins/korean-trading/dist/kis/index-price.js          # 전체
+node plugins/korean-trading/dist/kis/index-price.js 0001     # KOSPI만
 
 # 프로그램매매 동향
-bun run plugins/korean-trading/scripts/kis/program-trade.ts 005930
+node plugins/korean-trading/dist/kis/program-trade.js 005930
 
 # 증권사 컨센서스 (투자의견/목표가)
-bun run plugins/korean-trading/scripts/kis/consensus.ts 005930
+node plugins/korean-trading/dist/kis/consensus.js 005930
 
 # 선물/옵션 (KOSPI200)
-bun run plugins/korean-trading/scripts/kis/futures.ts
+node plugins/korean-trading/dist/kis/futures.js
 
 # --- Phase 6: 현재가/랭킹/분봉/해외주식 ---
 
 # 종목 현재가 (가격, 시총, PER/PBR, 52주 고저, 외국인순매수)
-bun run plugins/korean-trading/scripts/kis/current-price.ts 005930
+node plugins/korean-trading/dist/kis/current-price.js 005930
 
 # 거래량 순위 (코스피/코스닥)
-bun run plugins/korean-trading/scripts/kis/volume-rank.ts              # 코스피 기본
-bun run plugins/korean-trading/scripts/kis/volume-rank.ts kosdaq       # 코스닥
+node plugins/korean-trading/dist/kis/volume-rank.js              # 코스피 기본
+node plugins/korean-trading/dist/kis/volume-rank.js kosdaq       # 코스닥
 
 # 등락률 순위 (상승/하락)
-bun run plugins/korean-trading/scripts/kis/fluctuation-rank.ts         # 상승 상위
-bun run plugins/korean-trading/scripts/kis/fluctuation-rank.ts down    # 하락 상위
+node plugins/korean-trading/dist/kis/fluctuation-rank.js         # 상승 상위
+node plugins/korean-trading/dist/kis/fluctuation-rank.js down    # 하락 상위
 
 # 시가총액 순위
-bun run plugins/korean-trading/scripts/kis/market-cap-rank.ts          # 코스피 기본
-bun run plugins/korean-trading/scripts/kis/market-cap-rank.ts kosdaq   # 코스닥
+node plugins/korean-trading/dist/kis/market-cap-rank.js          # 코스피 기본
+node plugins/korean-trading/dist/kis/market-cap-rank.js kosdaq   # 코스닥
 
 # 외국인/기관 순매수 상위
-bun run plugins/korean-trading/scripts/kis/foreign-institution-total.ts          # 외국인 순매수 상위
-bun run plugins/korean-trading/scripts/kis/foreign-institution-total.ts sell     # 외국인 순매도 상위
-bun run plugins/korean-trading/scripts/kis/foreign-institution-total.ts buy inst # 기관 순매수 상위
+node plugins/korean-trading/dist/kis/foreign-institution-total.js          # 외국인 순매수 상위
+node plugins/korean-trading/dist/kis/foreign-institution-total.js sell     # 외국인 순매도 상위
+node plugins/korean-trading/dist/kis/foreign-institution-total.js buy inst # 기관 순매수 상위
 
 # 당일 분봉 (장중만 유효)
-bun run plugins/korean-trading/scripts/kis/minute-chart.ts 005930      # 1분봉 기본
-bun run plugins/korean-trading/scripts/kis/minute-chart.ts 005930 5    # 5분봉
-bun run plugins/korean-trading/scripts/kis/minute-chart.ts 005930 30   # 30분봉
+node plugins/korean-trading/dist/kis/minute-chart.js 005930      # 1분봉 기본
+node plugins/korean-trading/dist/kis/minute-chart.js 005930 5    # 5분봉
+node plugins/korean-trading/dist/kis/minute-chart.js 005930 30   # 30분봉
 
 # 해외주식 현재가 (NAS/NYS/AMS/HKS/TSE)
-bun run plugins/korean-trading/scripts/kis/overseas-price.ts NAS AAPL   # 나스닥 애플
-bun run plugins/korean-trading/scripts/kis/overseas-price.ts NYS SPY    # NYSE SPY
-bun run plugins/korean-trading/scripts/kis/overseas-price.ts HKS 00700  # 홍콩 텐센트
-bun run plugins/korean-trading/scripts/kis/overseas-price.ts TSE 7203   # 도쿄 도요타
+node plugins/korean-trading/dist/kis/overseas-price.js NAS AAPL   # 나스닥 애플
+node plugins/korean-trading/dist/kis/overseas-price.js NYS SPY    # NYSE SPY
+node plugins/korean-trading/dist/kis/overseas-price.js HKS 00700  # 홍콩 텐센트
+node plugins/korean-trading/dist/kis/overseas-price.js TSE 7203   # 도쿄 도요타
 
 # 해외주식 일봉/주봉/월봉
-bun run plugins/korean-trading/scripts/kis/overseas-daily.ts NAS AAPL          # 일봉 기본
-bun run plugins/korean-trading/scripts/kis/overseas-daily.ts NAS AAPL W        # 주봉
-bun run plugins/korean-trading/scripts/kis/overseas-daily.ts NYS SPY M         # 월봉
+node plugins/korean-trading/dist/kis/overseas-daily.js NAS AAPL          # 일봉 기본
+node plugins/korean-trading/dist/kis/overseas-daily.js NAS AAPL W        # 주봉
+node plugins/korean-trading/dist/kis/overseas-daily.js NYS SPY M         # 월봉
 ```
 
 ## 해석 가이드

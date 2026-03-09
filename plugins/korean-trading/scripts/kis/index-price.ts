@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KIS KOSPI/KOSDAQ 지수 ---
 // Usage: bun run scripts/kis/index-price.ts [index_code]
 // index_code: 0001(KOSPI), 1001(KOSDAQ), 2001(KOSPI200) — 기본값 전체
@@ -45,7 +45,7 @@ async function fetchIndex(code: string) {
 }
 
 async function main() {
-  const argCode = Bun.argv[2];
+  const argCode = process.argv[2];
   const codes = argCode ? [argCode] : Object.keys(INDEX_CODES);
 
   try {

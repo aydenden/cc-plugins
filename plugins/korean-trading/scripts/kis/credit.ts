@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KIS 신용잔고 ---
 // Usage: bun run scripts/kis/credit.ts <ticker>
 
@@ -6,7 +6,7 @@ import { kisGet } from "../common/kis-auth.ts";
 import { success, fail, output } from "../common/http.ts";
 
 async function main() {
-  const ticker = Bun.argv[2];
+  const ticker = process.argv[2];
   if (!ticker) {
     output(fail("INVALID_ARGS", "사용법: bun run credit.ts <종목코드>"));
     return;

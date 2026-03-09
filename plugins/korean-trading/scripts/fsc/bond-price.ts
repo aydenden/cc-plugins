@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- 금융위원회 채권시세 조회 ---
 // Usage: bun run scripts/fsc/bond-price.ts [date] [KTS|소액채권|일반채권]
 // date: YYYYMMDD 형식, 생략 시 최근 영업일 자동 탐색
@@ -79,8 +79,8 @@ async function fetchBonds(serviceKey: string, date: string, market: string): Pro
 
 async function main() {
   const serviceKey = requireEnv("DATA_GO_KR_API_KEY");
-  const inputDate = Bun.argv[2];
-  const market = Bun.argv[3] ?? "KTS";
+  const inputDate = process.argv[2];
+  const market = process.argv[3] ?? "KTS";
 
   try {
     let date = inputDate ?? todayYYYYMMDD();

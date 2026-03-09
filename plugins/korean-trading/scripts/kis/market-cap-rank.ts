@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KIS 시가총액 순위 ---
 // Usage: bun run scripts/kis/market-cap-rank.ts [kospi|kosdaq|all] [count]
 // Examples:
@@ -29,8 +29,8 @@ function resolveMarketCode(market?: string): string {
 }
 
 async function main() {
-  const market = Bun.argv[2];
-  const countArg = Bun.argv[3] ? parseInt(Bun.argv[3]) : undefined;
+  const market = process.argv[2];
+  const countArg = process.argv[3] ? parseInt(process.argv[3]) : undefined;
 
   try {
     const json = await kisGet<{

@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // --- KIS 투자자별 매매동향 ---
 // Usage: bun run scripts/kis/investor-trend.ts <ticker>
 // 외국인/기관/개인 순매수 동향
@@ -7,7 +7,7 @@ import { kisGet } from "../common/kis-auth.ts";
 import { success, fail, output } from "../common/http.ts";
 
 async function main() {
-  const ticker = Bun.argv[2];
+  const ticker = process.argv[2];
   if (!ticker) {
     output(fail("INVALID_ARGS", "사용법: bun run investor-trend.ts <종목코드>"));
     return;

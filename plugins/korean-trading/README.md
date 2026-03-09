@@ -88,14 +88,15 @@ KIS는 OAuth2 토큰이 필요합니다. 플러그인이 자동으로 처리합�
 
 ## 사전 요구사항
 
-- [Bun](https://bun.sh) 런타임 (v1.0 이상)
+- **실행**: [Node.js](https://nodejs.org) v18 이상 (사전 빌드된 `dist/` 포함)
+- **개발**: [Bun](https://bun.sh) v1.0 이상 (소스 수정 후 `bun run scripts/build.ts`로 재빌드)
 
 ```bash
-# macOS
-brew install oven-sh/bun/bun
+# Node.js (실행만)
+brew install node
 
-# 또는
-curl -fsSL https://bun.sh/install | bash
+# Bun (개발 시)
+brew install oven-sh/bun/bun
 ```
 
 ## 커맨드
@@ -146,65 +147,65 @@ curl -fsSL https://bun.sh/install | bash
 
 ```bash
 # FRED 지표
-bun run plugins/korean-trading/scripts/fred/indicators.ts FEDFUNDS
-bun run plugins/korean-trading/scripts/fred/indicators.ts all
+node plugins/korean-trading/dist/fred/indicators.js FEDFUNDS
+node plugins/korean-trading/dist/fred/indicators.js all
 
 # ECOS 지표
-bun run plugins/korean-trading/scripts/ecos/indicators.ts base_rate
-bun run plugins/korean-trading/scripts/ecos/indicators.ts all
+node plugins/korean-trading/dist/ecos/indicators.js base_rate
+node plugins/korean-trading/dist/ecos/indicators.js all
 
 # KRX
-bun run plugins/korean-trading/scripts/krx/vkospi.ts
-bun run plugins/korean-trading/scripts/krx/sector-index.ts
+node plugins/korean-trading/dist/krx/vkospi.js
+node plugins/korean-trading/dist/krx/sector-index.js
 
 # KIS
-bun run plugins/korean-trading/scripts/kis/ohlcv.ts 005930
-bun run plugins/korean-trading/scripts/kis/investor-trend.ts 005930
-bun run plugins/korean-trading/scripts/kis/financial-ratio.ts 005930
-bun run plugins/korean-trading/scripts/kis/index-price.ts
-bun run plugins/korean-trading/scripts/kis/consensus.ts 005930
-bun run plugins/korean-trading/scripts/kis/short-sale.ts 005930
-bun run plugins/korean-trading/scripts/kis/credit.ts 005930
-bun run plugins/korean-trading/scripts/kis/program-trade.ts 005930
-bun run plugins/korean-trading/scripts/kis/futures.ts
+node plugins/korean-trading/dist/kis/ohlcv.js 005930
+node plugins/korean-trading/dist/kis/investor-trend.js 005930
+node plugins/korean-trading/dist/kis/financial-ratio.js 005930
+node plugins/korean-trading/dist/kis/index-price.js
+node plugins/korean-trading/dist/kis/consensus.js 005930
+node plugins/korean-trading/dist/kis/short-sale.js 005930
+node plugins/korean-trading/dist/kis/credit.js 005930
+node plugins/korean-trading/dist/kis/program-trade.js 005930
+node plugins/korean-trading/dist/kis/futures.js
 
 # KIS Phase 6 — 현재가/랭킹/분봉/해외주식
-bun run plugins/korean-trading/scripts/kis/current-price.ts 005930
-bun run plugins/korean-trading/scripts/kis/volume-rank.ts
-bun run plugins/korean-trading/scripts/kis/fluctuation-rank.ts
-bun run plugins/korean-trading/scripts/kis/market-cap-rank.ts
-bun run plugins/korean-trading/scripts/kis/foreign-institution-total.ts
-bun run plugins/korean-trading/scripts/kis/minute-chart.ts 005930
-bun run plugins/korean-trading/scripts/kis/overseas-price.ts NAS AAPL
-bun run plugins/korean-trading/scripts/kis/overseas-daily.ts NAS AAPL
+node plugins/korean-trading/dist/kis/current-price.js 005930
+node plugins/korean-trading/dist/kis/volume-rank.js
+node plugins/korean-trading/dist/kis/fluctuation-rank.js
+node plugins/korean-trading/dist/kis/market-cap-rank.js
+node plugins/korean-trading/dist/kis/foreign-institution-total.js
+node plugins/korean-trading/dist/kis/minute-chart.js 005930
+node plugins/korean-trading/dist/kis/overseas-price.js NAS AAPL
+node plugins/korean-trading/dist/kis/overseas-daily.js NAS AAPL
 
 # DART
-bun run plugins/korean-trading/scripts/dart/corp-codes.ts 005930
-bun run plugins/korean-trading/scripts/dart/disclosure.ts 005930 disclosures
-bun run plugins/korean-trading/scripts/dart/disclosure.ts 005930 financial 2024 annual
+node plugins/korean-trading/dist/dart/corp-codes.js 005930
+node plugins/korean-trading/dist/dart/disclosure.js 005930 disclosures
+node plugins/korean-trading/dist/dart/disclosure.js 005930 financial 2024 annual
 
 # 뉴스
-bun run plugins/korean-trading/scripts/news/search.ts "삼성전자" 10
+node plugins/korean-trading/dist/news/search.js "삼성전자" 10
 
 # 글로벌 오버나이트
-bun run plugins/korean-trading/scripts/market/overnight.ts
+node plugins/korean-trading/dist/market/overnight.js
 
 # WICS 섹터
-bun run plugins/korean-trading/scripts/market/sector.ts 005930
+node plugins/korean-trading/dist/market/sector.js 005930
 
 # 환율 (한국수출입은행)
-bun run plugins/korean-trading/scripts/koreaexim/exchange-rate.ts
+node plugins/korean-trading/dist/koreaexim/exchange-rate.js
 
 # FSC 채권/지수 (공공데이터포털)
-bun run plugins/korean-trading/scripts/fsc/bond-price.ts
-bun run plugins/korean-trading/scripts/fsc/market-index.ts bond
+node plugins/korean-trading/dist/fsc/bond-price.js
+node plugins/korean-trading/dist/fsc/market-index.js bond
 
 # 원자재 시세 (Alpha Vantage)
-bun run plugins/korean-trading/scripts/alphavantage/commodities.ts WTI daily
-bun run plugins/korean-trading/scripts/alphavantage/commodities.ts COPPER daily
+node plugins/korean-trading/dist/alphavantage/commodities.js WTI daily
+node plugins/korean-trading/dist/alphavantage/commodities.js COPPER daily
 
 # 통합 검증 (모든 API 연결 테스트)
-bun run plugins/korean-trading/scripts/test-all.ts
+node plugins/korean-trading/dist/test-all.js
 ```
 
 모든 스크립트는 JSON envelope 형식으로 출력합니다:
@@ -282,7 +283,8 @@ plugins/korean-trading/
 │   └── risk-sizing/
 │       ├── SKILL.md
 │       └── references/position-sizing.md
-└── scripts/                       # Bun TypeScript 스크립트
+├── dist/                          # Node.js 번들 (bun build 결과물, git 포함)
+    └── scripts/                       # TypeScript 소스 (개발용)
     ├── common/                    # 공유 인프라
     │   ├── http.ts                # fetch 래퍼 (rate limit, retry)
     │   ├── cache.ts               # ~/.cache 경로 관리
