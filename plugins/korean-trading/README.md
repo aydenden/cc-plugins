@@ -50,6 +50,33 @@ claude --plugin-dir ./plugins/korean-trading
 
 > 모든 키가 필요하지는 않습니다. 필요한 데이터 소스의 키만 등록하면 해당 기능만 사용할 수 있습니다.
 
+### Cowork 환경 (Claude Desktop)
+
+Cowork VM에서는 `settings.json`의 환경변수가 전달되지 않습니다. 대신 **바인딩 폴더**에 `trading-env.json` 파일을 생성하세요.
+
+1. Cowork 세션 생성 시 폴더를 바인딩합니다 (예: `~/stock`)
+2. 해당 폴더에 `trading-env.json` 파일을 생성합니다:
+
+```json
+{
+  "KIS_APP_KEY": "your-kis-app-key",
+  "KIS_APP_SECRET": "your-kis-app-secret",
+  "KRX_API_KEY": "",
+  "ECOS_API_KEY": "",
+  "FRED_API_KEY": "",
+  "DART_API_KEY": "",
+  "NAVER_CLIENT_ID": "",
+  "NAVER_CLIENT_SECRET": "",
+  "KOREAEXIM_API_KEY": "",
+  "DATA_GO_KR_API_KEY": "",
+  "ALPHA_VANTAGE_API_KEY": ""
+}
+```
+
+> 파일명은 반드시 `trading-env.json`이어야 합니다. 사용할 API의 키만 입력하고 나머지는 빈 문자열로 두면 됩니다.
+
+스크립트가 OS 환경변수에서 키를 찾지 못하면 자동으로 `/mnt/*/trading-env.json`을 탐색하여 로드합니다.
+
 ### KIS 토큰 관리
 
 KIS는 OAuth2 토큰이 필요합니다. 플러그인이 자동으로 처리합니다:

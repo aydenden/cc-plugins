@@ -123,8 +123,39 @@ export function output(result: ApiResult): void {
 
 // --- Env Helper ---
 
+let envFileLoaded = false;
+
+function loadEnvFile(): void {
+  if (envFileLoaded) return;
+  envFileLoaded = true;
+
+  const { existsSync, readFileSync, readdirSync } = require("fs");
+  const searchRoots = ["/mnt", `${Bun.env.HOME}/mnt`];
+  const skip = new Set([".claude", ".local-plugins", ".skills", "outputs", "uploads"]);
+
+  for (const root of searchRoots) {
+    if (!existsSync(root)) continue;
+    for (const name of readdirSync(root)) {
+      if (skip.has(name)) continue;
+      const candidate = `${root}/${name}/trading-env.json`;
+      if (!existsSync(candidate)) continue;
+      try {
+        const env = JSON.parse(readFileSync(candidate, "utf-8"));
+        for (const [k, v] of Object.entries(env)) {
+          if (v && !Bun.env[k]) Bun.env[k] = v as string;
+        }
+      } catch { /* ignore */ }
+      return;
+    }
+  }
+}
+
 export function requireEnv(name: string): string {
-  const val = Bun.env[name];
+  let val = Bun.env[name];
+  if (!val) {
+    loadEnvFile();
+    val = Bun.env[name];
+  }
   if (!val) {
     output(fail("ENV_MISSING", `환경변수 ${name}이(가) 설정되지 않았습니다`));
     process.exit(0);
