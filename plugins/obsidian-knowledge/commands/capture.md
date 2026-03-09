@@ -5,41 +5,60 @@ argument-hint: <노트 제목 또는 URL>
 
 "$ARGUMENTS"를 Obsidian 볼트에 저장해줘.
 
+## 환경변수
+
+볼트 경로: `OBSIDIAN_VAULT_PATH` 환경변수에서 가져온다. 설정되지 않았으면 사용자에게 안내하고 중단.
+
 ## 소스 감지
 
 인자를 분석해서 소스 유형을 판단한다:
 
 | 조건 | 유형 | 동작 |
 |------|------|------|
-| URL 형태 (`http://`, `https://`) | 웹 클리핑 | defuddle로 본문 추출 후 노트 생성 |
+| URL 형태 (`http://`, `https://`) | 웹 클리핑 | WebFetch로 본문 추출 후 노트 생성 |
 | 그 외 | 대화 지식 저장 | 현재 대화에서 핵심 내용 추출 후 노트 생성 |
 
 ## 1. 웹 클리핑 (URL)
 
-```bash
-# 1단계: defuddle로 본문 추출
-defuddle parse <URL> --md
+1. WebFetch로 URL 본문 추출 (제목, 핵심 내용 요약 요청)
+2. 볼트 하위 폴더를 판단하여 Write로 노트 생성
+3. frontmatter에 `source: URL` 포함
 
-# 2단계: 볼트에 저장
-obsidian create name="제목" content="..." tags="clipping,소스도메인" silent
-```
-
-defuddle 결과에서 제목/본문을 추출하고, frontmatter에 source URL을 포함한다.
-
-## 3. 대화 지식 저장 (기본)
+## 2. 대화 지식 저장 (기본)
 
 현재 대화에서 핵심 지식을 추출하여 노트를 생성한다.
 
-```bash
-obsidian create name="$ARGUMENTS" content="---\ntags:\n  - 자동추론태그\ndate: YYYY-MM-DD\nsource: Claude Code 세션\n---\n\n# 제목\n\n## 핵심 요약\n...\n\n## 상세 내용\n..." silent
-```
+1. 적절한 하위 디렉토리를 판단
+2. Write 도구로 직접 파일 생성
 
-적절한 하위 디렉토리를 판단하여 저장한다 (AI/, 백엔드/, DesignPattern/ 등).
+## 노트 형식
+
+```markdown
+---
+tags: [자동추론된태그]
+summary: "1-2문장 핵심 요약. 검색 판단용."
+date: YYYY-MM-DD
+source: Claude Code 세션 | URL
+---
+
+# 제목
+
+## 핵심 요약
+
+## 상세 내용
+
+## 관련 노트
+- [[관련노트1]]
+
+## 코드 예시 (해당시)
+```
 
 ## 자동 정리 (모든 유형 공통)
 
 저장 후 반드시 수행:
 
-1. **중복 검사**: `obsidian search query="제목 키워드" limit=5`로 유사 노트 확인. 중복이면 기존 노트에 append 제안.
-2. **관련 노트 연결**: `obsidian search`와 `obsidian backlinks`로 관련 노트를 찾아 본문에 `[[wikilink]]` 추가.
-3. **태그 정규화**: `obsidian tags sort=count`로 기존 태그 목록 확인 후 유사 태그 통일 (예: `js`와 `javascript`가 혼용되면 빈도 높은 쪽으로).
+1. **중복 검사**: Grep으로 볼트 내 유사 제목/태그 검색. 중복이면 기존 노트에 append 제안.
+2. **관련 노트 연결**: Grep으로 관련 태그를 가진 노트를 찾아 본문에 `[[wikilink]]` 추가.
+3. **태그 정규화**: Grep으로 기존 태그 패턴 확인 후 일관된 태그 사용 (예: `js`와 `javascript` 혼용 방지).
+
+노트 제목: $ARGUMENTS
