@@ -2,10 +2,11 @@
 // All cache files stored under ~/.cache/claude-plugins/korean-trading/
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
+import { join, dirname } from "path";
 
-const CACHE_ROOT = join(homedir(), ".cache", "claude-plugins", "korean-trading");
+// 플러그인 루트 기준 .cache/ 디렉토리 (scripts/common/cache.ts → ../../.cache/)
+const PLUGIN_ROOT = join(dirname(new URL(import.meta.url).pathname), "..", "..");
+const CACHE_ROOT = join(PLUGIN_ROOT, ".cache");
 
 export function getCacheDir(...segments: string[]): string {
   const dir = join(CACHE_ROOT, ...segments);
