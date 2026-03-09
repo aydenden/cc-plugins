@@ -1,0 +1,16 @@
+{
+  "name": "obsidian-knowledge",
+  "version": "0.1.0",
+  "description": "Obsidian 볼트 기반 지식 관리 워크플로우 — 포착(capture), 회수(recall), 조사(research)",
+  "author": {
+    "name": "aydenden"
+  },
+  "repository": "https://github.com/aydenden/cc-plugins",
+  "keywords": [
+    "obsidian",
+    "knowledge",
+    "vault",
+    "research",
+    "pkm"
+  ]
+}

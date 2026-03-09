@@ -5,15 +5,15 @@
   },
   "plugins": [
     {
-      "name": "marksman-lsp",
-      "source": "./plugins/marksman-lsp",
-      "description": "Markdown LSP - 링크 완성, 정의 이동, 참조 찾기, 진단",
-      "version": "1.0.0"
+      "name": "obsidian-knowledge",
+      "source": "./plugins/obsidian-knowledge",
+      "description": "Obsidian 볼트 기반 지식 관리 워크플로우 — 포착(capture), 회수(recall), 조사(research)",
+      "version": "0.1.0"
     },
     {
-      "name": "workflow",
-      "source": "./plugins/workflow",
-      "description": "beads 작업 생성 워크플로우 자동화 - 자연어 프롬프트를 epic/task 구조로 변환",
+      "name": "korean-trading",
+      "source": "./plugins/korean-trading",
+      "description": "한국 주식 단타 트레이딩 분석 도구 — KIS, KRX, DART, ECOS, FRED API 기반 시장 데이터 조회 및 분석",
       "version": "0.1.0"
     }
   ]

@@ -1,8 +1,0 @@
-{
-  "name": "workflow",
-  "version": "0.1.0",
-  "description": "beads 작업 생성 워크플로우 자동화 플러그인",
-  "author": {
-    "name": "nyh"
-  }
-}

@@ -1,0 +1,19 @@
+{
+  "name": "korean-trading",
+  "version": "0.1.0",
+  "description": "한국 주식 단타 트레이딩 분석 도구 — KIS, KRX, DART, ECOS, FRED API 기반 시장 데이터 조회 및 분석",
+  "author": {
+    "name": "aydenden"
+  },
+  "repository": "https://github.com/aydenden/cc-plugins",
+  "keywords": [
+    "trading",
+    "korean-stock",
+    "kis",
+    "krx",
+    "dart",
+    "ecos",
+    "fred",
+    "market-data"
+  ]
+}

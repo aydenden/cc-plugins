@@ -17,3 +17,9 @@ Thumbs.db
 # Temporary
 *.tmp
 *.temp
+
+.memsearch
+.beads
+
+# Korean Trading Plugin
+plugins/korean-trading/scripts/dart/corp_codes.json
