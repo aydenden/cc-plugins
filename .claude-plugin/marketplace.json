@@ -15,6 +15,12 @@
       "source": "./plugins/korean-trading",
       "description": "한국 주식 단타 트레이딩 분석 도구 — KIS, KRX, DART, ECOS, FRED API 기반 시장 데이터 조회 및 분석",
       "version": "0.4.0"
+    },
+    {
+      "name": "worktree-task",
+      "source": "./plugins/worktree-task",
+      "description": "Git worktree 기반 태스크 격리 개발 — worktree 생성/제거, main 보호, 미커밋 방지",
+      "version": "0.1.0"
     }
   ]
 }
