@@ -3,6 +3,11 @@
 # .claude/worktree-task.local.md에 protected-branches가 설정된 프로젝트에서만 활성화
 set -euo pipefail
 
+# 메인 세션이면 통과 — worktree 에이전트에서만 보호
+if [ -z "${HOOK_AGENT_ID:-}" ]; then
+  exit 0
+fi
+
 # 프로젝트별 설정 파일 확인 — 없으면 즉시 통과
 LOCAL_CONFIG="${CLAUDE_PROJECT_DIR:-.}/.claude/worktree-task.local.md"
 if [ ! -f "$LOCAL_CONFIG" ]; then

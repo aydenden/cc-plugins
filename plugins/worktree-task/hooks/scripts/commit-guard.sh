@@ -2,6 +2,11 @@
 # Stop hook: 미커밋 변경사항이 있으면 세션 종료 차단
 set -euo pipefail
 
+# 메인 세션이면 통과 — worktree 에이전트에서만 동작
+if [ -z "${HOOK_AGENT_ID:-}" ]; then
+  exit 0
+fi
+
 # git repo가 아니면 통과
 if ! git rev-parse --git-dir &>/dev/null; then
   exit 0
