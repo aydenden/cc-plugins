@@ -38,6 +38,3 @@ Before cleanup, review the agent's work:
 
 Do NOT skip the review. Inspect commits and diffs before deciding to merge or discard.
 EOF
-
-# Remove marker after notification
-rm -f "$MARKER_FILE"

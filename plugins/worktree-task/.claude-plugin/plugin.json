@@ -1,6 +1,6 @@
 {
   "name": "worktree-task",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Git worktree 기반 태스크 격리 개발 플러그인. worktree 생성/제거, main 브랜치 보호, 미커밋 방지 기능 제공.",
   "author": {
     "name": "nyh",
