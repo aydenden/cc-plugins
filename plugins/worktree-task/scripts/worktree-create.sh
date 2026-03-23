@@ -1,32 +1,32 @@
 #!/bin/bash
-# WorktreeCreate hook script — Agent tool의 isolation: "worktree" 사용 시 자동 실행
-# stdin으로 JSON 입력: { "name": "...", "cwd": "..." }
+# WorktreeCreate hook script — runs when Agent tool uses isolation: "worktree"
+# stdin: JSON { "name": "...", "cwd": "..." }
 set -euo pipefail
 
 log() { echo "[worktree-create] $*" >&2; }
 
-# stdin에서 입력 읽기
+# Read input from stdin
 INPUT=$(cat)
 NAME=$(echo "$INPUT" | jq -r '.name')
 CWD=$(echo "$INPUT" | jq -r '.cwd')
 
-# CWD가 없으면 main worktree로 fallback
+# Fallback to main worktree if CWD is missing
 if [ ! -d "$CWD" ]; then
   CWD=$(git worktree list | grep '\[main\]' | awk '{print $1}' || pwd)
 fi
 
-# bare repo 루트
+# Bare repo root
 BARE_ROOT=$(cd "$CWD" && git rev-parse --git-common-dir | xargs dirname)
 WORKTREE_DIR="$BARE_ROOT/$NAME"
 
-# main worktree 경로
+# Main worktree path
 MAIN_DIR=$(cd "$CWD" && git worktree list | grep '\[main\]' | awk '{print $1}' || echo "")
 
-# git worktree 생성
+# Create git worktree
 log "Creating worktree: $WORKTREE_DIR"
 cd "$CWD" && git worktree add "$WORKTREE_DIR" -b "worktree-$NAME" >&2
 
-# .env 복사
+# Copy .env
 if [ -n "$MAIN_DIR" ] && [ -f "$MAIN_DIR/.env" ] && [ ! -f "$WORKTREE_DIR/.env" ]; then
   cp "$MAIN_DIR/.env" "$WORKTREE_DIR/"
   log ".env copied"
@@ -50,7 +50,7 @@ if [ -n "$MAIN_DIR" ] && [ -d "$MAIN_DIR/.beads" ]; then
   log "beads redirect created"
 fi
 
-# 프로젝트별 post-create 스크립트 실행
+# Run project-specific post-create script
 LOCAL_CONFIG="$MAIN_DIR/.claude/worktree-task.local.md"
 if [ -f "$LOCAL_CONFIG" ]; then
   POST_CREATE=$(sed -n '/^---$/,/^---$/p' "$LOCAL_CONFIG" \
@@ -67,5 +67,5 @@ fi
 
 log "Done: $WORKTREE_DIR"
 
-# stdout에 절대 경로만 출력
+# Output absolute path to stdout
 echo "$WORKTREE_DIR"
