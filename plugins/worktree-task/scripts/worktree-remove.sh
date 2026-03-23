@@ -16,6 +16,12 @@ fi
 # 브랜치명 추출
 BRANCH=$(cd "$WORKTREE_PATH" && git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
 
+# worktree 삭제 전 repo root로 이동 (cwd가 worktree 내부에 있을 경우 대비)
+REPO_ROOT=$(git -C "$WORKTREE_PATH" rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.bare$||; s|/\.git$||')
+if [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT" ]; then
+    cd "$REPO_ROOT" 2>/dev/null || true
+fi
+
 # git worktree remove
 log "Removing worktree: $WORKTREE_PATH"
 git worktree remove "$WORKTREE_PATH" --force 2>/dev/null || true
