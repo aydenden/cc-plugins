@@ -31,10 +31,13 @@ Pending worktree cleanup:
   Base:    $BASE_BRANCH
   Commits: $COMMIT_COUNT ($FIRST_COMMIT..$LAST_COMMIT)
 
-Before cleanup, review the agent's work:
+Review the agent's work, then clean up:
   1. git log ${BASE_BRANCH}..${BRANCH} --oneline
   2. git diff ${BASE_BRANCH}..${BRANCH}
   3. /worktree-task:remove ${WORKTREE_PATH}
 
+CRITICAL: You MUST use /worktree-task:remove for cleanup.
+Do NOT run "git worktree remove" directly via Bash — it WILL crash the session.
+The remove skill protects Claude Code's working directory before deletion.
 Do NOT skip the review. Inspect commits and diffs before deciding to merge or discard.
 EOF
