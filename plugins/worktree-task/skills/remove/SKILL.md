@@ -64,22 +64,36 @@ If you combine `cd` and `git worktree remove` in the same Bash call, only the su
 cd <repo-root>
 ```
 
-### 7. Remove worktree and branch
+### 7. Authorize removal
 
-After confirming cwd is safe (step 6 completed), run in a **new** Bash call:
+Set the `authorized` flag in the marker file so the PreToolUse guard allows the removal.
+This MUST be a separate Bash call AFTER step 6.
+
+```bash
+jq '.authorized = true' .claude/pending-worktree-cleanup.json > /tmp/wt-marker.json && mv /tmp/wt-marker.json .claude/pending-worktree-cleanup.json
+```
+
+If no marker file exists, create one:
+```bash
+mkdir -p .claude && echo '{"authorized": true}' > .claude/pending-worktree-cleanup.json
+```
+
+### 8. Remove worktree and branch
+
+After confirming cwd is safe (step 6) and authorized (step 7), run in a **new** Bash call:
 
 ```bash
 git worktree remove <worktree-path> --force
 git branch -d <worktree-branch>
 ```
 
-### 8. Clean up marker file
+### 9. Clean up marker file
 
 ```bash
 rm -f .claude/pending-worktree-cleanup.json
 ```
 
-### 9. Report
+### 10. Report
 
 ```
 Worktree removed:
