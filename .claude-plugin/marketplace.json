@@ -21,6 +21,12 @@
       "source": "./plugins/worktree-task",
       "description": "Git worktree 기반 태스크 격리 개발 — worktree 생성/제거, main 보호, 미커밋 방지",
       "version": "0.10.0"
+    },
+    {
+      "name": "pm",
+      "source": "./plugins/pm",
+      "description": "PMS 워크플로우와 Beads 이슈 트래커 통합 — 로드맵/PRD/디스커버리 산출물을 beads epic/task/feature로 자동 변환",
+      "version": "0.1.0"
     }
   ]
 }
