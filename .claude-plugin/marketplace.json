@@ -20,7 +20,7 @@
       "name": "worktree-task",
       "source": "./plugins/worktree-task",
       "description": "Git worktree 기반 태스크 격리 개발 — worktree 생성/제거, main 보호, 미커밋 방지",
-      "version": "0.10.0"
+      "version": "0.11.0"
     },
     {
       "name": "pm",

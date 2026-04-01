@@ -11,16 +11,6 @@
           }
         ]
       },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/worktree-remove-guard.sh",
-            "timeout": 5
-          }
-        ]
-      }
     ],
     "Stop": [
       {
