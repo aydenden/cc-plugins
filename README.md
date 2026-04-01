@@ -20,26 +20,31 @@
 
 ```bash
 git clone https://github.com/aydenden/cc-plugins.git
-claude --plugin-dir ./cc-plugins/plugins/marksman-lsp
+claude --plugin-dir ./cc-plugins/plugins/<plugin-name>
 ```
 
 ## 포함된 플러그인
 
-| 플러그인 | 설명 |
-|---------|------|
-| marksman-lsp | Markdown LSP - 링크 완성, 정의 이동, 참조 찾기, 진단 |
+| 플러그인 | 버전 | 설명 | 커맨드 | 스킬 | 에이전트 |
+|---------|------|------|--------|------|----------|
+| [obsidian-knowledge](./plugins/obsidian-knowledge) | v0.1.0 | Obsidian 볼트 기반 지식 관리 — 포착, 회수, 조사 | 3 | - | 1 |
+| [korean-trading](./plugins/korean-trading) | v0.4.0 | 한국 주식 단타 트레이딩 분석 — KIS, KRX, DART, ECOS, FRED API | 6 | 17 | - |
+| [worktree-task](./plugins/worktree-task) | v0.11.0 | Git worktree 기반 태스크 격리 개발 — 생성/제거, main 보호 | - | 3 | 1 |
+| [pm](./plugins/pm) | v0.1.0 | PMS + Beads 통합 PM 워크플로우 — 로드맵, PRD, 에픽 분해 | 5 | 2 | 1 |
 
-## 새 플러그인 추가
+## 디렉토리 구조
 
-```bash
-# 템플릿 복사
-cp -r templates/plugin-template plugins/my-new-plugin
-
-# plugin.json 수정
-# marketplace.json에 추가
 ```
-
-자세한 내용은 [CLAUDE.md](./CLAUDE.md) 참고.
+cc-plugins/
+├── .claude-plugin/marketplace.json   # 마켓플레이스 정의
+└── plugins/
+    └── {plugin-name}/
+        ├── .claude-plugin/plugin.json
+        ├── commands/    # 슬래시 명령어 (.md)
+        ├── skills/      # Agent Skills (SKILL.md)
+        ├── agents/      # 서브에이전트 (.md)
+        └── hooks/       # 이벤트 훅 (hooks.json)
+```
 
 ## 라이선스
 
