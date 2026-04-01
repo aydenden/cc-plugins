@@ -54,46 +54,20 @@ git merge <worktree-branch>
 
 If there are conflicts, inform the user and stop for manual resolution.
 
-### 6. Protect cwd — CRITICAL
-
-**This MUST be a separate Bash call BEFORE the remove step.**
-Claude Code's working directory must be moved to a safe location first.
-If you combine `cd` and `git worktree remove` in the same Bash call, only the subprocess changes directory — Claude Code's process cwd stays on the deleted path, crashing the session.
-
-```bash
-cd <repo-root>
-```
-
-### 7. Authorize removal
-
-Set the `authorized` flag in the marker file so the PreToolUse guard allows the removal.
-This MUST be a separate Bash call AFTER step 6.
-
-```bash
-jq '.authorized = true' .claude/pending-worktree-cleanup.json > /tmp/wt-marker.json && mv /tmp/wt-marker.json .claude/pending-worktree-cleanup.json
-```
-
-If no marker file exists, create one:
-```bash
-mkdir -p .claude && echo '{"authorized": true}' > .claude/pending-worktree-cleanup.json
-```
-
-### 8. Remove worktree and branch
-
-After confirming cwd is safe (step 6) and authorized (step 7), run in a **new** Bash call:
+### 6. Remove worktree and branch
 
 ```bash
 git worktree remove <worktree-path> --force
 git branch -d <worktree-branch>
 ```
 
-### 9. Clean up marker file
+### 7. Clean up marker file
 
 ```bash
 rm -f .claude/pending-worktree-cleanup.json
 ```
 
-### 10. Report
+### 8. Report
 
 ```
 Worktree removed:

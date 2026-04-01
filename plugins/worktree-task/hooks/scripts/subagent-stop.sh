@@ -36,8 +36,6 @@ Review the agent's work, then clean up:
   2. git diff ${BASE_BRANCH}..${BRANCH}
   3. /worktree-task:remove ${WORKTREE_PATH}
 
-CRITICAL: You MUST use /worktree-task:remove for cleanup.
-Do NOT run "git worktree remove" directly via Bash — it WILL crash the session.
-The remove skill protects Claude Code's working directory before deletion.
-Do NOT skip the review. Inspect commits and diffs before deciding to merge or discard.
+Tip: /worktree-task:remove handles merge, branch cleanup, and review in one flow.
+     You can also run "git worktree remove" directly if you prefer manual cleanup.
 EOF
