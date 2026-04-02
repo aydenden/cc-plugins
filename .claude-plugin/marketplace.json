@@ -27,6 +27,12 @@
       "source": "./plugins/pm",
       "description": "PMS 워크플로우와 Beads 이슈 트래커 통합 — 로드맵/PRD/디스커버리 산출물을 beads epic/task/feature로 자동 변환",
       "version": "0.1.0"
+    },
+    {
+      "name": "cmux-tools",
+      "source": "./plugins/cmux-tools",
+      "description": "cmux 워크플로우 도구",
+      "version": "0.1.0"
     }
   ]
 }

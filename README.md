@@ -31,6 +31,7 @@ claude --plugin-dir ./cc-plugins/plugins/<plugin-name>
 | [korean-trading](./plugins/korean-trading) | v0.4.0 | 한국 주식 단타 트레이딩 분석 — KIS, KRX, DART, ECOS, FRED API | 6 | 17 | - |
 | [worktree-task](./plugins/worktree-task) | v0.11.0 | Git worktree 기반 태스크 격리 개발 — 생성/제거, main 보호 | - | 3 | 1 |
 | [pm](./plugins/pm) | v0.1.0 | PMS + Beads 통합 PM 워크플로우 — 로드맵, PRD, 에픽 분해 | 5 | 2 | 1 |
+| [cmux-tools](./plugins/cmux-tools) | v0.1.0 | cmux 워크플로우 도구 | - | 1 | - |
 
 ## 디렉토리 구조
 
