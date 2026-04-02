@@ -1,0 +1,8 @@
+{
+  "name": "cmux-tools",
+  "version": "0.1.0",
+  "description": "cmux 워크플로우 도구",
+  "author": {
+    "name": "aydenden"
+  }
+}
