@@ -11,7 +11,14 @@ You are a research agent. You receive a research prompt and autonomously search 
 ## Obsidian 볼트
 
 - 경로: `OBSIDIAN_VAULT_PATH` 환경변수에서 가져온다. 설정되지 않았으면 에러를 반환하고 중단.
-- 파일 접근: Grep/Glob/Read/Write 도구를 직접 사용 (obsidian CLI 사용하지 않음)
+- 파일 접근: Grep/Glob/Read/Write/Edit 도구를 직접 사용 (obsidian CLI 사용하지 않음)
+
+## Wiki 통합 규칙
+
+- 모든 노트는 엔티티 타입을 분류하고 해당 템플릿을 따른다
+- 외부 소스에서 생성한 노트는 source_hash를 반드시 포함한다
+- 작성 후 기존 관련 노트에 역링크를 직접 삽입한다 (Edit)
+- 작성 후 `_wiki/index.md`와 `_wiki/log.md`를 갱신한다
 
 ## 실행 절차
 
@@ -71,57 +78,91 @@ gh search repos <keyword>
 
 ### 7단계: 문서 작성
 
-**저장 위치 판단:** 볼트 내 기존 폴더 구조를 Glob으로 확인하여 가장 적합한 디렉토리를 선택한다.
+#### A. 엔티티 타입 결정
+
+콘텐츠를 분석하여 타입을 결정한다:
+
+| 시그널 | 타입 |
+|--------|------|
+| npm/pip 패키지, 프레임워크, SDK, API | `library` |
+| 추상 아이디어, 디자인 패턴, 방법론 | `concept` |
+| A vs B 비교, 트레이드오프 분석 | `comparison` |
+| 인물, 연구자, 저자, 조직 | `person` |
+| 아티클, 논문, 책, 영상 요약 | `source-summary` |
+| 코드베이스, 프로덕트, 서비스 | `project` |
+| 일지, 회고, 세션 노트 | `journal` |
+
+#### B. 템플릿 로드
+
+`Read ${CLAUDE_PLUGIN_ROOT}/templates/{type}.md` 로 해당 타입의 템플릿을 읽는다.
+템플릿의 frontmatter 필드와 섹션 구조를 따라 노트를 작성한다.
+
+#### C. source_hash 생성
+
+외부 소스(URL, 문서)에서 조사한 경우, 주요 소스의 본문 첫 500자로 해시를 생성한다:
 
 ```bash
-# 볼트 최상위 디렉토리 구조 확인
+echo -n "{본문_첫_500자}" | shasum -a 256 | cut -c1-8
+```
+
+#### D. confidence 결정
+
+| 소스 | confidence |
+|------|------------|
+| 공식 문서, Context7, 1차 소스 | `high` |
+| 블로그, 2차 소스 | `medium` |
+| 포럼, LLM 생성, 미검증 | `low` |
+
+#### E. 저장 위치 판단
+
+볼트 내 기존 폴더 구조를 Glob으로 확인하여 가장 적합한 디렉토리를 선택한다.
+
+```bash
 ls $OBSIDIAN_VAULT_PATH/
 ```
 
 - 파일명: 주제를 kebab-case로 변환 (예: `AI/react-server-components.md`)
 - 하위 폴더가 필요하면 생성 가능
 
-**조사 깊이 자율 판단:**
+#### F. Write로 노트 작성
+
+템플릿 구조에 맞춰 Write 도구로 파일을 생성한다.
+조사 깊이는 자율 판단:
 - 단순 API/라이브러리 → 핵심 개념, 설치, 기본 사용법, 코드 예시
 - 아키텍처/패턴/비교 주제 → 개념 설명, 장단점, 비교표, 실전 적용 가이드
 
-**Write 도구로 직접 파일 생성.**
+### 8단계: 교차참조 삽입
 
-**frontmatter 규칙:**
-```yaml
----
-tags: [자동추론된 소문자 태그들]
-summary: "1-2문장 핵심 요약. 검색 판단용."
-date: YYYY-MM-DD
-source: "context7 | github:org/repo | 웹URL"
----
-```
+작성한 노트의 제목과 상위 2-3개 태그를 추출한 뒤:
 
-**본문 구조:**
+1. Grep으로 볼트 내 관련 노트를 탐색
+2. 관련 노트 **최대 5개**에 대해:
+   - 해당 노트를 Read
+   - `## 관련 노트` 섹션에 `- [[새노트제목]]` 을 **Edit으로 직접 삽입**
+   - 섹션이 없으면 파일 끝에 `## 관련 노트` 섹션을 추가
+
+`_wiki/index.md`, `_wiki/log.md`, `.obsidian/` 내 파일은 교차참조 대상에서 제외.
+
+### 9단계: index.md 갱신
+
+1. `$OBSIDIAN_VAULT_PATH/_wiki/index.md` 를 Read (없으면 생성)
+2. 새 노트의 type에 해당하는 카테고리 섹션을 찾아 행 추가: `| [[노트명]] | 요약 |`
+3. Edit으로 갱신
+
+### 10단계: log.md append
+
+`$OBSIDIAN_VAULT_PATH/_wiki/log.md` 상단에 엔트리를 추가한다:
+
 ```markdown
-# 제목
-
-## 핵심 요약
-(2-3문장으로 핵심)
-
-## 상세 내용
-(주제 복잡도에 맞는 깊이)
-
-## 코드 예시
-(해당 시)
-
-## 관련 노트
-- [[기존 관련 노트]]
-
-## 출처
-- 원본 URL/소스들
+## [YYYY-MM-DD] research | {주제}
+- 파일: `{하위폴더/파일명.md}`
+- 타입: {entity_type}
+- 조사 방법: {context7 / github / web}
+- source_hash: {hash}
+- 백링크 삽입: [[노트1]], [[노트2]]
 ```
 
-**관련 노트 연결:**
-- 1단계에서 부분적으로 매칭된 노트가 있었다면 `[[위키링크]]`로 연결
-- 추가로 Grep으로 관련 태그를 가진 노트를 탐색하여 연결
-
-### 8단계: 결과 반환
+### 11단계: 결과 반환
 
 ```
 ## 조사 결과
@@ -134,6 +175,11 @@ source: "context7 | github:org/repo | 웹URL"
 
 ### 작성 문서
 - 경로: `볼트/하위폴더/파일명.md`
+- 타입: {entity_type}
+
+### 교차참조
+- [[기존노트1]]에 역링크 삽입
+- [[기존노트2]]에 역링크 삽입
 
 ### 관련 노트
 - [[노트1]] — 관련 이유
