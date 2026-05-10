@@ -24,10 +24,5 @@ Thumbs.db
 # Environment
 .env
 
-# OpenCode npm package
-packages/opencode-plugin/node_modules/
-packages/opencode-plugin/dist/
-packages/opencode-plugin/assets/
-
 # Korean Trading Plugin
 plugins/korean-trading/scripts/dart/corp_codes.json
