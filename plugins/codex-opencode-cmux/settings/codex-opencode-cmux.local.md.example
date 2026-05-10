@@ -1,0 +1,66 @@
+---
+# 이 파일을 프로젝트 루트의 .claude/codex-opencode-cmux.local.md 로 복사 후 편집.
+# git에 커밋하지 말 것 (.gitignore에 .claude/*.local.md 추가 권장).
+
+# === 모델 라우팅 ===
+default_model: opencode-go/deepseek-v4-pro
+small_model: opencode-go/deepseek-v4-flash
+
+routing:
+  implement: opencode-go/deepseek-v4-pro       # 구현 (기본)
+  boilerplate: opencode-go/minimax-m2.7        # 단순 반복
+  review: opencode-go/deepseek-v4-pro          # 코드 리뷰
+  refactor: opencode-go/kimi-k2.6              # 장시간 multi-step
+  bulk: opencode-go/deepseek-v4-flash          # 대량 (100+ req)
+
+# === Escalation ===
+escalation:
+  enabled: true
+  primary: opencode-go/deepseek-v4-flash
+  fallback: opencode-go/kimi-k2.6
+  max_iterations: 3
+
+# === Budget ===
+budget:
+  preflight_check: true
+  warn_threshold_pct: 80
+  auto_block: false
+
+# === Timeouts ===
+dispatch_timeout: 600       # cmux wait-for 초
+
+# === cmux ===
+cmux:
+  prefer_pattern: B_prime   # B_prime (split + signal) 권장
+  sidebar_enabled: true     # set-status / set-progress / log
+
+# === 로깅 ===
+verbose: false              # SessionStart hook 상세 출력
+---
+
+# codex-opencode-cmux 사용자 설정
+
+이 파일은 본 플러그인의 사용자별 override를 담는다. frontmatter만 의미가 있고
+body 내용은 자유 메모로 사용 가능.
+
+## 환경변수 override
+
+settings 파일이 없거나 빠른 1회 변경이 필요하면 환경변수로도 가능:
+
+```bash
+export COCM_DEFAULT_MODEL=opencode-go/kimi-k2.6
+export COCM_ROUTE_IMPLEMENT=opencode-go/kimi-k2.6
+export COCM_ROUTE_BULK=opencode-go/deepseek-v4-flash
+export COCM_BUDGET_THRESHOLD=70
+```
+
+## 모델 카탈로그
+
+| Model ID | SWE-Pro | 크레딧 | 권장 용도 |
+|---|---|---|---|
+| `opencode-go/deepseek-v4-pro` | Tier A | 중간 | 기본 (default_model) |
+| `opencode-go/kimi-k2.6` | 58.6% | 높음 | 장시간 자율 |
+| `opencode-go/deepseek-v4-flash` | 중상 | 매우 낮음 | 대량 작업 |
+| `opencode-go/minimax-m2.7` | 41 | 낮음 | 보일러플레이트 |
+| `opencode-go/qwen3.6-plus` | 중 | 낮음 | CRUD |
+| `opencode-go/glm-5.1` | 중 | 매우 높음 | ⚠️ 사용 자제 |
