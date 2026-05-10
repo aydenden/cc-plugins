@@ -1,0 +1,39 @@
+{
+  "name": "@aydenden/opencode-plugins",
+  "version": "0.1.0",
+  "description": "OpenCode adapter for aydenden Claude Code plugins: commands, agents, skills, and selected hooks.",
+  "author": {
+    "name": "nyh",
+    "email": "aydenden@gmail.com"
+  },
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "assets",
+    "README.md"
+  ],
+  "scripts": {
+    "sync": "bun scripts/sync-assets.ts",
+    "build": "bun run sync && tsc -p tsconfig.json",
+    "prepack": "bun run build",
+    "pack:dry": "npm pack --dry-run"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.0.85"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20.11.5",
+    "typescript": "^5.7.2"
+  }
+}

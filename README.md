@@ -1,6 +1,6 @@
 # CC Plugins
 
-개인용 Claude Code 플러그인 마켓플레이스
+개인용 Claude Code 플러그인 마켓플레이스 및 OpenCode npm 플러그인 패키지
 
 ## 설치
 
@@ -15,6 +15,28 @@
 ```
 
 등록 후 `/plugin` 명령어로 개별 플러그인을 선택하여 설치할 수 있습니다.
+
+### OpenCode npm 플러그인으로 사용
+
+OpenCode 설정 파일(`~/.config/opencode/opencode.json` 또는 프로젝트 `opencode.json`)에 npm 패키지를 추가합니다.
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@aydenden/opencode-plugins"]
+}
+```
+
+로컬 개발 중에는 다음처럼 파일 경로를 사용할 수 있습니다.
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["file:./packages/opencode-plugin"]
+}
+```
+
+OpenCode용 패키지는 `plugins/`를 원본으로 삼아 commands, agents, skills 자산을 동기화합니다. Skills는 OpenCode의 위치 기반 discovery 특성 때문에 `/cc-plugins-install-skills` 명령으로 `.opencode/skills` 또는 `~/.config/opencode/skills`에 설치해야 native skill tool에 노출됩니다.
 
 ### 개별 플러그인 직접 사용
 
@@ -38,6 +60,7 @@ claude --plugin-dir ./cc-plugins/plugins/<plugin-name>
 ```
 cc-plugins/
 ├── .claude-plugin/marketplace.json   # 마켓플레이스 정의
+├── packages/opencode-plugin/         # OpenCode npm 플러그인
 └── plugins/
     └── {plugin-name}/
         ├── .claude-plugin/plugin.json
@@ -46,6 +69,17 @@ cc-plugins/
         ├── agents/      # 서브에이전트 (.md)
         └── hooks/       # 이벤트 훅 (hooks.json)
 ```
+
+## OpenCode 패키지 개발
+
+```bash
+cd packages/opencode-plugin
+bun install
+bun run build
+npm pack --dry-run
+```
+
+`packages/opencode-plugin/assets/`는 빌드 시 `plugins/`에서 생성되는 배포용 복사본입니다. 직접 수정하지 마세요.
 
 ## 라이선스
 
