@@ -2,7 +2,7 @@
 name: research-agent
 description: 프롬프트를 받아 Obsidian 볼트 검색 → 외부 조사 → 문서 작성까지 자율 수행하는 리서치 에이전트
 tools: Glob, Grep, Read, Write, Edit, Bash, WebSearch, WebFetch, ToolSearch, mcp__plugin_context7-plugin_context7__resolve-library-id, mcp__plugin_context7-plugin_context7__query-docs
-model: sonnet
+model: gpt-5.5
 color: green
 ---
 
