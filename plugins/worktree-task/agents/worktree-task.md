@@ -16,7 +16,7 @@ description: |
   user: "Fix this bug in a worktree"
   assistant: "I'll delegate this to the worktree-task agent"
   </example>
-model: sonnet
+model: gpt-5.5
 tools:
   - Read
   - Write

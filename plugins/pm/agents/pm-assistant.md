@@ -24,7 +24,7 @@ description: |
   user: "신규 사용자 이탈 문제 디스커버리 돌려줘"
   assistant: "I'll use the pm-assistant agent to run the discovery process"
   </example>
-model: sonnet
+model: gpt-5.5
 color: blue
 tools:
   - Read
