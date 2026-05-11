@@ -43,8 +43,8 @@
     {
       "name": "cc-opencode-cmux",
       "source": "./plugins/cc-opencode-cmux",
-      "description": "Claude Code Opus(오케스트레이터) + OpenCode(저렴 모델 구현) + cmux(병렬 세션) 3-tool 위임 플러그인. SSE 기반 hang 감지, 작업별 권한 차등, worktree 격리 옵션",
-      "version": "0.1.0"
+      "description": "Claude Code Opus(오케스트레이터) + OpenCode(저렴 모델 구현) + cmux(병렬 세션) 3-tool 위임 플러그인. 코드 작업 + 지식 작업 7종 task type (implement/refactor/summarize/cjk-doc/research/compose/analyze) 도메인-무관 위임, SSE 기반 hang 감지, 작업별 권한 차등",
+      "version": "0.2.0"
     }
   ]
 }

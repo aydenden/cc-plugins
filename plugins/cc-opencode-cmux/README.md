@@ -75,6 +75,8 @@ OC Go and OC Zen are **independent subscriptions** — subscribing to one does n
 Default config targets **OC Go-only** subscribers. Every default model is in the
 `opencode-go/*` namespace, so no Zen balance is required.
 
+### Code tasks (v0.1.0)
+
 | Type | Default model | Wall-clock | SSE hard-hang |
 |---|---|---|---|
 | `summarize` | `opencode-go/deepseek-v4-flash` (31,650 req/5h) | 300s | 60s |
@@ -83,6 +85,16 @@ Default config targets **OC Go-only** subscribers. Every default model is in the
 | `implement` | `opencode-go/deepseek-v4-pro` | 1800s | 120s |
 | `cjk-doc` | `opencode-go/qwen3.6-plus` (best Korean in Go) | 600s | 90s |
 | `batch` | `opencode-go/deepseek-v4-pro` | 3600s | 180s |
+
+### Knowledge tasks (v0.2.0) — domain-agnostic
+
+| Type | Default model | Wall-clock | SSE hard-hang | Permissions |
+|---|---|---|---|---|
+| `research` | `opencode-go/deepseek-v4-pro` (ctx 1M) | 1200s | 150s | webfetch+websearch allow, edit deny |
+| `compose` | `opencode-go/qwen3.6-plus` | 900s | 120s | web deny, edit allow in `--dir` |
+| `analyze` | `opencode-go/kimi-k2.6` (long reasoning) | 900s | 120s | read-only |
+
+Knowledge tasks are designed as **building blocks** for other plugins (`obsidian-knowledge`, `pm`, `korean-trading`). Callers provide the spec + output schema + target directory; this plugin handles the OpenCode invocation. See `examples/knowledge-pipeline.md` for a research → compose two-stage workflow.
 
 ### Hybrid (Zen + Go)
 
