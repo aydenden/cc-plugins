@@ -199,11 +199,13 @@ echo "[research-agent] OC research: exit=$RESEARCH_EXIT events=$EVENTS status=$S
 - `RESEARCH_EXIT in {2,3,4,5}` → 에러/hang/SSE 종료. cc-only fallback 또는 부분 결과 활용.
 - `RESEARCH_EXIT=0` + `EVENTS>0` → 정상. 다음 단계 진행.
 
-##### 4d-oc. raw research 검토 (CC)
+##### 4d-oc. raw research 검토 (CC, 토큰 절감 필수 준수)
 
-- `$TMPDIR/raw_research.md` 를 Read (50줄 이내로 핵심만 확인)
+- `$TMPDIR/raw_research.md` 를 **`Read tool with limit=80`** (전체 read 금지 — 본문이 메인 컨텍스트를 잠식함)
+- 첫 80줄에서 TL;DR + 핵심 출처 + 출처 인용 첫 500자만 확인
 - 사실 누락 / 거짓 의심 / 출처 부족 항목 식별
 - 부족하면 추가 research-spec 작성 후 재위임 1회 가능
+- 검토 후 raw research 본문을 다음 단계 메시지에 절대 포함하지 않는다 (compose는 OC가 파일에서 직접 읽음)
 
 ### 5단계: 엔티티 타입 결정 (CC, 모든 모드 공통)
 
@@ -292,11 +294,17 @@ WRITING CONVENTIONS:
 - frontmatter 외의 '---' 사용 금지.
 - 마크다운 코드 펜스의 언어 식별자 정확히.
 
+WRITE-TO-DISK (필수):
+- **반드시 Write/Edit 도구로 OUTPUT FILE을 직접 작성한다.**
+- 노트 본문을 응답 메시지로 반환하지 않는다 (caller가 별도 호출자라 메시지 본문은 사용되지 않음 — 토큰 낭비).
+- 응답 메시지는 최대 5줄: "Wrote <OUTPUT FILE>. Frontmatter: ok. Body: <줄 수>."
+
 FORBIDDEN ACTIONS:
 - .obsidian/ 폴더 수정
 - OUTPUT FILE 외의 파일 생성/수정
 - raw research에 없는 사실 추가 (hallucination 금지)
 - 출력 파일 외부에 임시 파일 생성
+- 노트 본문 또는 본문 단락을 응답 메시지에 포함하는 행위
 ```
 
 ##### 9b. /cc-opencode-cmux:delegate 위임 (compose)
@@ -309,17 +317,27 @@ COMPOSE_EXIT=$?
 
 OC가 노트 파일을 직접 Write.
 
-##### 9c. 위임 검증 (필수)
+##### 9c. 위임 검증 (필수, 토큰 절감 핵심)
+
+OC가 실제로 직접 Write 도구를 호출해 노트를 작성했는지 확인. **이게 핵심** — OC가 Write 안 하고 메시지로만 반환하면 sub-agent가 본문을 받아 다시 CC Write 하면서 같은 17K+ 자가 CC 컨텍스트를 두 번 통과한다 (메모리 분석에서 발견된 30-40K 토큰 낭비 원인).
 
 ```bash
 EVENTS=$(wc -l < "$TMPDIR/oc.ndjson" 2>/dev/null || echo 0)
 STATUS=$(cat "$TMPDIR/status" 2>/dev/null || echo "missing")
-echo "[research-agent] OC compose: exit=$COMPOSE_EXIT events=$EVENTS status=$STATUS file=$OUTPUT_FILE" >&2
 
-# 출력 파일이 실제로 생겼는지 + 의도한 mtime인지
-if [ ! -f "$OUTPUT_FILE" ]; then
-  echo "[research-agent] OUTPUT_FILE not created — cc-only fallback에서 직접 Write" >&2
-  # CC가 직접 Write로 노트 생성
+# OC가 실제 Write/Edit 도구를 호출했는지 events에서 검증
+# session.next.tool.called 이벤트의 도구명이 write/edit인지 확인
+OC_WRITES=$(grep -c '"type":"session.next.tool.called"' "$TMPDIR/events.ndjson" 2>/dev/null | grep -cE '"(write|edit)"' || echo 0)
+OUTPUT_EXISTS=$([ -f "$OUTPUT_FILE" ] && echo yes || echo no)
+OUTPUT_MTIME=$([ -f "$OUTPUT_FILE" ] && stat -f %m "$OUTPUT_FILE" 2>/dev/null || stat -c %Y "$OUTPUT_FILE" 2>/dev/null || echo 0)
+
+echo "[research-agent] OC compose verify: exit=$COMPOSE_EXIT events=$EVENTS oc_writes=$OC_WRITES output=$OUTPUT_EXISTS mtime=$OUTPUT_MTIME" >&2
+
+if [ "$OUTPUT_EXISTS" = "no" ]; then
+  echo "[research-agent] WARN: OUTPUT_FILE not created. OC did not write to disk — likely returned content as message only. Falling back to CC direct Write (will cost ~30K extra tokens)." >&2
+  # CC가 raw_research.md 읽어서 직접 노트 생성 (toxen overhead 발생)
+elif [ "$OC_WRITES" = "0" ]; then
+  echo "[research-agent] INFO: OUTPUT_FILE exists but no write/edit tool calls detected in events. Possibly written via different mechanism — verify content quality." >&2
 fi
 ```
 
@@ -363,37 +381,45 @@ head -20 "$OUTPUT_FILE" | grep -E '^(type|tags|summary|date|source|confidence):'
 - 백링크 삽입: [[노트1]], [[노트2]]
 ```
 
-### 13단계: 결과 반환
+### 13단계: 결과 반환 (메인 컨텍스트 보호 — **압축 필수**)
+
+**⚠️ 토큰 절감 핵심**: 메인 CC가 sub-agent의 보고 메시지를 수신할 때 발생하는 토큰 비용이 가장 크다. 노트 본문, raw research 본문, 긴 인용을 절대 반환 메시지에 포함하지 않는다. 메인이 필요하면 `Read` 도구로 노트 파일을 직접(부분) 읽는다.
+
+**금지 사항 (반환 메시지에 포함 X)**:
+- 작성한 노트의 본문 또는 큰 단락 (>5줄)
+- raw research 본문 또는 발췌
+- 80자 초과 출처 인용
+- 템플릿 풀텍스트
+- compose spec 또는 research spec 본문
+
+**반환 형식 (반드시 이 구조, 전체 200줄 이내)**:
 
 ```
 ## 조사 결과
 
-**주제:** (프롬프트)
-**모드:** (oc / cc-only)
-**조사 방법:** (oc-delegated / context7 / github / web)
+**주제:** {프롬프트 한 줄}
+**모드:** {oc | cc-only}
+**노트 경로:** `{절대경로 또는 볼트 상대경로}`
+**한 줄 결론:** {15단어 이내}
+**타입:** {entity_type} | **confidence:** {high|medium|low}
 
-### OC 위임 검증 (mode=oc 시 필수 포함)
+### OC 위임 검증
 - session: {SESSION_ID}
-- research exit: {RESEARCH_EXIT}, events: {EVENTS}
-- compose  exit: {COMPOSE_EXIT}, output_file mtime: {mtime}
-- 모든 검증 통과 ✅ / 부분 실패 ⚠️ + 어떤 부분이 CC로 fallback됐는지
+- research: exit={RESEARCH_EXIT}, events={N_research}
+- compose: exit={COMPOSE_EXIT}, events={N_compose}, oc_writes={OC_WRITES}, output={yes|no}
+- 판정: {✅ 정상 위임 | ⚠️ 일부 CC fallback ({어떤 단계}) | ❌ 위임 실패, cc-only}
 
-### 요약
-(핵심 3-5줄)
-
-### 작성 문서
-- 경로: `볼트/하위폴더/파일명.md`
-- 타입: {entity_type}
-- confidence: {high|medium|low}
-
-### 교차참조
-- [[기존노트1]]에 역링크 삽입
-- [[기존노트2]]에 역링크 삽입
+### 백링크 삽입
+- [[제목1]], [[제목2]], [[제목3]]   ← 제목만, 이유 X
 
 ### 관련 노트
-- [[노트1]] — 관련 이유
-- [[노트2]] — 관련 이유
+- [[제목1]], [[제목2]]   ← 제목만
 ```
+
+메인이 노트 내용을 더 보고 싶으면 다음과 같이 안내한다 (메시지에 포함 X, 메인이 알아서 호출):
+> 노트 본문은 `Read {경로}` 또는 `Read {경로} offset=N limit=M`로 직접 확인.
+
+이전 버전(v0.3.1)에서는 "요약 3-5줄"이라 적었으나 sub-agent가 본문 일부를 무의식적으로 포함시키는 경향이 있었다 (v2 실측에서 17K자 본문이 메인 컨텍스트 통과 → ~30-40K 토큰 낭비). v0.3.2부터 본문 인용 자체를 금지한다.
 
 ## [기존 노트 발견] 반환 형식
 
