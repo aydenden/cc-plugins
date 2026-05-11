@@ -21,8 +21,7 @@ You are delegating a coding task from Claude Code (Opus, orchestrator) to OpenCo
    - Write the full spec (including any context the user wants OpenCode to have) into `/tmp/cc-oc-$SESSION/prompt.md`
    - Prepend project conventions snippet from `${CLAUDE_PLUGIN_ROOT}/templates/AGENTS.md.snippet` so OpenCode receives consistent style guidance
 
-3. **Ensure opencode serve daemon is running**:
-   - If `/tmp/cc-oc-serve.env` does not exist, run `${CLAUDE_PLUGIN_ROOT}/bin/oc-serve-start.sh`
+3. **Daemon auto-start**: `safe-oc.sh` checks `/tmp/cc-oc-serve.env` + health and auto-starts the daemon if missing (since v0.2.1). No explicit action needed unless `CC_OC_NO_AUTOSTART=1` is set.
 
 4. **Spawn visual pane (optional, best-effort)**:
    - `${CLAUDE_PLUGIN_ROOT}/bin/cmux-spawn.sh "oc-$SESSION" tail -F /tmp/cc-oc-$SESSION/events.ndjson`
