@@ -48,6 +48,34 @@ fi
 
 > safe-oc.sh는 동기 호출이라 보통 위 폴링이 불필요하다. 비동기 사용 시에만 위 패턴.
 
+**폴링 자가 연장 절대 금지.** 4회(120s) 도달 시 즉시 분기. "더 기다리면 될 것 같다", "사용자가 원하니까", "`--oc-only`라 cc-only로 못 떨어지니까 더 폴링" 류 자가 합리화는 모두 위반. `--oc-only` 모드이고 120s 안에 결과 없으면 **즉시 중단 보고**(폴링 추가 X, cc 직접 작업 X).
+
+### Compose 단계 — OC 위임 강제, CC 직접 Write 금지
+
+`compose` 단계는 OC가 raw_research를 파일에서 직접 read해서 노트를 작성한다. **CC는 raw_research 본문을 받지 않고 compose 결과도 직접 작성하지 않는다** (토큰 절감 핵심).
+
+- compose 위임 실패 시(`COMPOSE_EXIT != 0`, `events==0`, `output==no`): **즉시 중단 보고**. CC가 raw에서 본문 추출해 직접 Write 금지.
+- `--oc-only` 모드에서 compose 실패는 결과 미생성으로 종료. "사용자가 결과를 원하니까 부분 fallback" 금지.
+- 기본 모드에서만 별도 cc-only 재실행 안내 가능 (현 호출 안에서 CC fallback Write 금지).
+
+### OC local cold-start 우회 금지
+
+`safe-oc.sh` 호출이 실패해도 **`opencode run --agent ...` 직접 실행 금지**. daemon attach가 의도이므로 local cold-start는 ~75s 추가 비용 + attach 의도 위반.
+
+- daemon health 실패 시 분기: `--oc-only` → 즉시 중단 보고 / 기본 모드 → cc-only fallback.
+- 사용자가 명시적으로 `/cc-opencode-cmux:serve-start`를 요청한 경우에만 daemon 기동 (이 agent는 호출자 입장).
+- "attach 안 되면 local로라도" 류 우회 작성 금지.
+
+### 본문 위반 시 자가 보고 의무
+
+본문 명시 규칙을 우회한 경우(폴링 연장, compose CC fallback, OC local 등), 최종 결과 보고의 **1순위 라인**에 다음 형식으로 명시:
+
+```
+⚠ 본문 위반: <어떤 규칙> (이유: <왜>)
+```
+
+위반은 위반으로 보고. "본문 의도는 지켰다", "이건 위반 아닌 우회다" 류 자가 면제 해석 금지. v3 시도 3 sub-agent는 우회 행동을 양심적으로 보고했지만 본문 의도 위반이었음 — 같은 패턴 반복 금지.
+
 ## Obsidian 볼트
 
 - 경로: `OBSIDIAN_VAULT_PATH` 환경변수에서 가져온다. 설정되지 않았으면 에러 반환 후 중단.
