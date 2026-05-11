@@ -1,0 +1,19 @@
+{
+  "webfetch": "allow",
+  "websearch": "allow",
+  "read": "allow",
+  "grep": "allow",
+  "glob": "allow",
+  "list": "allow",
+  "edit": "deny",
+  "bash": {
+    "*": "deny",
+    "ls *": "allow",
+    "cat *": "allow",
+    "shasum *": "allow",
+    "echo *": "allow"
+  },
+  "external_directory": "deny",
+  "task": "deny",
+  "question": "deny"
+}

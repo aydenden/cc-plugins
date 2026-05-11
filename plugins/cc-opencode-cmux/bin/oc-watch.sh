@@ -31,6 +31,9 @@ case "$TASK_TYPE" in
   refactor)    SOFT=30; HARD=90  ;;
   implement)   SOFT=45; HARD=120 ;;
   cjk-doc)     SOFT=30; HARD=90  ;;
+  research)    SOFT=45; HARD=150 ;;
+  compose)     SOFT=40; HARD=120 ;;
+  analyze)     SOFT=40; HARD=120 ;;
   batch)       SOFT=60; HARD=180 ;;
   *)           SOFT=30; HARD=90  ;;
 esac

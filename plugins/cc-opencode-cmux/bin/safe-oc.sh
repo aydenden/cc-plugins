@@ -39,6 +39,9 @@ case "$TASK_TYPE" in
   refactor)    WALL=600  ;;
   implement)   WALL=1800 ;;
   cjk-doc)     WALL=600  ;;
+  research)    WALL=1200 ;;
+  compose)     WALL=900  ;;
+  analyze)     WALL=900  ;;
   batch)       WALL=3600 ;;
   *)           WALL=600  ;;
 esac

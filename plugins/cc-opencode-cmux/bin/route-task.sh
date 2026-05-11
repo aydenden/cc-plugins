@@ -15,15 +15,33 @@ CONFIG_DIR="$PLUGIN_ROOT/config"
 
 LOWER="$(echo "$SPEC" | tr '[:upper:]' '[:lower:]')"
 
+# Research detection (external info gathering)
+if echo "$LOWER" | grep -qE '(research|investigate|gather sources|find references|literature|조사|찾아|리서치)'; then
+  echo -e "research\toc-research\t$CONFIG_DIR/perm-research.json"
+  exit 0
+fi
+
+# Analyze detection (compare/evaluate existing documents)
+if echo "$LOWER" | grep -qE '(compare|evaluate|critique|assess|benchmark|비교|평가|분석)'; then
+  echo -e "analyze\toc-analyze\t$CONFIG_DIR/perm-analyze.json"
+  exit 0
+fi
+
+# Compose detection (writing structured documents)
+if echo "$LOWER" | grep -qE '(compose|draft|write document|write a note|작성|초안|문서 작성|보고서)'; then
+  echo -e "compose\toc-compose\t$CONFIG_DIR/perm-compose.json"
+  exit 0
+fi
+
 # CJK-doc detection: Korean/Chinese characters in spec OR doc-related keywords
 if echo "$SPEC" | LC_ALL=C grep -q '[^[:print:][:space:]]' \
-   || echo "$LOWER" | grep -qE '(한글|한국어|문서|readme|docstring|주석|韩文|文档|注释)'; then
+   || echo "$LOWER" | grep -qE '(한글|한국어|readme|docstring|주석|韩文|文档|注释)'; then
   echo -e "cjk-doc\toc-cjk-doc\t$CONFIG_DIR/perm-cjk-doc.json"
   exit 0
 fi
 
-# Summarize detection
-if echo "$LOWER" | grep -qE '(summarize|summary|explain|describe|analyze|review|outline)'; then
+# Summarize detection (read-only code summarization)
+if echo "$LOWER" | grep -qE '(summarize|summary|explain|describe|outline)'; then
   echo -e "summarize\toc-summarize\t$CONFIG_DIR/perm-summarize.json"
   exit 0
 fi
