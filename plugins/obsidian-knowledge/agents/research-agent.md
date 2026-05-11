@@ -60,19 +60,20 @@ fi
 호출 인자에 `--cc-only` 또는 `--oc-only`가 명시되면 그것을 따른다. 그 외에는 자동 감지:
 
 ```bash
-# 1) cc-opencode-cmux binary 위치 찾기 (robust chain)
-OC_BIN_DIR=""
-for candidate in \
-  "${CC_OC_BIN_DIR:-}" \
-  "$HOME/.claude/plugins/cache/aydenden-plugins/cc-opencode-cmux/0.2.0/bin" \
-  "$HOME/.claude/plugins/marketplaces/aydenden-plugins/plugins/cc-opencode-cmux/bin" \
-  "$(dirname "$(find "$HOME/.claude/plugins" -name 'safe-oc.sh' -path '*cc-opencode-cmux*' 2>/dev/null | head -1)")"
-do
-  if [ -n "$candidate" ] && [ -x "$candidate/safe-oc.sh" ]; then
-    OC_BIN_DIR="$candidate"
-    break
-  fi
-done
+# 1) cc-opencode-cmux binary 위치 찾기
+# 마켓플레이스 경로는 버전 디렉토리가 없어 항상 최신 (git checkout 기준).
+# 캐시 경로(<version>/bin)는 버전별 격리되어 stale 위험이 크므로 사용 금지.
+#
+# CC_OC_BIN_DIR env로 override 가능 (디버깅/개발용, 또는 marketplace 미등록 환경).
+OC_BIN_DIR="${CC_OC_BIN_DIR:-}"
+if [ -z "$OC_BIN_DIR" ]; then
+  # 마켓플레이스 이름은 사용자에 따라 다를 수 있어 와일드카드로 매칭
+  OC_BIN_DIR="$(ls -1d "$HOME"/.claude/plugins/marketplaces/*/plugins/cc-opencode-cmux/bin 2>/dev/null | head -1)"
+fi
+if [ -n "$OC_BIN_DIR" ] && [ ! -x "$OC_BIN_DIR/safe-oc.sh" ]; then
+  OC_BIN_DIR=""
+fi
+echo "[research-agent] OC_BIN_DIR=$OC_BIN_DIR" >&2
 
 # 2) 모드 결정
 if [[ "$ARGUMENTS" == *"--cc-only"* ]]; then
