@@ -1,6 +1,6 @@
 {
   "name": "codex-opencode-cmux",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "codex captain + opencode crew + cmux IPC 3-tool orchestration. cmux split + wait-for signal 패턴으로 opencode를 서브에이전트처럼 호출.",
   "author": {
     "name": "aydenden",

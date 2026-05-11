@@ -20,13 +20,13 @@
       "name": "worktree-task",
       "source": "./plugins/worktree-task",
       "description": "Git worktree 기반 태스크 격리 개발 — worktree 생성/제거, main 보호, 미커밋 방지",
-      "version": "0.11.0"
+      "version": "0.11.1"
     },
     {
       "name": "pm",
       "source": "./plugins/pm",
       "description": "PMS 워크플로우와 Beads 이슈 트래커 통합 — 로드맵/PRD/디스커버리 산출물을 beads epic/task/feature로 자동 변환",
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     {
       "name": "cmux-tools",
@@ -38,7 +38,7 @@
       "name": "codex-opencode-cmux",
       "source": "./plugins/codex-opencode-cmux",
       "description": "codex captain + opencode crew + cmux IPC 3-tool orchestration. cmux split + wait-for signal 패턴(B')으로 opencode를 서브에이전트처럼 호출, 미설치 시 bash subprocess 자동 폴백",
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     {
       "name": "cc-opencode-cmux",
