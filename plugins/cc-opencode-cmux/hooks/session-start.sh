@@ -41,6 +41,17 @@ if ! command -v cmux >/dev/null 2>&1 && ! command -v tmux >/dev/null 2>&1; then
   emit_warn "Neither cmux nor tmux found. Sessions will run without visual splits."
 fi
 
+# Register plugin's OC agent definitions into the user's OC config (idempotent, marker-gated).
+# Without this, `opencode run --agent oc-research` falls back to default `build` agent and
+# breaks ndjson streaming → REST polling overhead.
+if [ "$AUTH_OK" = "1" ] && command -v jq >/dev/null 2>&1; then
+  if [ -x "$PLUGIN_ROOT/bin/install-agents.sh" ]; then
+    "$PLUGIN_ROOT/bin/install-agents.sh" >&2 || emit_warn "agent registration failed (non-fatal)"
+  fi
+elif [ "$AUTH_OK" = "1" ] && ! command -v jq >/dev/null 2>&1; then
+  emit_warn "jq not installed — OC agent registration skipped. Install: brew install jq"
+fi
+
 # Auto-start serve daemon if CC_OC_AUTOSTART=1
 if [ "${CC_OC_AUTOSTART:-0}" = "1" ]; then
   if [ -x "$PLUGIN_ROOT/bin/oc-serve-start.sh" ]; then

@@ -1,6 +1,6 @@
 {
   "name": "cc-opencode-cmux",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "CC Opus(orchestrator) + OpenCode(low-cost implementer) + cmux(parallel sessions) 3-tool hybrid delegation plugin. SSE-based hang detection, per-task permission profiles, worktree isolation.",
   "author": {
     "name": "aydenden",
