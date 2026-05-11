@@ -50,6 +50,17 @@ fi
 
 AGENT="oc-${TASK_TYPE}"
 
+# Ensure the agent is registered in the user's OC config. Without this OC silently
+# falls back to default `build` agent and breaks ndjson streaming.
+OC_CONFIG_FILE="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/opencode.json"
+if [ -f "$OC_CONFIG_FILE" ] && command -v jq >/dev/null 2>&1; then
+  if ! jq -e --arg a "$AGENT" '.agent[$a] // empty' "$OC_CONFIG_FILE" >/dev/null 2>&1; then
+    echo "[safe-oc] agent '$AGENT' not registered in $OC_CONFIG_FILE — running install-agents.sh" >&2
+    "$PLUGIN_ROOT/bin/install-agents.sh" --force >&2 || \
+      echo "[safe-oc] WARNING: agent registration failed. OC may fall back to default agent." >&2
+  fi
+fi
+
 # Wall-clock safety net per task type (seconds)
 case "$TASK_TYPE" in
   summarize)   WALL=300  ;;
