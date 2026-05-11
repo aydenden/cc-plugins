@@ -40,9 +40,11 @@ cat ${CLAUDE_PLUGIN_ROOT}/templates/AGENTS.md.snippet >> AGENTS.md
 # 4. (Optional) Copy CLAUDE.md policy snippet
 cat ${CLAUDE_PLUGIN_ROOT}/templates/CLAUDE.md.snippet >> CLAUDE.md
 
-# 5. Start the daemon (or set CC_OC_AUTOSTART=1)
+# 5. (Optional) Start the daemon — safe-oc.sh auto-starts it on first use
 /cc-opencode-cmux:serve-start
 ```
+
+> **v0.2.1+**: `safe-oc.sh` auto-starts the daemon if it's not running. Set `CC_OC_NO_AUTOSTART=1` to opt out (manual mode).
 
 Default agents use OC's own gateway:
 

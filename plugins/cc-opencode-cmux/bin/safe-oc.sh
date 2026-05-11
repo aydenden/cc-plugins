@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # safe-oc.sh — standard opencode delegation wrapper
 # Usage: safe-oc.sh <task_type> <project_dir> <prompt_file> [model_override]
-# - Reads serve daemon metadata from /tmp/cc-oc-serve.env (must be started first).
+# - Reads serve daemon metadata from /tmp/cc-oc-serve.env.
+# - Auto-starts daemon if missing (opt out: CC_OC_NO_AUTOSTART=1).
 # - Injects OPENCODE_PERMISSION from config/perm-<task_type>.json.
 # - Calls `opencode run --attach <url> --agent oc-<task_type> --format json < prompt.md`
 # - Wall-clock timeout per task type as safety net.
@@ -16,9 +17,26 @@ MODEL_OVERRIDE="${4:-}"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 META_FILE="/tmp/cc-oc-serve.env"
 
-if [ ! -f "$META_FILE" ]; then
-  echo "ERROR: opencode serve not running. Run /cc-opencode-cmux:serve-start first." >&2
-  exit 1
+# Daemon health check + auto-start (default on, opt out via CC_OC_NO_AUTOSTART=1)
+daemon_alive() {
+  [ -f "$META_FILE" ] && \
+    curl -sf -o /dev/null -m 2 "http://127.0.0.1:${CC_OC_PORT:-4096}/global/health" 2>/dev/null
+}
+
+if ! daemon_alive; then
+  if [ "${CC_OC_NO_AUTOSTART:-0}" = "1" ]; then
+    echo "ERROR: opencode serve not running and autostart disabled (CC_OC_NO_AUTOSTART=1). Run /cc-opencode-cmux:serve-start manually." >&2
+    exit 1
+  fi
+  echo "[safe-oc] daemon not running, auto-starting..." >&2
+  if ! "$PLUGIN_ROOT/bin/oc-serve-start.sh" >&2; then
+    echo "ERROR: failed to start opencode serve daemon. See log for details." >&2
+    exit 1
+  fi
+  if ! daemon_alive; then
+    echo "ERROR: daemon started but health check failed." >&2
+    exit 1
+  fi
 fi
 
 # shellcheck disable=SC1090
