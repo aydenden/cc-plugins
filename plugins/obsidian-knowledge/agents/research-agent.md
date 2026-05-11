@@ -2,7 +2,7 @@
 name: research-agent
 description: 프롬프트를 받아 Obsidian 볼트 검색 → 외부 조사 → 문서 작성까지 자율 수행. cc-opencode-cmux 가용 시 외부 조사·문서 작성은 OpenCode에 위임(저토큰), 미가용 시 CC 직접 수행(기존 동작).
 tools: Glob, Grep, Read, Write, Edit, Bash, WebSearch, WebFetch, ToolSearch, mcp__plugin_context7-plugin_context7__resolve-library-id, mcp__plugin_context7-plugin_context7__query-docs
-model: gpt-5.5
+model: sonnet
 color: green
 ---
 
@@ -15,14 +15,33 @@ You are a research agent. You receive a research prompt and autonomously search 
 
 ## 모드 감지 (반드시 1단계에서 수행)
 
+> **중요**: 이 agent의 frontmatter `model: sonnet`은 본문 실행 모델이다. Bash 분기로 OpenCode를 호출하는 것은 그 모델 선택과 별개로 이뤄진다 — OC가 외부 조사·노트 작성을 수행하고, sonnet은 spec 작성·결과 검토·백링크/index 갱신만 담당한다.
+
 호출 인자에 `--cc-only` 또는 `--oc-only`가 명시되면 그것을 따른다. 그 외에는 자동 감지:
 
 ```bash
-# Mode detection logic
+# 1) cc-opencode-cmux binary 위치 찾기 (robust chain)
+OC_BIN_DIR=""
+for candidate in \
+  "${CC_OC_BIN_DIR:-}" \
+  "$HOME/.claude/plugins/cache/aydenden-plugins/cc-opencode-cmux/0.2.0/bin" \
+  "$HOME/.claude/plugins/marketplaces/aydenden-plugins/plugins/cc-opencode-cmux/bin" \
+  "$(dirname "$(find "$HOME/.claude/plugins" -name 'safe-oc.sh' -path '*cc-opencode-cmux*' 2>/dev/null | head -1)")"
+do
+  if [ -n "$candidate" ] && [ -x "$candidate/safe-oc.sh" ]; then
+    OC_BIN_DIR="$candidate"
+    break
+  fi
+done
+
+# 2) 모드 결정
 if [[ "$ARGUMENTS" == *"--cc-only"* ]]; then
   MODE="cc-only"
 elif [[ "$ARGUMENTS" == *"--oc-only"* ]]; then
-  MODE="oc-required"   # OC 미가용 시 에러
+  MODE="oc-required"
+elif [ -z "$OC_BIN_DIR" ]; then
+  echo "[research-agent] cc-opencode-cmux not installed — falling back to cc-only" >&2
+  MODE="cc-only"
 elif [ -f /tmp/cc-oc-serve.env ] && \
      curl -sf -o /dev/null -m 2 "http://127.0.0.1:4096/global/health" 2>/dev/null; then
   MODE="oc"
@@ -30,11 +49,36 @@ elif command -v opencode >/dev/null 2>&1 && \
      opencode auth list 2>/dev/null | grep -qE '(opencode|opencode-go|openrouter|deepseek|anthropic|google|openai)'; then
   MODE="oc-coldstart"
 else
+  echo "[research-agent] opencode CLI or auth missing — falling back to cc-only" >&2
   MODE="cc-only"
 fi
+
+# 3) oc-coldstart 시 자동 daemon 기동
+if [ "$MODE" = "oc-coldstart" ]; then
+  echo "[research-agent] starting opencode serve daemon..." >&2
+  if bash "$OC_BIN_DIR/oc-serve-start.sh" >&2; then
+    MODE="oc"
+  else
+    echo "[research-agent] daemon start failed — falling back to cc-only" >&2
+    MODE="cc-only"
+  fi
+fi
+
+# 4) oc-required 모드에서 OC 미가용은 에러
+if [ "$MODE" = "oc-required" ]; then
+  if [ -z "$OC_BIN_DIR" ] || [ ! -f /tmp/cc-oc-serve.env ]; then
+    echo "[research-agent] --oc-only requested but OC unavailable. Run /cc-opencode-cmux:serve-start first." >&2
+    exit 1
+  fi
+  MODE="oc"
+fi
+
+echo "[research-agent] mode=$MODE oc_bin=$OC_BIN_DIR" >&2
 ```
 
-`oc-coldstart` 모드면 먼저 `/cc-opencode-cmux:serve-start` 또는 `bash $(find ~/.claude -path '*/cc-opencode-cmux/bin/oc-serve-start.sh' 2>/dev/null | head -1)` 호출 후 `oc`로 전환.
+이후 MODE 값으로 4단계 분기. CC가 보고해야 할 사항:
+- 어떤 모드로 동작했는지 (`oc`, `oc-coldstart→oc`, `cc-only`)
+- OC 호출이 있었다면 `/tmp/cc-oc-<session>/oc.ndjson` 줄 수 + exit code
 
 ## Wiki 통합 규칙
 
@@ -133,15 +177,29 @@ OUTPUT SCHEMA (stdout, markdown):
 ##### 4b-oc. /cc-opencode-cmux:delegate 위임 (research)
 
 ```bash
-# Bash 도구로 직접 호출
-PLUGIN_ROOT=$(find ~/.claude -path '*/cc-opencode-cmux' -type d 2>/dev/null | head -1)
 CC_OC_SESSION_ID=$SESSION_ID \
-  "$PLUGIN_ROOT/bin/safe-oc.sh" research $PWD "$TMPDIR/research-spec.md"
+  "$OC_BIN_DIR/safe-oc.sh" research "$PWD" "$TMPDIR/research-spec.md"
+RESEARCH_EXIT=$?
 ```
 
-결과는 `$TMPDIR/oc.ndjson` (raw events) 및 stdout. CC가 stdout 본문(또는 `$TMPDIR/oc.ndjson`의 message.updated 누적)을 `$TMPDIR/raw_research.md`로 추출.
+결과는 `$TMPDIR/oc.ndjson` (raw events) 및 stdout. CC가 stdout 본문(또는 `$TMPDIR/oc.ndjson`의 `message.updated` payload들)을 `$TMPDIR/raw_research.md`로 추출.
 
-##### 4c-oc. raw research 검토 (CC)
+##### 4c-oc. 위임 검증 (필수)
+
+위임이 실제로 OC에서 일어났는지 확인:
+
+```bash
+EVENTS=$(wc -l < "$TMPDIR/oc.ndjson" 2>/dev/null || echo 0)
+STATUS=$(cat "$TMPDIR/status" 2>/dev/null || echo "missing")
+echo "[research-agent] OC research: exit=$RESEARCH_EXIT events=$EVENTS status=$STATUS" >&2
+```
+
+판정:
+- `EVENTS=0` 또는 `STATUS=missing` → OC가 실제로 동작하지 않았음. cc-only로 fallback.
+- `RESEARCH_EXIT in {2,3,4,5}` → 에러/hang/SSE 종료. cc-only fallback 또는 부분 결과 활용.
+- `RESEARCH_EXIT=0` + `EVENTS>0` → 정상. 다음 단계 진행.
+
+##### 4d-oc. raw research 검토 (CC)
 
 - `$TMPDIR/raw_research.md` 를 Read (50줄 이내로 핵심만 확인)
 - 사실 누락 / 거짓 의심 / 출처 부족 항목 식별
@@ -245,15 +303,30 @@ FORBIDDEN ACTIONS:
 
 ```bash
 CC_OC_SESSION_ID=$SESSION_ID \
-  "$PLUGIN_ROOT/bin/safe-oc.sh" compose "$OBSIDIAN_VAULT_PATH" "$TMPDIR/compose-spec.md"
+  "$OC_BIN_DIR/safe-oc.sh" compose "$OBSIDIAN_VAULT_PATH" "$TMPDIR/compose-spec.md"
+COMPOSE_EXIT=$?
 ```
 
 OC가 노트 파일을 직접 Write.
 
-##### 9c. frontmatter 검증 (CC)
+##### 9c. 위임 검증 (필수)
 
 ```bash
-head -20 "<OUTPUT_FILE>" | grep -E '^(type|tags|summary|date|source|confidence):' | wc -l
+EVENTS=$(wc -l < "$TMPDIR/oc.ndjson" 2>/dev/null || echo 0)
+STATUS=$(cat "$TMPDIR/status" 2>/dev/null || echo "missing")
+echo "[research-agent] OC compose: exit=$COMPOSE_EXIT events=$EVENTS status=$STATUS file=$OUTPUT_FILE" >&2
+
+# 출력 파일이 실제로 생겼는지 + 의도한 mtime인지
+if [ ! -f "$OUTPUT_FILE" ]; then
+  echo "[research-agent] OUTPUT_FILE not created — cc-only fallback에서 직접 Write" >&2
+  # CC가 직접 Write로 노트 생성
+fi
+```
+
+##### 9d. frontmatter 검증 (CC)
+
+```bash
+head -20 "$OUTPUT_FILE" | grep -E '^(type|tags|summary|date|source|confidence):' | wc -l
 ```
 
 6개(또는 외부 소스면 source_hash 포함 7개) 모두 있으면 OK. 누락 시 CC가 직접 Edit으로 보강.
@@ -296,8 +369,14 @@ head -20 "<OUTPUT_FILE>" | grep -E '^(type|tags|summary|date|source|confidence):
 ## 조사 결과
 
 **주제:** (프롬프트)
-**모드:** (oc / oc-coldstart / cc-only)
+**모드:** (oc / cc-only)
 **조사 방법:** (oc-delegated / context7 / github / web)
+
+### OC 위임 검증 (mode=oc 시 필수 포함)
+- session: {SESSION_ID}
+- research exit: {RESEARCH_EXIT}, events: {EVENTS}
+- compose  exit: {COMPOSE_EXIT}, output_file mtime: {mtime}
+- 모든 검증 통과 ✅ / 부분 실패 ⚠️ + 어떤 부분이 CC로 fallback됐는지
 
 ### 요약
 (핵심 3-5줄)
