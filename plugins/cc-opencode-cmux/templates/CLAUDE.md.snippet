@@ -1,0 +1,30 @@
+<!--
+  Paste this section into your project's CLAUDE.md to enable Opus auto-delegation
+  to OpenCode via the cc-opencode-cmux plugin.
+-->
+
+## Delegation policy (cc-opencode-cmux)
+
+When the current task matches the following profile, delegate to OpenCode via
+`/cc-opencode-cmux:delegate "<spec>"` rather than implementing in this Opus session:
+
+- **Mechanical implementation**: CRUD scaffolding, boilerplate, repeated patterns across files
+- **Large output**: >200 lines of code or >5 files
+- **Shallow reasoning**: no architectural decisions, no ambiguous requirements
+- **CJK documentation**: Korean / Chinese / Japanese README, docstrings, comments
+
+Do **not** delegate when:
+
+- The task requires architecture or API design decisions
+- The user has explicitly asked for Opus-quality output
+- The spec has unresolved ambiguity — clarify with the user first
+- The task is small enough to do in fewer tokens than the delegation overhead
+
+After delegation:
+1. Wait for the `post-oc-run` hook to surface the diff path
+2. Run `/cc-opencode-cmux:review` to inspect the changes
+3. Reject hallucinated APIs, missing tests, or convention violations
+4. Either accept, re-delegate with corrections, or fix small issues directly
+
+Use `--worktree` when the delegation might touch files you will also edit
+concurrently or when the task is large enough to warrant isolated review.

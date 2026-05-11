@@ -1,0 +1,18 @@
+{
+  "edit": "deny",
+  "bash": "deny",
+  "read": "allow",
+  "grep": "allow",
+  "glob": "allow",
+  "list": "allow",
+  "webfetch": {
+    "*": "deny",
+    "https://docs.*": "allow",
+    "https://*.dev/docs/*": "allow",
+    "https://github.com/*": "allow"
+  },
+  "websearch": "allow",
+  "external_directory": "deny",
+  "task": "deny",
+  "question": "deny"
+}

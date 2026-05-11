@@ -1,0 +1,46 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "_comment_subscription": "Default agents target OC Go-only subscribers (every model is opencode-go/*). OC Zen models (opencode/gemini-3-flash, opencode/claude-sonnet-4-5, etc.) require a Zen balance — if you have one and have enabled 'Use balance' in the OpenCode console, swap the model field in the relevant agents or pass --model on the delegate command.",
+  "_comment_fallback": "OpenCode does not support a fallback_models config field. Each agent description lists alternative model IDs for manual fallback via 'safe-oc.sh <task> <dir> <prompt> <model_id>'.",
+  "agent": {
+    "oc-implement": {
+      "model": "opencode-go/deepseek-v4-pro",
+      "temperature": 0.1,
+      "tools": {
+        "*_*": false,
+        "fs_*": true,
+        "git_*": true
+      },
+      "description": "Repetitive implementation, file creation, boilerplate. No architecture decisions. Manual fallback ids (Go-only): opencode-go/deepseek-v4-flash, opencode-go/qwen3.6-plus, opencode-go/kimi-k2.6. Hybrid fallback (requires Zen balance): opencode/claude-haiku-4-5, opencode/gemini-3-flash."
+    },
+    "oc-refactor": {
+      "model": "opencode-go/qwen3.6-plus",
+      "temperature": 0.1,
+      "tools": {
+        "*_*": false,
+        "fs_*": true,
+        "lsp_*": true
+      },
+      "description": "Rename, extract, inline, simplify. Preserve behavior. Manual fallback ids (Go-only): opencode-go/qwen3.5-plus, opencode-go/deepseek-v4-pro, opencode-go/kimi-k2.6."
+    },
+    "oc-summarize": {
+      "model": "opencode-go/deepseek-v4-flash",
+      "temperature": 0.2,
+      "tools": {
+        "*_*": false,
+        "fs_*": true,
+        "websearch_*": true
+      },
+      "description": "Code reading, file summarization, dependency analysis. Read-only. Default uses deepseek-v4-flash (31,650 req/5h, biggest Go quota). Manual fallback (Go-only): opencode-go/qwen3.5-plus, opencode-go/qwen3.6-plus. Hybrid: opencode/gemini-3-flash (cheaper per-token but consumes Zen balance)."
+    },
+    "oc-cjk-doc": {
+      "model": "opencode-go/qwen3.6-plus",
+      "temperature": 0.3,
+      "tools": {
+        "*_*": false,
+        "fs_*": true
+      },
+      "description": "Korean/Chinese/Japanese documentation writing. Default Qwen3.6 Plus is best Korean within Go catalog (KMMLU ~74). Manual fallback (Go-only): opencode-go/qwen3.5-plus, opencode-go/kimi-k2.6. Hybrid (recommended if Zen balance available): opencode/gemini-3-flash (LMSYS Korean top-3) or opencode/claude-sonnet-4-5 (LogicKor #1)."
+    }
+  }
+}
