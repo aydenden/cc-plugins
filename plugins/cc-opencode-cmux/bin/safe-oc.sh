@@ -18,9 +18,16 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && p
 META_FILE="/tmp/cc-oc-serve.env"
 
 # Daemon health check + auto-start (default on, opt out via CC_OC_NO_AUTOSTART=1)
+# 0.2.4: source META_FILE so OPENCODE_SERVER_PASSWORD is available, then pass
+# Basic Auth. Without auth, password-protected servers return 401 and -sf
+# misreports the daemon as dead, triggering cold-start bypasses.
 daemon_alive() {
-  [ -f "$META_FILE" ] && \
-    curl -sf -o /dev/null -m 2 "http://127.0.0.1:${CC_OC_PORT:-4096}/global/health" 2>/dev/null
+  [ -f "$META_FILE" ] || return 1
+  # shellcheck disable=SC1090
+  . "$META_FILE"
+  curl -sf -o /dev/null -m 2 \
+    -u "opencode:${OPENCODE_SERVER_PASSWORD:-}" \
+    "http://127.0.0.1:${CC_OC_PORT:-4096}/global/health" 2>/dev/null
 }
 
 if ! daemon_alive; then

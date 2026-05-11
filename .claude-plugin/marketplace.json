@@ -44,7 +44,7 @@
       "name": "cc-opencode-cmux",
       "source": "./plugins/cc-opencode-cmux",
       "description": "Claude Code Opus(오케스트레이터) + OpenCode(저렴 모델 구현) + cmux(병렬 세션) 3-tool 위임 플러그인. 코드/지식 작업 7종 task type, SSE 기반 hang 감지, 작업별 권한 차등, daemon·agent config 자동 셋업.",
-      "version": "0.2.3"
+      "version": "0.2.4"
     }
   ]
 }
