@@ -31,7 +31,41 @@ Karpathy의 [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11
 
 | 에이전트 | 설명 |
 |----------|------|
-| research-agent | Obsidian 볼트 검색 → 외부 조사 → 문서 작성 → 교차참조 삽입까지 자율 수행 |
+| research-agent | Obsidian 볼트 검색 → 외부 조사 → 문서 작성 → 교차참조 삽입까지 자율 수행. v0.3.0부터 cc-opencode-cmux 가용 시 외부 조사 + 문서 작성을 OpenCode에 위임 (CC 토큰 70%+ 절감, 자동 fallback) |
+
+## OC 위임 모드 (v0.3.0+)
+
+`cc-opencode-cmux` 플러그인이 함께 설치 + 인증되어 있으면, `research` (및 향후 `capture`, `lint`)가 자동으로 OpenCode에 외부 조사·문서 작성을 위임한다.
+
+### 3-tier 자동 감지
+
+| 우선순위 | 조건 | 모드 |
+|---|---|---|
+| 1 | `/tmp/cc-oc-serve.env` + daemon health 200 | `oc` (warm, 가장 빠름) |
+| 2 | `opencode` CLI + 인증 OK, daemon 미기동 | `oc-coldstart` (자동 serve-start) |
+| 3 | 위 둘 다 아님 | `cc-only` (기존 동작, 회귀 없음) |
+
+### 명시적 override
+
+```bash
+/obsidian-knowledge:research "주제" --cc-only   # CC 직접 (품질 모드)
+/obsidian-knowledge:research "주제" --oc-only   # OC 위임 강제 (미가용 시 에러)
+```
+
+### 토큰 절감 패턴
+
+- CC: spec 작성 + raw research 검토 + 백링크/index/log 갱신 (~5–15K)
+- OC: WebSearch/WebFetch + 노트 본문 작성 (~30–150K, OC 잔액에서 차감)
+
+CC 세션 토큰 사용량 기존 50–200K → 5–15K (~90% 절감 예상).
+
+### 도메인 책임 분리
+
+위임해도 다음은 CC가 직접 수행 (외부 디렉토리 동시 수정 위험 방지):
+- 백링크 5개 Edit
+- `_wiki/index.md` 갱신
+- `_wiki/log.md` append
+- frontmatter 검증
 
 ## 엔티티 타입
 
