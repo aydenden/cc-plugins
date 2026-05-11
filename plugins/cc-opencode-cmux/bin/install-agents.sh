@@ -74,4 +74,17 @@ PLUGIN_AGENTS="$(jq -r '.agent | keys | map(select(startswith("oc-"))) | join(",
 echo "[install-agents] merged ${PLUGIN_VERSION} into $OC_CONFIG_FILE (total agents: $AGENT_COUNT)" >&2
 echo "[install-agents] plugin agents now available: $PLUGIN_AGENTS" >&2
 echo "[install-agents] backup: $BACKUP" >&2
+
+# If a daemon is running, it has the OLD config cached. Stop it so the next
+# safe-oc.sh invocation triggers autostart with the new agent definitions.
+# This avoids the ServeError pattern where stale PID prevents fresh serve startup.
+META_FILE="/tmp/cc-oc-serve.env"
+if [ -f "$META_FILE" ]; then
+  PLUGIN_BIN="$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "$0")")"
+  if [ -x "$PLUGIN_BIN/oc-serve-stop.sh" ]; then
+    echo "[install-agents] daemon detected with stale agent config — stopping (autostart will pick up new config)" >&2
+    bash "$PLUGIN_BIN/oc-serve-stop.sh" >&2 || true
+  fi
+fi
+
 exit 0
