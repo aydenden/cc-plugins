@@ -1,7 +1,7 @@
 ---
 name: crew-dispatcher
 description: codex captain → opencode crew 위임을 자율 실행하는 dispatcher 에이전트. 사용자가 "opencode에게 위임 / crew 호출 / cmux split으로 실행" 등을 요청하면 자동 트리거. 환경 검증, 모델 라우팅, 패턴 B'/A 분기, 결과 리뷰까지 한 번에 처리한다. dispatch 스킬과 동일한 절차를 자율 모드로 수행. <example>Context: 사용자가 자율 실행을 원함. user: "이 모듈 리팩터링 작업을 opencode에게 맡기고 결과만 보고해줘" assistant: "crew-dispatcher 에이전트로 위임하겠습니다" <commentary>자율 위임 요청 → crew-dispatcher 트리거</commentary></example> <example>Context: 대량 보일러플레이트 작업. user: "30개 API 엔드포인트 CRUD를 자동 생성해줘" assistant: "crew-dispatcher로 bulk 라우팅 + escalation 적용해서 실행" <commentary>대량 작업은 crew-dispatcher의 escalation 로직이 적합</commentary></example>
-model: gpt-5.4-mini
+model: haiku
 color: purple
 tools: Bash, Read, Write
 skills:
