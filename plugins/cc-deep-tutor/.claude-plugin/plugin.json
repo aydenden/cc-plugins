@@ -1,0 +1,19 @@
+{
+  "name": "cc-deep-tutor",
+  "version": "0.1.0",
+  "description": "DeepTutor 메커니즘의 Claude Code 네이티브 재구현 — 자료 인덱싱(memsearch) + 분해·조사·풀이·출제·소크라테스 학습 루프. cc-opencode-cmux 가용 시 조사/압축/집필을 OpenCode에 위임해 CC 토큰 절감.",
+  "author": {
+    "name": "aydenden",
+    "email": "lucky72nyh@gmail.com"
+  },
+  "homepage": "https://github.com/aydenden/cc-plugins",
+  "keywords": [
+    "learning",
+    "research",
+    "tutor",
+    "memsearch",
+    "mineru",
+    "deeptutor",
+    "study"
+  ]
+}
