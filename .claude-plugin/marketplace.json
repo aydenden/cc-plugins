@@ -45,6 +45,12 @@
       "source": "./plugins/cc-opencode-cmux",
       "description": "Claude Code Opus(오케스트레이터) + OpenCode(저렴 모델 구현) + cmux(병렬 세션) 3-tool 위임 플러그인. 코드/지식 작업 7종 task type, SSE 기반 hang 감지, 작업별 권한 차등, daemon·agent config 자동 셋업.",
       "version": "0.2.4"
+    },
+    {
+      "name": "cc-deep-tutor",
+      "source": "./plugins/cc-deep-tutor",
+      "description": "DeepTutor 메커니즘의 Claude Code 네이티브 재구현 — memsearch KB + 분해·조사·풀이·출제·소크라테스 학습 루프. cc-opencode-cmux 가용 시 조사/압축/집필을 OpenCode에 위임해 CC 토큰 절감.",
+      "version": "0.1.0"
     }
   ]
 }
