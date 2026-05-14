@@ -50,6 +50,8 @@ brew install jq    # or apt install jq
 > **v0.2.1+**: `safe-oc.sh` auto-starts the daemon if it's not running. Set `CC_OC_NO_AUTOSTART=1` to opt out.
 >
 > **v0.2.2+**: Plugin's `oc-*` agent definitions are automatically merged into the user's `~/.config/opencode/opencode.json` on session start (idempotent, marker-gated, preserves user's existing agents/providers/MCP via `jq` deep merge). Without this OC silently falls back to the default `build` agent on `--agent oc-research` etc., which breaks ndjson streaming and forces REST polling.
+>
+> **v0.2.5+**: Parallel `/cc-opencode-cmux:delegate` calls are now safe. `oc-watch.sh` filters server-global `/event` SSE by `sessionID` so concurrent sessions don't poison each other's idle/error/step-loop detection. `worktree-dispatch.sh` appends a short uuid to worktree paths/branches to avoid same-second collisions.
 
 Default agents use OC's own gateway:
 

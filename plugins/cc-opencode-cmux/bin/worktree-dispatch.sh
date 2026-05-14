@@ -9,8 +9,11 @@ PROMPT_FILE="${3:?prompt_file required}"
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 TS="$(date +%Y%m%d-%H%M%S)"
-WT_PATH="${PROJECT_DIR}/../wt-oc-${TS}"
-WT_BRANCH="oc/${TASK_TYPE}-${TS}"
+# Append short uuid (or PID fallback) so parallel dispatches in the same
+# second don't collide on worktree path / branch name.
+UNIQ="$(uuidgen 2>/dev/null | tr 'A-Z' 'a-z' | cut -c1-8 || echo "$$")"
+WT_PATH="${PROJECT_DIR}/../wt-oc-${TS}-${UNIQ}"
+WT_BRANCH="oc/${TASK_TYPE}-${TS}-${UNIQ}"
 
 cd "$PROJECT_DIR"
 git worktree add -b "$WT_BRANCH" "$WT_PATH" HEAD
