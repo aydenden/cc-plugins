@@ -71,17 +71,24 @@ while :; do
     case "$line" in
       "data: "*)
         PAYLOAD="${line#data: }"
-        echo "$PAYLOAD" >> "$EVENT_LOG"
         EVENT_TYPE="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"type":"\([^"]*\)".*/\1/p')"
+        EVENT_SESSION="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"sessionID":"\([^"]*\)".*/\1/p')"
+
+        # /event SSE is server-global. Drop events from other sessions so
+        # parallel delegate calls don't bleed activity, errors, or step-loop
+        # counters into each other. Events without a sessionID (server-level)
+        # are kept for now since they may signal daemon-wide failures.
+        if [ -n "$EVENT_SESSION" ] && [ "$EVENT_SESSION" != "$SESSION_ID" ]; then
+          continue
+        fi
+
+        echo "$PAYLOAD" >> "$EVENT_LOG"
 
         case "$EVENT_TYPE" in
           session.idle)
-            EVENT_SESSION="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"sessionID":"\([^"]*\)".*/\1/p')"
-            if [ "$EVENT_SESSION" = "$SESSION_ID" ] || [ -z "$EVENT_SESSION" ]; then
-              echo "done" > "$STATUS_FILE"
-              RESULT_EXIT=0
-              break
-            fi
+            echo "done" > "$STATUS_FILE"
+            RESULT_EXIT=0
+            break
             ;;
           session.error)
             echo "error" > "$STATUS_FILE"
