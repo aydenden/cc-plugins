@@ -21,20 +21,21 @@ You are delegating a coding task from Claude Code (Opus, orchestrator) to OpenCo
    - Write the full spec (including any context the user wants OpenCode to have) into `/tmp/cc-oc-$SESSION/prompt.md`
    - Prepend project conventions snippet from `${CLAUDE_PLUGIN_ROOT}/templates/AGENTS.md.snippet` so OpenCode receives consistent style guidance
 
-3. **Daemon auto-start**: `safe-oc.sh` checks `/tmp/cc-oc-serve.env` + health and auto-starts the daemon if missing (since v0.2.1). No explicit action needed unless `CC_OC_NO_AUTOSTART=1` is set.
+3. **Auto-route between cmux IPC and SSE (v0.3.0+)**:
+   - `oc-route.sh` picks the transport. With `cmux` available it uses `cmux-dispatch.sh` (visualizable split, signal-based completion). Without `cmux` it falls back to `safe-oc.sh` (daemon + SSE).
+   - Override with `CC_OC_FORCE_MODE=cmux|sse|auto` if you need a specific path.
 
-4. **Spawn visual pane (optional, best-effort)**:
-   - `${CLAUDE_PLUGIN_ROOT}/bin/cmux-spawn.sh "oc-$SESSION" tail -F /tmp/cc-oc-$SESSION/events.ndjson`
+4. **Invoke OpenCode**:
+   - If `--worktree` is present: `${CLAUDE_PLUGIN_ROOT}/bin/worktree-dispatch.sh <task_type> $PWD /tmp/cc-oc-$SESSION/prompt.md`
+   - Otherwise: `CC_OC_SESSION_ID=$SESSION ${CLAUDE_PLUGIN_ROOT}/bin/oc-route.sh <task_type> $PWD /tmp/cc-oc-$SESSION/prompt.md [<model_override>]`
 
-5. **Run watcher in background**:
-   - `CC_OC_SESSION_ID=$SESSION ${CLAUDE_PLUGIN_ROOT}/bin/oc-watch.sh $SESSION <task_type> &`
+5. **(SSE mode only) Spawn visual pane + watcher**:
+   - Only needed when `CC_OC_FORCE_MODE=sse` or `cmux` is missing. In cmux mode the surface is already created by `cmux-dispatch.sh`.
+   - Visual: `${CLAUDE_PLUGIN_ROOT}/bin/cmux-spawn.sh "oc-$SESSION" tail -F /tmp/cc-oc-$SESSION/events.ndjson`
+   - Watcher: `CC_OC_SESSION_ID=$SESSION ${CLAUDE_PLUGIN_ROOT}/bin/oc-watch.sh $SESSION <task_type> &`
 
-6. **Invoke OpenCode**:
-   - If `--worktree` is present, call `${CLAUDE_PLUGIN_ROOT}/bin/worktree-dispatch.sh <task_type> $PWD /tmp/cc-oc-$SESSION/prompt.md`
-   - Otherwise: `CC_OC_SESSION_ID=$SESSION ${CLAUDE_PLUGIN_ROOT}/bin/safe-oc.sh <task_type> $PWD /tmp/cc-oc-$SESSION/prompt.md [<model_override>]`
-
-7. **Report**:
-   - Show: session id, task type, agent name, output location
+6. **Report**:
+   - Show: session id, task type, agent name, output location, transport mode (`cmux-ipc` or SSE)
    - Suggest: `/cc-opencode-cmux:review $SESSION` to inspect the diff
 
 ## Failure handling
