@@ -23,7 +23,7 @@ echo "worktree created: $WT_PATH (branch $WT_BRANCH)"
 PROMPT_BASENAME="$(basename "$PROMPT_FILE")"
 cp "$PROMPT_FILE" "$WT_PATH/$PROMPT_BASENAME"
 
-"$PLUGIN_ROOT/bin/safe-oc.sh" "$TASK_TYPE" "$WT_PATH" "$WT_PATH/$PROMPT_BASENAME"
+"$PLUGIN_ROOT/bin/oc-route.sh" "$TASK_TYPE" "$WT_PATH" "$WT_PATH/$PROMPT_BASENAME"
 
 echo ""
 echo "Worktree changes:"

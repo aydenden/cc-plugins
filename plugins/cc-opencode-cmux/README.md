@@ -52,6 +52,8 @@ brew install jq    # or apt install jq
 > **v0.2.2+**: Plugin's `oc-*` agent definitions are automatically merged into the user's `~/.config/opencode/opencode.json` on session start (idempotent, marker-gated, preserves user's existing agents/providers/MCP via `jq` deep merge). Without this OC silently falls back to the default `build` agent on `--agent oc-research` etc., which breaks ndjson streaming and forces REST polling.
 >
 > **v0.2.5+**: Parallel `/cc-opencode-cmux:delegate` calls are now safe. `oc-watch.sh` filters server-global `/event` SSE by `sessionID` so concurrent sessions don't poison each other's idle/error/step-loop detection. `worktree-dispatch.sh` appends a short uuid to worktree paths/branches to avoid same-second collisions.
+>
+> **v0.3.0+**: cmux IPC transport (Pattern B'). When `cmux` is on PATH, delegations now run inside a visible cmux split — `cmux new-split right` for the first delegate, `cmux new-split down --surface $ROOT` for parallel ones so the main pane is never further sliced. Completion is signaled via `cmux wait-for --signal`, and surfaces auto-close (`cmux close-surface`) when each delegate finishes; the last one also closes the root surface. SSE is kept as automatic fallback (`safe-oc.sh`) — override the transport with `CC_OC_FORCE_MODE=cmux|sse|auto`. Resolves SSE blindness ("is it actually running?") and known SSE regressions in opencode v1.14.43–48 (#27391).
 
 Default agents use OC's own gateway:
 
