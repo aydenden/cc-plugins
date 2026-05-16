@@ -56,6 +56,17 @@ brew install jq    # or apt install jq
 > **v0.3.0+**: cmux IPC transport (Pattern B'). When `cmux` is on PATH, delegations now run inside a visible cmux split — `cmux new-split right` for the first delegate, `cmux new-split down --surface $ROOT` for parallel ones so the main pane is never further sliced. Completion is signaled via `cmux wait-for --signal`, and surfaces auto-close (`cmux close-surface`) when each delegate finishes; the last one also closes the root surface. SSE is kept as automatic fallback (`safe-oc.sh`) — override the transport with `CC_OC_FORCE_MODE=cmux|sse|auto`. Resolves SSE blindness ("is it actually running?") and known SSE regressions in opencode v1.14.43–48 (#27391).
 >
 > **v0.3.1+**: Live progress inside the split. The cmux-dispatch worker now passes `--print-logs` and tees stderr to the split (plus a file), while stdout (ndjson) goes through `jq` to surface response text in the split as it streams. You'll see "==> opencode starting", live INFO logs, and the model's reply landing in the right pane instead of a blank screen. `oc-implementer` agent now dispatches through `bin/oc-route.sh` (was `bin/safe-oc.sh`) so sub-agent delegations also get the split visualization.
+>
+> **v0.3.2+**: `perm-compose.json` now allows generator scripts scoped to the session dir (`python3 /tmp/cc-oc-*/*`, `node /tmp/cc-oc-*/*`, `bash /tmp/cc-oc-*/*`, `chmod +x /tmp/cc-oc-*/*`) so OC can run one-shot helpers without breaking sandbox boundaries. Also quantifies the OC Write-token budget so callers can decide split-vs-delegate before paying the cost:
+>
+> | Output type | Tokens/line | Safe per delegate | Hard wall |
+> |---|---|---|---|
+> | Source code | 50–80 | ≤ 1000 LOC | ~1100 LOC |
+> | Markdown / 한국어 문서 | 60–100 | ≤ 800 LOC | ~900 LOC |
+> | JSONL / CSV fixture | 150–300 | ≤ 250 LOC | ~300 LOC |
+> | Parquet / DB seed / binary | — | **never delegate** | — |
+>
+> Estimated > 70K tokens or any binary output → CC main session generates the file first, then delegates only the code that reads it. The `delegate-oc` skill carries the decision rule; the `oc-implementer` agent rejects oversized tasks up front instead of letting them run to `step-loop` abort. Background: real-world v0.3.1 delegate hit `aborted (step-loop)` at ~88K tokens trying to `Write` a 400-frame JSONL cassette — see knowledge note `2026-05-16-cc-opencode-cmux-fixture-generation-blocked`.
 
 ## opencode version pinning (recommended)
 

@@ -25,6 +25,36 @@ Do **not** delegate when any of these hold:
 - The task is small enough to do in this session in fewer tokens than the delegation overhead (~5K tokens for setup + diff review).
 - There is no clear acceptance criterion — Opus needs to make judgment calls iteratively.
 - The codebase requires understanding of subtle conventions that have not been written down.
+- **The output exceeds the Write-token budget** (see "Sizing & token budget" below). OC has no streaming Write — every byte goes through the tool call boundary, and the session aborts with `step-loop` once Write tokens climb past ~88K. Large fixtures/binaries (JSONL cassettes, CSV with hundreds of rows, parquet, DB seeds, image/audio assets) are the typical trigger. **Split the work**: CC generates the fixture(s) first, then delegates only the code that consumes them.
+
+## Sizing & token budget (run this estimate BEFORE delegating)
+
+Use this table to estimate whether one delegate can finish without hitting the Write wall. Multiply the expected new+modified LOC by the bytes/line constant for the output type, divide by 4 (rough chars→token ratio), and compare to the budget.
+
+| Output type | Tokens per line (Write tool) | Safe LOC per single delegate | Hard wall |
+|---|---|---|---|
+| Source code (Rust/Python/TS) | ~50–80 | **≤ 1000 LOC** | ~1100 LOC |
+| Markdown / Korean doc | ~60–100 | **≤ 800 LOC** | ~900 LOC |
+| JSONL / CSV fixture | ~150–300 | **≤ 250 LOC** | ~300 LOC |
+| Parquet / DB seed / binary | n/a (cannot be Written line-by-line) | **0 — never delegate** | — |
+
+Caps come from: empirical step-loop abort threshold ~88K Write tokens (OC v1.14.48), conservative 20% safety margin, observed token-per-line for each format.
+
+**Decision rule**:
+- Estimated tokens **< 30K** → safe single delegate, any `--type`.
+- Estimated **30–70K** → still single delegate, but use `--worktree` so a partial failure is reviewable; consider splitting across 2 delegates if natural seams exist.
+- Estimated **> 70K** or any binary/parquet output → **must split**: CC produces the fixture/binary, then delegate only the code that reads it. Never put the fixture body inside the prompt.
+
+Symptoms that you skipped the estimate: OC stderr shows `Write` totals climbing past 80K, then `aborted (step-loop)` or `aborted (inactivity-Xs)`, and `oc.ndjson` ends mid-line. The `perm-compose.json` policy only allows generator scripts under `/tmp/cc-oc-*/` — useful for one-shot helpers OC writes itself, but not a workaround for the LOC-size problem.
+
+## Splitting work so OC stays within its bandwidth
+
+When a task bundles "generate data + write code that uses the data", do the split in CC, not in OC:
+
+1. CC generates the fixture/seed file(s) (use a one-off python/bash script in the project tree — CC has unrestricted bash).
+2. CC commits or stages those files so OC can read them.
+3. CC writes the delegation spec referencing the paths: "Read `tests/fixtures/happy.jsonl` and implement…".
+4. Delegate `implement` / `compose` / `refactor` for the code only.
 
 ## How to delegate
 
@@ -34,7 +64,7 @@ Do **not** delegate when any of these hold:
    - Any conventions to follow (variable naming, import order, error handling style)
    - The acceptance test (which command verifies success — `npm test`, `cargo check`, etc.)
 
-2. Invoke `/cc-opencode-cmux:delegate "<spec>"`. The plugin auto-classifies the task and selects the right model/permission profile. Override with `--type` if classification looks wrong.
+2. Invoke `/cc-opencode-cmux:delegate "<spec>"`. The plugin auto-classifies the task and selects the right model/permission profile. Override with `--type <implement|refactor|summarize|cjk-doc|research|compose|analyze>` if classification looks wrong, and `--model <provider/model>` if you want a specific model (e.g. `--model opencode-go/kimi-k2.6`, `--model opencode-go/deepseek-v4-pro`, or any from `opencode models opencode-go` / `opencode models opencode`). Without `--model`, the agent's default from `~/.config/opencode/opencode.json` is used.
 
 3. Use `--worktree` when OpenCode might touch files you will also edit, or when the task is large enough that you want to review it isolated.
 
