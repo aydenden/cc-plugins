@@ -54,6 +54,22 @@ brew install jq    # or apt install jq
 > **v0.2.5+**: Parallel `/cc-opencode-cmux:delegate` calls are now safe. `oc-watch.sh` filters server-global `/event` SSE by `sessionID` so concurrent sessions don't poison each other's idle/error/step-loop detection. `worktree-dispatch.sh` appends a short uuid to worktree paths/branches to avoid same-second collisions.
 >
 > **v0.3.0+**: cmux IPC transport (Pattern B'). When `cmux` is on PATH, delegations now run inside a visible cmux split — `cmux new-split right` for the first delegate, `cmux new-split down --surface $ROOT` for parallel ones so the main pane is never further sliced. Completion is signaled via `cmux wait-for --signal`, and surfaces auto-close (`cmux close-surface`) when each delegate finishes; the last one also closes the root surface. SSE is kept as automatic fallback (`safe-oc.sh`) — override the transport with `CC_OC_FORCE_MODE=cmux|sse|auto`. Resolves SSE blindness ("is it actually running?") and known SSE regressions in opencode v1.14.43–48 (#27391).
+>
+> **v0.3.1+**: Live progress inside the split. The cmux-dispatch worker now passes `--print-logs` and tees stderr to the split (plus a file), while stdout (ndjson) goes through `jq` to surface response text in the split as it streams. You'll see "==> opencode starting", live INFO logs, and the model's reply landing in the right pane instead of a blank screen. `oc-implementer` agent now dispatches through `bin/oc-route.sh` (was `bin/safe-oc.sh`) so sub-agent delegations also get the split visualization.
+
+## opencode version pinning (recommended)
+
+opencode v1.15.1 introduced an `InstanceRef not provided` regression that breaks every `opencode run` invocation. This plugin has been tested against **v1.14.48**. Pin and prevent silent auto-upgrades:
+
+```bash
+# Pin to the known-good version
+opencode upgrade 1.14.48
+
+# Disable in-app auto-update by adding to ~/.config/opencode/opencode.json:
+#   { "autoupdate": false, ... }
+```
+
+`safe-oc.sh` and `cmux-dispatch.sh` already set `OPENCODE_DISABLE_AUTOUPDATE=1` for the non-interactive worker process, but the config-level pin protects TUI/interactive invocations too. Re-enable only after confirming a newer opencode release fixes the regression.
 
 Default agents use OC's own gateway:
 

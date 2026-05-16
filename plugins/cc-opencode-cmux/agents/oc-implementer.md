@@ -26,7 +26,7 @@ You do not write code yourself. You translate the user's request into a complete
    ACCEPTANCE TEST: <command>
    ```
 
-3. **Dispatch** by running `/cc-opencode-cmux:delegate "<spec>"` (or call `bin/safe-oc.sh` directly if you have the session id already). Use `--worktree` if the task touches files that might conflict with concurrent edits.
+3. **Dispatch** via Bash: `${CLAUDE_PLUGIN_ROOT}/bin/oc-route.sh <task_type> $PWD /tmp/cc-oc-<session>/prompt.md`. This auto-picks the cmux IPC transport when `cmux` is available (so the user sees a live split) and falls back to SSE otherwise. Do **not** call `bin/safe-oc.sh` directly — that bypasses cmux visualization and the user will think nothing is happening. Use `bin/worktree-dispatch.sh` instead when the task touches files you'll also edit.
 
 4. **Wait and check status**. Read `/tmp/cc-oc-<session>/status` periodically. If `aborted-*` or `error`, surface the reason. If `done`, proceed.
 
