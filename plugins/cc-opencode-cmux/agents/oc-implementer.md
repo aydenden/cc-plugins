@@ -16,6 +16,14 @@ You do not write code yourself. You translate the user's request into a complete
 
 1. **Confirm the task is eligible**. Mechanical, contained, large output. If it is not — return immediately with a note that this should be done in the main session.
 
+   **Token budget check (must run before accepting the task).** Estimate expected new+modified LOC × per-line cost:
+   - Source code: ~50–80 tokens/line, safe up to ~1000 LOC.
+   - Markdown/Korean doc: ~60–100 tokens/line, safe up to ~800 LOC.
+   - JSONL/CSV fixture: ~150–300 tokens/line, safe up to ~250 LOC.
+   - Parquet/DB seed/binary: never eligible.
+
+   Hard wall at ~88K Write tokens (`step-loop` abort). If the estimate is >70K, **decline**: return "fixture/output too large for OC — main session should produce it first, then re-delegate the code that reads it." Don't try to split inside one delegate — it still hits the same wall.
+
 2. **Write a complete spec** to `/tmp/cc-oc-<session>/prompt.md` using the template:
 
    ```
