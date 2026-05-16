@@ -43,8 +43,8 @@
     {
       "name": "cc-opencode-cmux",
       "source": "./plugins/cc-opencode-cmux",
-      "description": "Claude Code Opus(오케스트레이터) + OpenCode(저렴 모델 구현) + cmux(병렬 세션 IPC) 3-tool 위임 플러그인. cmux 가용 시 new-split + wait-for signal로 시각화·동기화하고, 미가용 시 SSE로 자동 폴백. 코드/지식 작업 7종 task type, 작업별 권한 차등.",
-      "version": "0.3.0"
+      "description": "Claude Code Opus(오케스트레이터) + OpenCode(저렴 모델 구현) + cmux(병렬 세션 IPC) 3-tool 위임 플러그인. cmux 가용 시 new-split + wait-for signal로 시각화·동기화하고, 미가용 시 SSE로 자동 폴백. split에 실시간 로그·응답 streaming. 코드/지식 작업 7종 task type, 작업별 권한 차등.",
+      "version": "0.3.1"
     },
     {
       "name": "cc-deep-tutor",
