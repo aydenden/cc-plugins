@@ -11,13 +11,13 @@
         ]
       }
     ],
-    "PostToolUse": [
+    "SubagentStop": [
       {
-        "matcher": "Bash",
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-oc-run.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop.sh"
           }
         ]
       }
