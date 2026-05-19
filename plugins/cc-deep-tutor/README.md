@@ -5,7 +5,7 @@ DeepTutor 메커니즘을 Claude Code 네이티브로 재구현한 다중 에이
 논문·교과서를 깊이 이해하고 약점을 보완하는 능동적 학습 루프:
 자료 인덱싱(memsearch) → 분해·조사·요약 → 풀이·집필 → 출제·소크라테스 follow-up → 진행 트래킹(beads).
 
-`cc-opencode-cmux` 가용 시 외부 조사·압축·집필을 OpenCode에 위임해 CC 토큰을 절감한다.
+`cc-opencode-cmux` 설치 시 외부 조사·압축·집필을 `Skill(cc-opencode-cmux:delegate-oc)`을 통해 OpenCode에 위임해 CC 토큰을 절감한다. 위임 가용성·daemon 기동·결과 검증은 delegate-oc Skill이 자체적으로 책임지며, 본 플러그인은 `Skill` 호출 한 줄로만 dispatch한다.
 
 ## 기능
 
@@ -103,15 +103,20 @@ my-study/
 
 ## OC 위임 정책
 
-`oc_delegate` 설정에 따라:
-- `auto` (default): cc-opencode-cmux daemon 가용 시 위임, 아니면 cc-only
-- `always`: 위임 실패 시 에러 (cc fallback 안 함)
-- `never`: 항상 CC 직접 수행
+각 sub-agent가 `Skill(cc-opencode-cmux:delegate-oc, args: <spec>)` 한 번을 호출한다. delegate-oc Skill이 다음을 모두 처리:
+- cc-opencode-cmux 설치 여부 / opencode CLI 인증 / daemon health 검사
+- 위임 가치 판단 (token budget, 작업 복잡도)
+- daemon ensure (필요 시 자동 기동, 종료 시 정리)
+- spec dispatch + 결과 diff 캡처 + 8줄 보고서 반환
+
+delegate-oc가 `status: declined / error / aborted-perm`을 반환하면 호출 agent가 cc-only fallback으로 직접 작성한다.
 
 위임 대상:
 - `deep-research`의 topic-researcher (병렬 N개) + note-compressor + 최종 compose
 - `deep-solve`의 solution-writer
 - `deep-question`의 question-generator
+
+`oc_delegate: never` 환경변수가 필요하면 호출 agent별 fallback 분기를 강제하는 식으로 사용자 .local.md에서 토글할 수 있다 (각 agent의 cc-only 경로는 항상 살아 있음).
 
 ## 자동 인덱싱 Hook
 
