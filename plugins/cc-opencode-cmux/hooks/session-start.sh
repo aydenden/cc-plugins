@@ -52,10 +52,10 @@ elif [ "$AUTH_OK" = "1" ] && ! command -v jq >/dev/null 2>&1; then
   emit_warn "jq not installed — OC agent registration skipped. Install: brew install jq"
 fi
 
-# Auto-start serve daemon if CC_OC_AUTOSTART=1
+# Auto-start serve daemon if CC_OC_AUTOSTART=1 (otherwise oc-implementer ensures on demand)
 if [ "${CC_OC_AUTOSTART:-0}" = "1" ]; then
-  if [ -x "$PLUGIN_ROOT/bin/oc-serve-start.sh" ]; then
-    "$PLUGIN_ROOT/bin/oc-serve-start.sh" >&2 || emit_warn "auto-start of opencode serve failed"
+  if [ -x "$PLUGIN_ROOT/bin/oc-daemon.sh" ]; then
+    "$PLUGIN_ROOT/bin/oc-daemon.sh" ensure >&2 || emit_warn "auto-start of opencode daemon failed"
   fi
 fi
 
