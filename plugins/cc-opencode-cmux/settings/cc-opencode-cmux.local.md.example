@@ -1,6 +1,6 @@
 ---
 # Copy this file to .claude/cc-opencode-cmux.local.md (project root) and adjust.
-# The plugin reads these values when starting the serve daemon and dispatching tasks.
+# Values here are read as environment variables by the plugin's bin/ scripts.
 
 # Port for `opencode serve`. Default 4096.
 port: 4096
@@ -8,73 +8,68 @@ port: 4096
 # Hostname. Stay on loopback unless you know what you are doing.
 host: 127.0.0.1
 
-# Auto-start the serve daemon on SessionStart.
-# Saves the 1.5–2s health-check wait per delegation. Costs one idle daemon.
+# Auto-start the serve daemon on SessionStart. Costs one idle daemon but saves
+# the ensure-on-first-call latency (~1–3s).
 auto_start: false
 
-# Default model overrides per task type (optional).
-# Leave commented to use config/opencode.json.template defaults.
-# models:
-#   implement: opencode-go/deepseek-v4-pro
-#   refactor:  opencode-go/qwen3.6-plus
-#   summarize: opencode/gemini-3-flash
-#   cjk-doc:   opencode/gemini-3-flash
+# Keep the cmux split surface open after each delegation finishes (default:
+# auto-close after 5s grace). Useful when reviewing slow runs.
+keep_surface: false
 ---
 
 # cc-opencode-cmux local settings
 
-This file is git-ignored. Use it for per-machine overrides like a different daemon port
-or a personal preference for which model handles `implement` tasks.
+This file is git-ignored. Use it for per-machine overrides. The plugin's `bin/`
+scripts read these as env vars: `CC_OC_PORT`, `CC_OC_HOST`, `CC_OC_AUTOSTART`,
+`CC_OC_KEEP_SURFACE`. You can also export them in your shell profile instead of
+using this file.
 
 ## Authentication
 
-OC Zen and OC Go are **two separate OpenCode subscriptions**. Subscribing to one does
-not unlock the other. Both end up authenticated under the same env var
-(`OPENCODE_API_KEY`) — `opencode auth login` runs through a TUI menu where you choose
-which subscription to authenticate.
+OC Zen and OC Go are **two separate OpenCode subscriptions**. Subscribing to one
+does not unlock the other. Both end up authenticated under `OPENCODE_API_KEY` —
+`opencode auth login` runs through a TUI menu where you choose which one.
 
 ### OpenCode Go ($10/month flat, 14 models)
 
 ```bash
-opencode auth login           # menu: choose "OpenCode Go"
-# Browser opens at opencode.ai/auth → subscribe → copy API key → paste back into TUI
+opencode auth login   # menu: choose "OpenCode Go"
 ```
 
-Models reachable via `opencode-go/<id>`:
-- DeepSeek V4 Flash (31,650 req/5h, ctx 1M, biggest quota)
+Models reachable via `opencode-go/<id>` (see `config/opencode.json.template` for
+plugin-defined agent → model mappings):
+
+- DeepSeek V4 Flash (31,650 req/5h, ctx 1M — biggest Go quota)
 - Qwen 3.5 Plus (10,200 req/5h, ctx 256K)
 - DeepSeek V4 Pro (3,450 req/5h, ctx 1M)
-- MiniMax M2.7 (3,400 req/5h, ctx 200K)
-- Qwen 3.6 Plus (3,300 req/5h, ctx 256K) — best Korean of the Go bunch
-- MiMo-V2.5-Pro (1,290 req/5h, ctx 1M)
-- Kimi K2.6 (1,150 req/5h, ctx 256K) — SWE-Bench Pro leader
-- GLM-5.1 (880 req/5h, ctx 198K)
-- (and 6 more: kimi-k2.5, glm-5, minimax-m2.5, mimo-v2.5, mimo-v2-pro, mimo-v2-omni)
+- Qwen 3.6 Plus (3,300 req/5h, ctx 256K — best Korean within Go)
+- Kimi K2.6 (1,150 req/5h, ctx 256K — SWE-Bench Pro leader)
+- (and several more)
 
 ### OpenCode Zen (pay-per-token, premium models)
 
 ```bash
-opencode auth login           # menu: choose "OpenCode Zen"
-# Same browser flow → pay-as-you-go (default $20 auto-reload)
+opencode auth login   # menu: choose "OpenCode Zen"
 ```
 
 Models reachable via `opencode/<id>`:
+
 - `opencode/gemini-3-flash`, `opencode/gemini-3.1-pro`
 - `opencode/claude-sonnet-4-5`, `opencode/claude-haiku-4-5`
 - `opencode/gpt-5.1`, `opencode/gpt-5.4-mini`
-- (and ~50 more, see `opencode auth list` after login)
+- (and ~50 more — `opencode auth list` after login)
 
-### BYOK (optional fallback, not used automatically)
+### BYOK (optional fallback)
 
-These bypass the OC gateway. Set whichever you have:
+Bypass the OC gateway. Set whichever you have:
 
 - `OPENROUTER_API_KEY` — any `openrouter/...` model
-- `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY` — direct provider routes
+- `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`
 
-> **Note**: OpenCode does not support a `fallback_models` config field. The plugin's
-> `config/opencode.json.template` lists alternative model IDs in each agent's `description`
-> for **manual** fallback — pass the alternative ID to `safe-oc.sh` as the 4th argument
-> when the primary model is rate-limited or fails.
+> OpenCode does not support a `fallback_models` config field. Each agent in
+> `config/opencode.json.template` lists alternative model IDs in its
+> `description` for **manual** fallback — call the delegate-oc skill with a
+> `--model <id>` hint in the spec, or override via Skill args.
 
 ## Verifying auth
 
@@ -82,5 +77,11 @@ These bypass the OC gateway. Set whichever you have:
 opencode auth list
 ```
 
-If you see at least one provider listed (e.g. `opencode-go`, `opencode`, or a BYOK
-provider), authentication is in place.
+If at least one provider is listed (`opencode-go`, `opencode`, or a BYOK
+provider), auth is in place.
+
+## Overriding the daemon version
+
+The plugin pins opencode to **v1.15.5** (see `bin/oc-daemon.sh PINNED_VERSION`).
+If you need a different version, change that constant and restart the daemon —
+but be aware of the known regressions documented in the project README.

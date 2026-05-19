@@ -1,172 +1,107 @@
 # cc-opencode-cmux
 
-Claude Code (Opus, orchestrator) + OpenCode (cheap-model implementer) + cmux (parallel session visualization) — a 3-tool hybrid delegation plugin.
+Claude Code (Opus, orchestrator) → OpenCode (cheap-model implementer) 위임 플러그인.
 
-## What it does
+메인 Opus 컨텍스트가 한 줄 호출만 하고, 격리된 서브에이전트(`oc-implementer`, haiku)가 daemon 관리·세션 생성·dispatch·cmux 시각화·diff 캡처를 모두 처리합니다. 메인은 8줄짜리 구조화된 보고만 받습니다.
 
-Lets Claude Code in Opus mode hand off mechanical coding work (CRUD scaffolding, refactors, summarization, CJK documentation) to OpenCode running cheaper models like Gemini 3 Flash, DeepSeek V4 Pro, or Qwen 3.6 Plus, while keeping a tight feedback loop:
+## 진입점 (총 3개)
 
-- **Daemon reuse**: `opencode serve` runs once, every delegation attaches in 1–3s instead of paying 75s cold start
-- **SSE-based hang detection**: subscribes to `/event` and aborts on inactivity or step-loop signatures, no blind `timeout`
-- **Per-task permission profiles**: 4 separate JSON policies (implement / refactor / summarize / cjk-doc) injected via `OPENCODE_PERMISSION` env
-- **Auto diff capture**: PostToolUse hook captures `git diff` and surfaces it for Opus review
-- **Worktree isolation**: optional `--worktree` flag runs the delegation in a separate branch for clean review
-- **cmux/tmux split** (best-effort): shows each delegation as a separate pane for visual progress
+| 종류 | 이름 | 호출 |
+|---|---|---|
+| **Agent** | `cc-opencode-cmux:oc-implementer` | 메인 Opus가 `Agent({ subagent_type: "cc-opencode-cmux:oc-implementer", prompt: "<spec>" })`로 직접 호출 |
+| **Skill** | `cc-opencode-cmux:delegate-oc` | 사용자가 `/cc-opencode-cmux:delegate-oc <spec>` 슬래시로 호출하거나, Claude가 description 자동 트리거. 다른 플러그인(obsidian-knowledge, cc-deep-tutor 등)이 `Skill(cc-opencode-cmux:delegate-oc, args: "<spec>")`로 호출 |
+| **Skill** | `cc-opencode-cmux:oc-result-review` | delegation 종료 후 diff 리뷰 워크플로. SubagentStop hook이 자동 안내, 또는 사용자 명시 호출 |
 
-## Why a new plugin
+슬래시 명령은 별도로 두지 않습니다. skill이 슬래시 호출도 지원하므로 단일 인터페이스로 통합되어 있습니다.
 
-Existing options either delegate from OpenCode (not the other way around — `oh-my-openagent`, `0xCaso/opencode-cmux`), put codex in the orchestrator seat (`stellarlinkco/myclaude`), or run plain tmux without CC plugin packaging (`barkain/claude-code-workflow-orchestration`). None expose a CC-plugin-shaped surface where Opus is the captain, OpenCode is the crew, and SSE drives hang detection.
+## 무엇을 하는가
 
-See `docs/plans/2026-05-11-cc-opencode-cmux-design.md` in the repo root for the full design rationale.
+`Agent` 또는 `Skill` 한 줄 호출 → 격리 서브에이전트가:
 
-## Install
+1. `opencode serve` daemon 확인·기동 (`oc-daemon.sh ensure`, idempotent)
+2. OC 세션 미리 생성
+3. cmux 우측 split 띄움 — events.ndjson을 `oc-stream-format.py`로 가공해 사람이 읽을 progress 라이브 표시. 작업 끝나면 5초 grace 후 자동 close (`CC_OC_KEEP_SURFACE=1`로 유지 가능)
+4. SSE `/event` watcher 백그라운드 시작 (`permission.asked` 자동 deny)
+5. `opencode run --attach --dir <workdir> -s <sid>` 동기 dispatch (HTTP API의 `directory` 무시 버그를 CLI `--dir`로 우회)
+6. git diff 캡처
+7. 구조화 8줄 보고 반환
 
-Add the plugin to your Claude Code marketplace, then enable it in a project. From the project root:
+메인 Opus 컨텍스트에는 raw tool output, NDJSON, 진행상황이 들어오지 않습니다. 보고만 들어옵니다.
+
+## 설치
 
 ```bash
-# 1. Install opencode CLI
+# 1) opencode CLI 설치 + 핀
 brew install opencode-ai/opencode/opencode
+opencode upgrade 1.15.5            # 권장 핀. v1.15.5 미만은 SSE/instance 회귀
 
-# 2. Authenticate. OC Zen and OC Go are SEPARATE subscriptions — pick one or both.
-opencode auth login          # menu: select "OpenCode Go" ($10/mo subscription required)
-opencode auth login          # menu: select "OpenCode Zen" (pay-as-you-go, premium models)
-# Both store the API key under env OPENCODE_API_KEY. BYOK fallback (optional):
-#   export OPENROUTER_API_KEY=sk-or-...
-#   export DEEPSEEK_API_KEY=sk-...
+# 2) 인증 (OC Go / OC Zen / BYOK 중 하나)
+opencode auth login                 # TUI 메뉴에서 선택
 
-# 3. (Optional) Copy AGENTS.md snippet to your project
+# 3) jq (agent 정의 자동 등록에 필요)
+brew install jq
+
+# 4) (선택) project AGENTS.md에 conventions 스니펫 추가
 cat ${CLAUDE_PLUGIN_ROOT}/templates/AGENTS.md.snippet >> AGENTS.md
-
-# 4. (Optional) Copy CLAUDE.md policy snippet
-cat ${CLAUDE_PLUGIN_ROOT}/templates/CLAUDE.md.snippet >> CLAUDE.md
-
-# 5. Install jq (required for agent registration into user OC config)
-brew install jq    # or apt install jq
-
-# 6. (Optional) Start the daemon — safe-oc.sh auto-starts it on first use
-/cc-opencode-cmux:serve-start
 ```
 
-> **v0.2.1+**: `safe-oc.sh` auto-starts the daemon if it's not running. Set `CC_OC_NO_AUTOSTART=1` to opt out.
->
-> **v0.2.2+**: Plugin's `oc-*` agent definitions are automatically merged into the user's `~/.config/opencode/opencode.json` on session start (idempotent, marker-gated, preserves user's existing agents/providers/MCP via `jq` deep merge). Without this OC silently falls back to the default `build` agent on `--agent oc-research` etc., which breaks ndjson streaming and forces REST polling.
->
-> **v0.2.5+**: Parallel `/cc-opencode-cmux:delegate` calls are now safe. `oc-watch.sh` filters server-global `/event` SSE by `sessionID` so concurrent sessions don't poison each other's idle/error/step-loop detection. `worktree-dispatch.sh` appends a short uuid to worktree paths/branches to avoid same-second collisions.
->
-> **v0.3.0+**: cmux IPC transport (Pattern B'). When `cmux` is on PATH, delegations now run inside a visible cmux split — `cmux new-split right` for the first delegate, `cmux new-split down --surface $ROOT` for parallel ones so the main pane is never further sliced. Completion is signaled via `cmux wait-for --signal`, and surfaces auto-close (`cmux close-surface`) when each delegate finishes; the last one also closes the root surface. SSE is kept as automatic fallback (`safe-oc.sh`) — override the transport with `CC_OC_FORCE_MODE=cmux|sse|auto`. Resolves SSE blindness ("is it actually running?") and known SSE regressions in opencode v1.14.43–48 (#27391).
->
-> **v0.3.1+**: Live progress inside the split. The cmux-dispatch worker now passes `--print-logs` and tees stderr to the split (plus a file), while stdout (ndjson) goes through `jq` to surface response text in the split as it streams. You'll see "==> opencode starting", live INFO logs, and the model's reply landing in the right pane instead of a blank screen. `oc-implementer` agent now dispatches through `bin/oc-route.sh` (was `bin/safe-oc.sh`) so sub-agent delegations also get the split visualization.
->
-> **v0.3.2+**: `perm-compose.json` now allows generator scripts scoped to the session dir (`python3 /tmp/cc-oc-*/*`, `node /tmp/cc-oc-*/*`, `bash /tmp/cc-oc-*/*`, `chmod +x /tmp/cc-oc-*/*`) so OC can run one-shot helpers without breaking sandbox boundaries. Also quantifies the OC Write-token budget so callers can decide split-vs-delegate before paying the cost:
->
-> | Output type | Tokens/line | Safe per delegate | Hard wall |
-> |---|---|---|---|
-> | Source code | 50–80 | ≤ 1000 LOC | ~1100 LOC |
-> | Markdown / 한국어 문서 | 60–100 | ≤ 800 LOC | ~900 LOC |
-> | JSONL / CSV fixture | 150–300 | ≤ 250 LOC | ~300 LOC |
-> | Parquet / DB seed / binary | — | **never delegate** | — |
->
-> Estimated > 70K tokens or any binary output → CC main session generates the file first, then delegates only the code that reads it. The `delegate-oc` skill carries the decision rule; the `oc-implementer` agent rejects oversized tasks up front instead of letting them run to `step-loop` abort. Background: real-world v0.3.1 delegate hit `aborted (step-loop)` at ~88K tokens trying to `Write` a 400-frame JSONL cassette — see knowledge note `2026-05-16-cc-opencode-cmux-fixture-generation-blocked`.
+세션 시작 시 `hooks/session-start.sh`가 `bin/install-agents.sh`를 호출해 `config/opencode.json.template`의 7개 OC agent 정의(`oc-implement`/`oc-refactor`/`oc-summarize`/`oc-cjk-doc`/`oc-research`/`oc-compose`/`oc-analyze`)를 사용자 `~/.config/opencode/opencode.json`에 jq deep merge 합니다 (idempotent, marker-gated, 백업 자동).
 
-## opencode version pinning (recommended)
+`CC_OC_AUTOSTART=1`을 설정하면 세션 시작 시 daemon도 미리 기동합니다. 미설정 시 첫 dispatch에서 자동 ensure.
 
-opencode v1.15.1 introduced an `InstanceRef not provided` regression that breaks every `opencode run` invocation. This plugin has been tested against **v1.14.48**. Pin and prevent silent auto-upgrades:
+## opencode 버전 핀 (필수: v1.15.5)
 
-```bash
-# Pin to the known-good version
-opencode upgrade 1.14.48
+- **v1.14.48 이하**: `/event` SSE가 `server.connected` 이후 닫힘 — `permission.asked` 같은 부수 이벤트 미수신
+- **v1.15.0**: Effect 기반 이벤트 시스템 전환 — 일부 이벤트 누락 가능
+- **v1.15.1**: `InstanceRef not provided` 회귀 — 모든 `opencode run` 깨짐
+- **v1.15.2 ~ v1.15.4**: project-scoped bus 라우팅 패치 진행 중
+- **v1.15.5** (권장): SSE 구독 레이스 픽스 + `ask` tool 완료 픽스 + InstanceRef 해소
 
-# Disable in-app auto-update by adding to ~/.config/opencode/opencode.json:
-#   { "autoupdate": false, ... }
+자동 업데이트 비활성:
+```jsonc
+// ~/.config/opencode/opencode.json
+{ "autoupdate": false, ... }
 ```
 
-`safe-oc.sh` and `cmux-dispatch.sh` already set `OPENCODE_DISABLE_AUTOUPDATE=1` for the non-interactive worker process, but the config-level pin protects TUI/interactive invocations too. Re-enable only after confirming a newer opencode release fixes the regression.
+## 알려진 한계 (v1.15.5 기준)
 
-Default agents use OC's own gateway:
+- **HTTP API의 `directory` 파라미터 무시**: `POST /session`에 `{directory:<path>}`를 보내도 daemon이 자기 cwd를 강제. 우회: `opencode run --attach --dir <path>` CLI 경로 사용 (이 플러그인이 그렇게 함)
+- **`opencode run --attach`는 SSE `/event`로 진행 이벤트를 broadcast하지 않음**: tool/step/text 이벤트는 CLI stdout NDJSON으로만 흐름. 그래서 cmux split 표시는 events.ndjson을 직접 follow (SSE가 아니라). SSE는 `permission.asked` 등 부수 이벤트에만 사용
 
-- `opencode-go/...` for the $10/mo Go plan (Kimi K2.6, DeepSeek V4 Pro, Qwen 3.6 Plus, GLM-5.1, MiniMax M2.7, MiMo-V2.5-Pro, etc.)
-- `opencode/...` for OC Zen premium pay-as-you-go (Gemini 3 Flash, Claude Sonnet 4.5, GPT-5.1, Claude Haiku 4.5, etc.)
+## 위임 정책 (요약)
 
-OC Go and OC Zen are **independent subscriptions** — subscribing to one does not enable the other. BYOK keys are accepted but are not used as automatic fallback; OpenCode's `fallback_models` config field is not supported, so fallback is manual via `safe-oc.sh <task> ... <model_id>`.
+`delegate-oc` skill의 본문 정책. 다음이 모두 참이면 위임:
 
-## Commands
+- 작업이 mechanical 또는 패턴 따라가기 (CRUD scaffold, rename, summarization, CJK 문서, structured research, document composition)
+- 예상 출력 > 200 LOC 또는 > 5 파일
+- 추론 얕음 — 아키텍처 결정 없음
+- 사용자가 Opus 품질 명시 요청 안 함
 
-| Command | Purpose |
-|---|---|
-| `/cc-opencode-cmux:delegate "<spec>" [--type T] [--worktree]` | Dispatch a task to OpenCode |
-| `/cc-opencode-cmux:review [session_id]` | Inspect the diff produced by a delegation |
-| `/cc-opencode-cmux:status [session_id]` | Show active sessions and SSE progress |
-| `/cc-opencode-cmux:serve-start` | Start the OpenCode daemon |
-| `/cc-opencode-cmux:serve-stop` | Stop the OpenCode daemon |
+토큰 예산:
 
-## Skills
-
-- `delegate-oc` — decides whether the current task should be delegated; auto-triggered by Claude when work matches the policy
-- `oc-result-review` — structured review of a delegation diff (hallucination scan, scope adherence, security)
-
-## Agent
-
-- `oc-implementer` — thin Haiku wrapper for the orchestrator to invoke without polluting the main Opus context
-
-## Task types and model routing
-
-Default config targets **OC Go-only** subscribers. Every default model is in the
-`opencode-go/*` namespace, so no Zen balance is required.
-
-### Code tasks (v0.1.0)
-
-| Type | Default model | Wall-clock | SSE hard-hang |
+| 출력 유형 | 토큰/줄 | Safe 단일 delegate | Hard wall |
 |---|---|---|---|
-| `summarize` | `opencode-go/deepseek-v4-flash` (31,650 req/5h) | 300s | 60s |
-| `single-file` | `opencode-go/deepseek-v4-pro` | 480s | 90s |
-| `refactor` | `opencode-go/qwen3.6-plus` | 600s | 90s |
-| `implement` | `opencode-go/deepseek-v4-pro` | 1800s | 120s |
-| `cjk-doc` | `opencode-go/qwen3.6-plus` (best Korean in Go) | 600s | 90s |
-| `batch` | `opencode-go/deepseek-v4-pro` | 3600s | 180s |
+| 소스코드 | 50–80 | ≤ 1000 LOC | ~1100 |
+| Markdown / 한국어 doc | 60–100 | ≤ 800 LOC | ~900 |
+| JSONL / CSV fixture | 150–300 | ≤ 250 LOC | ~300 |
+| Parquet / DB seed / binary | — | **never** | — |
 
-### Knowledge tasks (v0.2.0) — domain-agnostic
+> 70K 또는 binary → CC 메인이 fixture 먼저 생성, 그 후 fixture를 읽는 코드만 위임.
 
-| Type | Default model | Wall-clock | SSE hard-hang | Permissions |
-|---|---|---|---|---|
-| `research` | `opencode-go/deepseek-v4-pro` (ctx 1M) | 1200s | 150s | webfetch+websearch allow, edit deny |
-| `compose` | `opencode-go/qwen3.6-plus` | 900s | 120s | web deny, edit allow in `--dir` |
-| `analyze` | `opencode-go/kimi-k2.6` (long reasoning) | 900s | 120s | read-only |
+## 환경 변수
 
-Knowledge tasks are designed as **building blocks** for other plugins (`obsidian-knowledge`, `pm`, `korean-trading`). Callers provide the spec + output schema + target directory; this plugin handles the OpenCode invocation. See `examples/knowledge-pipeline.md` for a research → compose two-stage workflow.
+| 변수 | 기본 | 효과 |
+|---|---|---|
+| `CC_OC_PORT` | 4096 | daemon 포트 |
+| `CC_OC_HOST` | 127.0.0.1 | daemon 호스트 |
+| `CC_OC_AUTOSTART` | 0 | 1이면 session-start에서 daemon 자동 기동 |
+| `CC_OC_KEEP_SURFACE` | 0 | 1이면 작업 끝나도 cmux split 자동 close 안 함 |
+| `OPENCODE_SERVER_PASSWORD` | (자동) | daemon ensure가 발급/저장 |
 
-### Hybrid (Zen + Go)
+## 의존성
 
-If you also have an OC Zen balance and have enabled **Use balance** in the OpenCode
-console, you can upgrade `cjk-doc` and `summarize` to premium Zen models:
-
-```bash
-/cc-opencode-cmux:delegate "한국어 README 작성" --model opencode/gemini-3-flash
-/cc-opencode-cmux:delegate "한국어 README 작성" --model opencode/claude-sonnet-4-5
-```
-
-Manual fallback IDs are listed in each agent's `description` field in
-`config/opencode.json.template`. Pass an alternative model ID as the 4th argument to
-`bin/safe-oc.sh`, or use `--model` on `/cc-opencode-cmux:delegate`.
-
-## Security defaults
-
-- `--dangerously-skip-permissions` is **never** passed through
-- All permission profiles use `allow`/`deny` binary (no `ask` — `ask` hangs in headless mode)
-- `*.env*`, `**/secrets/**`, `**/.git/**` are deny-listed for edit by default
-- `bash` is deny-by-default with a small allow list per task type
-- `webfetch` and `websearch` are denied except for `summarize` (limited domains) and `cjk-doc` (denied)
-- Daemon binds to `127.0.0.1` only, password-authenticated
-
-## Known limitations
-
-- `opencode run` has hang patterns (#16367, #17516, #26220) that the watcher catches but does not prevent
-- `opencode-cli` 1.14.x has no native `--timeout` flag — wall-clock fallback uses GNU `timeout`
-- `cmux` integration is best-effort; falls back to `tmux` then to background process
-- Worktree mode does not auto-merge — Opus reviews and decides
-
-## Related notes
-
-- [OpenCode Server docs](https://opencode.ai/docs/server/) — SSE `/event` endpoint
-- [OpenCode permissions](https://opencode.ai/docs/permissions/) — `OPENCODE_PERMISSION` env
-- [OpenCode Go plan](https://opencode.ai/go) — model list
-- [OpenCode Zen pricing](https://opencode.ai/docs/zen/) — Gemini 3 Flash and other premium models
+- macOS (cmux v0.64.x 기반 — Linux/Windows 미지원)
+- `opencode` CLI v1.15.5
+- `python3` (3.10+)
+- `jq` (agent 정의 등록에 사용)
+- `cmux` (선택 — 미설치 시 split 없이 헤드리스 동작)

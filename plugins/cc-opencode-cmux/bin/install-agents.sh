@@ -76,14 +76,13 @@ echo "[install-agents] plugin agents now available: $PLUGIN_AGENTS" >&2
 echo "[install-agents] backup: $BACKUP" >&2
 
 # If a daemon is running, it has the OLD config cached. Stop it so the next
-# safe-oc.sh invocation triggers autostart with the new agent definitions.
-# This avoids the ServeError pattern where stale PID prevents fresh serve startup.
+# oc-implementer dispatch triggers `oc-daemon.sh ensure` with the new agent defs.
 META_FILE="/tmp/cc-oc-serve.env"
 if [ -f "$META_FILE" ]; then
   PLUGIN_BIN="$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "$0")")"
-  if [ -x "$PLUGIN_BIN/oc-serve-stop.sh" ]; then
-    echo "[install-agents] daemon detected with stale agent config — stopping (autostart will pick up new config)" >&2
-    bash "$PLUGIN_BIN/oc-serve-stop.sh" >&2 || true
+  if [ -x "$PLUGIN_BIN/oc-daemon.sh" ]; then
+    echo "[install-agents] daemon detected with stale agent config — stopping (ensure will pick up new config on next call)" >&2
+    bash "$PLUGIN_BIN/oc-daemon.sh" stop >&2 || true
   fi
 fi
 
