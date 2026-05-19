@@ -1,19 +1,20 @@
 ---
 name: deep-solve
-description: 수학·과학 문제를 계획→풀이→집필 3단계로 풀이. "문제 풀어줘", "solve", "증명해줘"에 활성화. cc-opencode-cmux 가용 시 집필을 OpenCode에 위임.
+description: 수학·과학 문제를 계획→풀이→집필 3단계로 풀이. "문제 풀어줘", "solve", "증명해줘"에 활성화. cc-opencode-cmux 설치 시 집필을 OpenCode에 위임.
 ---
 
 # Deep Solve
 
 문제를 받아 sub-agent 협업으로 풀이 + 학습자 친화 재서술.
 
-## 모드 감지
+## 환경 준비
 
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?}"
 eval "$("$PLUGIN_ROOT/scripts/resolve-config.sh")"
-eval "$("$PLUGIN_ROOT/scripts/oc-detect.sh")"
 ```
+
+집필(`solution-writer`) sub-agent는 내부에서 `Skill(cc-opencode-cmux:delegate-oc, ...)`로 위임한다. delegate-oc가 가용성 판단·daemon ensure를 담당하므로 본 skill은 모드 감지 없이 진행한다.
 
 ## 워크플로우
 
@@ -31,8 +32,8 @@ eval "$("$PLUGIN_ROOT/scripts/oc-detect.sh")"
 
 ### 3. 집필 — `solution-writer` agent
 - 입력: 문제 + plan.json + steps.md + 최종 답
-- oc 모드: OC에 위임 (긴 본문 + LaTeX → 토큰 절감)
-- cc-only: writer가 직접 Write
+- writer가 내부에서 delegate-oc Skill 호출 (compose) — 긴 본문 + LaTeX → 토큰 절감
+- delegate-oc 실패 시 writer가 cc-only fallback으로 직접 Write
 - 출력: `$CC_DEEP_TUTOR_MATERIALS_DIR/notes/solve-<slug>-<date>.md` (사용자 동의 시)
 
 ### 4. 저장
@@ -53,4 +54,4 @@ eval "$("$PLUGIN_ROOT/scripts/oc-detect.sh")"
 ## 주의
 - LaTeX 수식 검증 (mismatched delimiters 없음)
 - 검증 단계 누락 금지
-- OC 위임 실패 시 cc-only fallback
+- delegate-oc 위임 실패는 writer agent 내부에서 cc-only fallback 처리
