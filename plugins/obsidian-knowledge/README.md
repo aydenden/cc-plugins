@@ -31,19 +31,19 @@ Karpathy의 [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11
 
 | 에이전트 | 설명 |
 |----------|------|
-| research-agent | Obsidian 볼트 검색 → 외부 조사 → 문서 작성 → 교차참조 삽입까지 자율 수행. v0.3.0부터 cc-opencode-cmux 가용 시 외부 조사 + 문서 작성을 OpenCode에 위임 (CC 토큰 70%+ 절감, 자동 fallback) |
+| research-agent | Obsidian 볼트 검색 → 외부 조사 → 문서 작성 → 교차참조 삽입까지 자율 수행. cc-opencode-cmux:delegate-oc skill 가용 시 외부 조사 + 문서 작성을 OpenCode에 위임 (CC 토큰 70%+ 절감, 자동 fallback) |
 
-## OC 위임 모드 (v0.3.0+)
+## OC 위임 모드
 
-`cc-opencode-cmux` 플러그인이 함께 설치 + 인증되어 있으면, `research` (및 향후 `capture`, `lint`)가 자동으로 OpenCode에 외부 조사·문서 작성을 위임한다.
+`cc-opencode-cmux` 플러그인이 함께 설치 + 인증되어 있으면, `research`가 `Skill(cc-opencode-cmux:delegate-oc, ...)`를 통해 OpenCode에 외부 조사·문서 작성을 위임한다. daemon 기동·attach·SSE 모니터링은 모두 `cc-opencode-cmux:oc-implementer` agent가 책임지므로 이 플러그인 쪽에서는 별도 사전 감지가 없다.
 
-### 3-tier 자동 감지
+### 모드
 
-| 우선순위 | 조건 | 모드 |
-|---|---|---|
-| 1 | `/tmp/cc-oc-serve.env` + daemon health 200 | `oc` (warm, 가장 빠름) |
-| 2 | `opencode` CLI + 인증 OK, daemon 미기동 | `oc-coldstart` (자동 serve-start) |
-| 3 | 위 둘 다 아님 | `cc-only` (기존 동작, 회귀 없음) |
+| 모드 | 동작 |
+|---|---|
+| `oc` (default) | Skill 위임 시도. 실패 시 자동 cc-only fallback |
+| `cc-only` | CC가 직접 외부 조사·문서 작성 (품질 모드) |
+| `oc-required` | OC 위임 강제. 실패 시 에러 (fallback 없음) |
 
 ### 명시적 override
 
