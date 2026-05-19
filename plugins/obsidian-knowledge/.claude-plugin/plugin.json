@@ -1,7 +1,7 @@
 {
   "name": "obsidian-knowledge",
-  "version": "0.3.5",
-  "description": "Obsidian 볼트 기반 LLM Wiki — 엔티티 타입 분류, 출처 추적, 교차참조, 위키 건강점검으로 지식을 복리 축적한다. cc-opencode-cmux 가용 시 외부 조사·문서 작성을 OpenCode에 위임해 CC 토큰 절감.",
+  "version": "0.3.6",
+  "description": "Obsidian 볼트 기반 LLM Wiki — 엔티티 타입 분류, 출처 추적, 교차참조, 위키 건강점검으로 지식을 복리 축적한다. cc-opencode-cmux:delegate-oc skill이 가용하면 외부 조사·문서 작성을 OpenCode에 자동 위임해 CC 토큰 절감.",
   "author": {
     "name": "aydenden"
   },
