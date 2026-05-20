@@ -12,12 +12,15 @@ After OpenCode finishes a delegation, the agent report and the session directory
 Resolve the session directory from the agent report (`session:` field): `/tmp/cc-oc-<session>/`. Expected contents:
 
 - `prompt.md` — the spec sent to OpenCode
-- `events.ndjson` — raw OpenCode events (text deltas, tool calls, status, errors)
+- `events.ndjson` — raw OpenCode CLI event stream (text deltas, tool calls, status, errors)
 - `events.ndjson.err` — opencode CLI stderr (empty on clean runs)
+- `sse.ndjson` — filtered SSE side-channel (own-session events only; auto-deny log)
 - `done` — two lines: exit code, then a one-line reason (e.g. `0\nsession idle`)
 - `diff.patch` — full `git diff` of the working directory at end of run
 - `oc_sid` — the OpenCode session id (for `session.fork` or `session-cont` patterns)
 - `watch.stdout` / `watch.stderr` — SSE watcher logs (mostly diagnostic)
+
+The agent report also has a `server:` line carrying the last server-side status token observed (`idle`, `running`, `error`, …). Use it together with the `status:` line for sanity checking.
 
 If the agent report says `status: done`, expect `done` line-1 to be `0`. Any other status means the diff is partial — read `done` first.
 
@@ -25,9 +28,14 @@ If the agent report says `status: done`, expect `done` line-1 to be `0`. Any oth
 
 ### 1. Status sanity check
 
-- `status: done` + `done` first line `0` → proceed.
+- `status: done` + `done` first line `0` + `server: idle|completed` → proceed.
 - `status: error` → read `events.ndjson.err` and the last 20 lines of `events.ndjson`. The diff may be partial; decide whether to keep or `git restore .`.
 - `status: aborted-perm` → OC asked a permission the watcher auto-denied. Look at the spec — is it implicitly asking OC to write outside `--dir`, run `git push`, or touch a denied tool? Re-spec or reject.
+- `status: running-after-detach` → opencode CLI returned but the server-side session was still active after the agent's ~6s grace polling. The `diff.patch` is a **partial snapshot** at detach time. Options:
+  1. Re-poll: `${PLUGIN}/bin/oc-session.sh status <oc_sid>`. If now idle, re-capture `git diff` and proceed with the normal checklist.
+  2. Wait and re-capture if the task was nearly done.
+  3. Abort the runaway session: `${PLUGIN}/bin/oc-session.sh abort <oc_sid>` — then treat the partial diff as an `error` case.
+  Common cause: opencode v1.15.x dropping `--attach` on a step boundary. Not a model failure.
 - `status: declined` → token budget exceeded before dispatch. Split the work; don't re-delegate the same spec.
 
 ### 2. Scope adherence
@@ -79,6 +87,10 @@ status: done  &&  multiple issues OR scope drift
   → RE-DELEGATE: write a corrective spec listing specific fixes,
      call `Skill(cc-opencode-cmux:delegate-oc, args)` or
      `Agent({subagent_type:"cc-opencode-cmux:oc-implementer"})` again.
+
+status: running-after-detach
+  → INSPECT first: re-poll `oc-session.sh status` once, re-capture diff if now idle.
+     If still running and not progressing → `oc-session.sh abort`, then treat as error.
 
 status: aborted-* OR error OR major hallucinations
   → REJECT: `git restore` the touched paths (or discard the working tree),

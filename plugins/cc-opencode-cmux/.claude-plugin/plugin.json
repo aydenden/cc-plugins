@@ -1,7 +1,7 @@
 {
   "name": "cc-opencode-cmux",
-  "version": "0.4.0",
-  "description": "CC Opus가 OpenCode(저비용)에 작업을 위임하는 단일 진입점 플러그인. Agent({subagent_type:\"oc-implementer\"}) 또는 Skill(delegate-oc) 한 줄로 호출하면 daemon ensure → opencode run --attach --dir → cmux split 라이브 진행 표시 → diff 캡처 → 8줄 보고. opencode v1.15.5 핀, SSE permission 자동 deny.",
+  "version": "0.5.0",
+  "description": "CC Opus가 OpenCode(저비용)에 작업을 위임하는 단일 진입점 플러그인. Agent({subagent_type:\"oc-implementer\"}) 또는 Skill(delegate-oc) 한 줄로 호출하면 daemon ensure → opencode run --attach --dir → 서버측 status polling 완료 검증 → diff 캡처 → 7줄 보고. v0.5.0: cmux 우측 split 제거, SSE watcher 슬림화(permission 자동 deny + strict SID 필터), running-after-detach 감지. opencode v1.15.5 핀.",
   "author": {
     "name": "aydenden",
     "email": "lucky72nyh@gmail.com"

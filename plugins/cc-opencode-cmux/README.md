@@ -2,7 +2,7 @@
 
 Claude Code (Opus, orchestrator) → OpenCode (cheap-model implementer) 위임 플러그인.
 
-메인 Opus 컨텍스트가 한 줄 호출만 하고, 격리된 서브에이전트(`oc-implementer`, haiku)가 daemon 관리·세션 생성·dispatch·cmux 시각화·diff 캡처를 모두 처리합니다. 메인은 8줄짜리 구조화된 보고만 받습니다.
+메인 Opus 컨텍스트가 한 줄 호출만 하고, 격리된 서브에이전트(`oc-implementer`, haiku)가 daemon 관리·세션 생성·dispatch·완료 검증·diff 캡처를 모두 처리합니다. 메인은 7줄짜리 구조화된 보고만 받습니다.
 
 ## 진입점 (총 3개)
 
@@ -20,13 +20,13 @@ Claude Code (Opus, orchestrator) → OpenCode (cheap-model implementer) 위임 �
 
 1. `opencode serve` daemon 확인·기동 (`oc-daemon.sh ensure`, idempotent)
 2. OC 세션 미리 생성
-3. cmux 우측 split 띄움 — events.ndjson을 `oc-stream-format.py`로 가공해 사람이 읽을 progress 라이브 표시. 작업 끝나면 5초 grace 후 자동 close (`CC_OC_KEEP_SURFACE=1`로 유지 가능)
-4. SSE `/event` watcher 백그라운드 시작 (`permission.asked` 자동 deny)
-5. `opencode run --attach --dir <workdir> -s <sid>` 동기 dispatch (HTTP API의 `directory` 무시 버그를 CLI `--dir`로 우회)
+3. SSE `/event` watcher 백그라운드 시작 — `permission.asked` 자동 deny + 자기 세션 idle 신호 부수 기록 (strict SID 필터로 sibling 세션 누수 차단)
+4. `opencode run --attach --dir <workdir> -s <sid>` 동기 dispatch — `MSG_EXIT`가 1차 완료 시그널 (HTTP API의 `directory` 무시 버그를 CLI `--dir`로 우회)
+5. Watcher 즉시 reap → `oc-session.sh status`로 서버측 상태 ~6초 grace polling — opencode v1.15.x의 조기 detach 시 `running-after-detach`로 보고
 6. git diff 캡처
-7. 구조화 8줄 보고 반환
+7. 7줄 구조화 보고 반환
 
-메인 Opus 컨텍스트에는 raw tool output, NDJSON, 진행상황이 들어오지 않습니다. 보고만 들어옵니다.
+메인 Opus 컨텍스트에는 raw tool output, NDJSON, 진행상황이 들어오지 않습니다. 보고만 들어옵니다. 진행상황을 보고 싶다면 `$SESSION_DIR/events.ndjson`(OC CLI 원본 스트림) 또는 `$SESSION_DIR/sse.ndjson`(필터된 SSE 사이드채널)을 수동으로 `tail -F` 가능.
 
 ## 설치
 
@@ -66,7 +66,8 @@ cat ${CLAUDE_PLUGIN_ROOT}/templates/AGENTS.md.snippet >> AGENTS.md
 ## 알려진 한계 (v1.15.5 기준)
 
 - **HTTP API의 `directory` 파라미터 무시**: `POST /session`에 `{directory:<path>}`를 보내도 daemon이 자기 cwd를 강제. 우회: `opencode run --attach --dir <path>` CLI 경로 사용 (이 플러그인이 그렇게 함)
-- **`opencode run --attach`는 SSE `/event`로 진행 이벤트를 broadcast하지 않음**: tool/step/text 이벤트는 CLI stdout NDJSON으로만 흐름. 그래서 cmux split 표시는 events.ndjson을 직접 follow (SSE가 아니라). SSE는 `permission.asked` 등 부수 이벤트에만 사용
+- **`opencode run --attach`는 SSE `/event`로 진행 이벤트를 broadcast하지 않음**: tool/step/text 이벤트는 CLI stdout NDJSON으로만 흐름. SSE는 `permission.asked`/`session.status` 같은 부수 이벤트에만 사용
+- **`--attach`가 서버 세션이 끝나기 전에 detach되는 경우가 있음**: step 경계의 짧은 idle을 CLI가 종료 신호로 오인. v0.5.0부터 agent가 `oc-session.sh status` polling으로 ~6초 grace 후 검증하고, 여전히 active면 `status: running-after-detach` 보고
 
 ## 위임 정책 (요약)
 
@@ -95,13 +96,12 @@ cat ${CLAUDE_PLUGIN_ROOT}/templates/AGENTS.md.snippet >> AGENTS.md
 | `CC_OC_PORT` | 4096 | daemon 포트 |
 | `CC_OC_HOST` | 127.0.0.1 | daemon 호스트 |
 | `CC_OC_AUTOSTART` | 0 | 1이면 session-start에서 daemon 자동 기동 |
-| `CC_OC_KEEP_SURFACE` | 0 | 1이면 작업 끝나도 cmux split 자동 close 안 함 |
 | `OPENCODE_SERVER_PASSWORD` | (자동) | daemon ensure가 발급/저장 |
 
 ## 의존성
 
-- macOS (cmux v0.64.x 기반 — Linux/Windows 미지원)
 - `opencode` CLI v1.15.5
 - `python3` (3.10+)
 - `jq` (agent 정의 등록에 사용)
-- `cmux` (선택 — 미설치 시 split 없이 헤드리스 동작)
+
+> v0.5.0부터 cmux 우측 split 시각화는 제거되었습니다. cmux/tmux는 더 이상 필요 없습니다. 진행상황은 `$SESSION_DIR/events.ndjson`을 수동으로 `tail -F` 해서 볼 수 있습니다.

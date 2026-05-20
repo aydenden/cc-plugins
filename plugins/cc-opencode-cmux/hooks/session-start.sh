@@ -37,10 +37,6 @@ if ! command -v curl >/dev/null 2>&1; then
   emit_warn "curl not found. SSE hang detection requires curl."
 fi
 
-if ! command -v cmux >/dev/null 2>&1 && ! command -v tmux >/dev/null 2>&1; then
-  emit_warn "Neither cmux nor tmux found. Sessions will run without visual splits."
-fi
-
 # Register plugin's OC agent definitions into the user's OC config (idempotent, marker-gated).
 # Without this, `opencode run --agent oc-research` falls back to default `build` agent and
 # breaks ndjson streaming → REST polling overhead.

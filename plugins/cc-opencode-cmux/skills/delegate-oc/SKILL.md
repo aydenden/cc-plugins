@@ -50,7 +50,7 @@ Agent({
 })
 ```
 
-The `oc-implementer` subagent owns the entire pipeline: daemon ensure, session creation, `opencode run --attach --dir` dispatch with the right working directory, cmux split with live progress, SSE permission auto-deny, diff capture, and a structured 8-line report. Your job in this skill is to **decide** and **write the spec**; the subagent handles execution.
+The `oc-implementer` subagent owns the entire pipeline: daemon ensure, session creation, `opencode run --attach --dir` dispatch with the right working directory, SSE permission auto-deny, server-side completion verification (catches v1.15.x early-detach as `running-after-detach`), diff capture, and a structured 7-line report. Your job in this skill is to **decide** and **write the spec**; the subagent handles execution.
 
 The subagent returns the report verbatim. Surface it to the caller (the user or another plugin's agent) without rewriting.
 
@@ -159,6 +159,7 @@ After the Agent call returns:
 - `status: done` → diff at the path in the report. If you want a structured review, invoke `Skill(cc-opencode-cmux:oc-result-review, args: "<session>")`.
 - `status: error` → surface the `notes:` line. Common causes: daemon ensure failure, OC CLI non-zero exit, network issues.
 - `status: aborted-perm` → OC asked for a permission the watcher auto-denied. Reconsider whether the spec is asking for something out of policy.
+- `status: running-after-detach` → OC CLI returned but server-side session is still active after the agent's ~6s grace polling. The diff in the report is a **partial snapshot** at detach time. Either re-poll `oc-session.sh status <oc_sid>` manually, abort via `oc-session.sh abort`, or wait and re-capture the diff. Common cause: opencode v1.15.x dropping `--attach` early on step boundaries.
 - `status: declined` → token budget exceeded. Split the work.
 
 **Never silently re-execute the task yourself.** If OC fails, the report says so; the caller decides next steps.

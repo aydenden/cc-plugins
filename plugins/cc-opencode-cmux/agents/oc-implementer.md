@@ -1,6 +1,6 @@
 ---
 name: oc-implementer
-description: Use this agent when Claude Code (Opus orchestrator) wants to offload a contained, mechanical implementation task to OpenCode without polluting the main conversation context. Owns the entire delegation pipeline (daemon ensure, session+message via opencode run --attach --dir, SSE watch, cmux pane, diff capture). The main session calls Agent once and receives an 8-line structured report. Examples - <example>Context: User asks for a tedious multi-file scaffold. user: "Create CRUD repositories for User, Order, Product in src/db/" assistant: "I'll dispatch this to the oc-implementer agent so the main session stays clean." <commentary>Pure boilerplate, three repos with parallel structure. Ideal delegation target.</commentary></example> <example>Context: User wants a mechanical rename across many files. user: "Rename getUserData to fetchUserProfile everywhere it's called" assistant: "Using oc-implementer agent to perform the rename." <commentary>Mechanical, large output, no judgment needed.</commentary></example>
+description: Use this agent when Claude Code (Opus orchestrator) wants to offload a contained, mechanical implementation task to OpenCode without polluting the main conversation context. Owns the entire delegation pipeline (daemon ensure, session+message via opencode run --attach --dir, SSE permission auto-deny, server-side completion verification, diff capture). The main session calls Agent once and receives a 7-line structured report. Examples - <example>Context: User asks for a tedious multi-file scaffold. user: "Create CRUD repositories for User, Order, Product in src/db/" assistant: "I'll dispatch this to the oc-implementer agent so the main session stays clean." <commentary>Pure boilerplate, three repos with parallel structure. Ideal delegation target.</commentary></example> <example>Context: User wants a mechanical rename across many files. user: "Rename getUserData to fetchUserProfile everywhere it's called" assistant: "Using oc-implementer agent to perform the rename." <commentary>Mechanical, large output, no judgment needed.</commentary></example>
 model: haiku
 color: green
 tools: Bash, Read
@@ -23,7 +23,7 @@ Resolve `PLUGIN=${CLAUDE_PLUGIN_ROOT}` — the cc-opencode-cmux directory. All b
    - Markdown/Korean doc: ~60–100 tokens/line, safe up to ~800 LOC
    - JSONL/CSV fixture: ~150–300 tokens/line, safe up to ~250 LOC
    - Parquet/DB seed/binary: never eligible
-   
+
    If estimate > 70K Write tokens, decline with: `status: declined / reason: output too large for OC — main session should produce it first`.
 
 2. **Bootstrap session**.
@@ -51,88 +51,86 @@ Resolve `PLUGIN=${CLAUDE_PLUGIN_ROOT}` — the cc-opencode-cmux directory. All b
    ```
    If `${PLUGIN}/templates/AGENTS.md.snippet` exists, prepend it with a separate `cat` so it stays unmodified.
 
-6. **Pre-create OC session id** (so the SSE watcher can start BEFORE dispatch and the cmux split has progress from t=0).
+6. **Pre-create OC session id** (so the SSE watcher can attach BEFORE dispatch).
    ```bash
    OC_SID=$(${PLUGIN}/bin/oc-session.sh create --title "$SESSION" --dir "$OC_DIR")
    echo "$OC_SID" > "$SESSION_DIR/oc_sid"
    ```
-   Note: HTTP API `directory` is ignored — that's fine here; the real working directory is set by `--dir` in step 9 (CLI honors it).
+   Note: HTTP API `directory` is ignored — that's fine here; the real working directory is set by `--dir` in step 8 (CLI honors it).
 
-7. **Pre-create watch.stderr** so `tail -F` in the cmux split can follow from t=0.
-   ```bash
-   : > "$SESSION_DIR/watch.stderr"
-   ```
-
-8. **Spawn cmux split** (visual progress, best-effort). Tail target is `events.ndjson` — the OpenCode CLI streams `step_start`/`tool_use`/`text`/`step_finish` events into this file in real time as the run progresses. `cmux-spawn-oc.sh` pipes the NDJSON through `oc-stream-format.sh` so the pane shows a readable one-line summary per event.
-   ```bash
-   SURFACE=$(${PLUGIN}/bin/cmux-spawn-oc.sh "$SESSION" "$SESSION_DIR/events.ndjson" 2>/dev/null || echo "")
-   ```
-   Note: opencode v1.15.5 does **not** broadcast tool/message events to `/event` SSE when the run is initiated via `opencode run --attach` — they go to the CLI's stdout only. SSE is still useful for `permission.asked` auto-deny, but it cannot be the source of human-visible progress.
-
-9. **Start SSE watcher BEFORE dispatch** (background). Reads `/event` SSE, filters by `OC_SID`, writes `[oc-sse-watch:xxx] tool[N]: <name>` lines to `watch.stderr` (appended so the split shows live progress) and auto-denies any `permission.asked`. Self-exits when `session.status: idle` arrives.
+7. **Start SSE watcher BEFORE dispatch** (background). Its sole jobs in v0.5.0+: auto-deny any `permission.asked` for our SID, and self-exit on `session.status: idle` (used only as a secondary signal — the agent's completion source of truth is the synchronous exit of step 8).
    ```bash
    ${PLUGIN}/bin/oc-sse-watch.sh "$OC_SID" \
      --out "$SESSION_DIR/sse.ndjson" \
      --done-file "$SESSION_DIR/done" \
-     ${SURFACE:+--surface "$SURFACE"} \
      > "$SESSION_DIR/watch.stdout" 2>> "$SESSION_DIR/watch.stderr" &
    WATCH_PID=$!
    ```
 
-10. **Dispatch via opencode run** — synchronous; continues the pre-created session via `send-cont`. `--dir` is what actually sets OC's workdir.
-    ```bash
-    ${PLUGIN}/bin/oc-message.sh send-cont "$OC_SID" "$SESSION_DIR/prompt.md" \
-      --dir "$OC_DIR" \
-      --agent builder \
-      --out "$SESSION_DIR/events.ndjson"
-    MSG_EXIT=$?
-    ```
-    Agent: `builder` for code work. Override if a more specific OC agent fits.
-
-11. **Wait for watcher to confirm idle**. It exits on its own when `session.status: idle` arrives. Bound the wait so a stuck watcher doesn't block the report forever.
-    ```bash
-    ( sleep 30 && kill $WATCH_PID 2>/dev/null ) &
-    KILL_PID=$!
-    wait $WATCH_PID 2>/dev/null
-    WATCH_EXIT=$?
-    kill $KILL_PID 2>/dev/null
-    ```
-
-12. **Capture diff** in OC_DIR (the actual workdir).
+8. **Dispatch via opencode run** — synchronous; continues the pre-created session via `send-cont`. `--dir` is what actually sets OC's workdir.
    ```bash
-   ( cd "$OC_DIR" && git diff > "$SESSION_DIR/diff.patch" ) 2>/dev/null || true
-   FILES_CHANGED=$(grep -c '^diff --git' "$SESSION_DIR/diff.patch" 2>/dev/null || echo 0)
-   ADD=$(grep -c '^+[^+]' "$SESSION_DIR/diff.patch" 2>/dev/null || echo 0)
-   DEL=$(grep -c '^-[^-]' "$SESSION_DIR/diff.patch" 2>/dev/null || echo 0)
+   ${PLUGIN}/bin/oc-message.sh send-cont "$OC_SID" "$SESSION_DIR/prompt.md" \
+     --dir "$OC_DIR" \
+     --agent builder \
+     --out "$SESSION_DIR/events.ndjson"
+   MSG_EXIT=$?
    ```
-   If OC_DIR is not a git repo, list created/modified files via `find $OC_DIR -newer $SESSION_DIR/prompt.md -type f` as fallback.
+   Agent: `builder` for code work. Override if a more specific OC agent fits.
 
-13. **Determine status**.
-    - `MSG_EXIT == 0` AND `OC_SID` non-empty → `done`
-    - `MSG_EXIT != 0` → `error` (POST/CLI failed; read `events.ndjson.err`)
-    - `events.ndjson` contains `permission.asked` AND no later success → `aborted-perm`
-    - `events.ndjson` contains `session.error` or `error` event → `error`
-    
-    **Never** fall back to direct execution. If OC failed for any reason, the report below carries the error — the main session decides what to do.
+9. **Reap the watcher**. It is a side-channel for permission auto-deny — not the completion signal. SIGTERM it immediately and reap; do not wait for `session.status: idle`.
+   ```bash
+   kill -TERM $WATCH_PID 2>/dev/null || true
+   wait $WATCH_PID 2>/dev/null || true
+   ```
 
-14. **Cmux cleanup** (best-effort). Close the split surface after a short grace period so the user has time to see the final lines, then it auto-closes. The grace + close runs in the background so the agent doesn't wait on it.
+10. **Verify server-side completion** (Phase 3 safety net). `opencode run --attach` in v1.15.x occasionally detaches early while the daemon-side session is still running — `MSG_EXIT` alone is not always trustworthy. Poll `oc-session.sh status` for up to ~6s; if the session is still active afterwards, surface `running-after-detach` instead of a false `done`.
     ```bash
-    if [ -n "$SURFACE" ] && [ "${CC_OC_KEEP_SURFACE:-0}" != "1" ]; then
-      ${PLUGIN}/bin/cmux-feed.sh clear-progress --surface "$SURFACE" >/dev/null 2>&1 || true
-      ( sleep 5 && cmux close-surface --surface "$SURFACE" >/dev/null 2>&1 ) &
-      disown 2>/dev/null || true
-    fi
+    SERVER_STATUS=""
+    ACTIVE_AFTER_DETACH=0
+    for _ in 1 2 3 4 5 6; do
+      SERVER_STATUS=$(${PLUGIN}/bin/oc-session.sh status "$OC_SID" 2>/dev/null || echo "")
+      case "$SERVER_STATUS" in
+        idle|completed|done|"")
+          ACTIVE_AFTER_DETACH=0
+          break ;;
+        error)
+          ACTIVE_AFTER_DETACH=0
+          break ;;
+        *)
+          ACTIVE_AFTER_DETACH=1
+          sleep 1 ;;
+      esac
+    done
     ```
-    Override: if the caller sets `CC_OC_KEEP_SURFACE=1` in the environment, skip the close so the surface stays open for manual inspection.
+    - Empty status (`""`) means the API response could not be parsed — fall through to `MSG_EXIT` and treat as `done` if exit was 0.
+    - Do **not** auto-abort a session in `running-after-detach`; let the main session decide.
 
-15. **Return structured report** (verbatim format below — nothing else):
+11. **Capture diff** in `OC_DIR` (the actual workdir).
+    ```bash
+    ( cd "$OC_DIR" && git diff > "$SESSION_DIR/diff.patch" ) 2>/dev/null || true
+    FILES_CHANGED=$(grep -c '^diff --git' "$SESSION_DIR/diff.patch" 2>/dev/null || echo 0)
+    ADD=$(grep -c '^+[^+]'              "$SESSION_DIR/diff.patch" 2>/dev/null || echo 0)
+    DEL=$(grep -c '^-[^-]'              "$SESSION_DIR/diff.patch" 2>/dev/null || echo 0)
     ```
-    status:   <done|error|aborted-perm|declined>
+    If `OC_DIR` is not a git repo, fall back to `find $OC_DIR -newer $SESSION_DIR/prompt.md -type f`.
+
+12. **Determine status** (in priority order — first match wins):
+    - `MSG_EXIT != 0` → `error` (POST/CLI failed; read `events.ndjson.err`)
+    - `events.ndjson` contains `session.error` or an `error` event → `error`
+    - `events.ndjson` contains `permission.asked` AND no later success event → `aborted-perm`
+    - `ACTIVE_AFTER_DETACH == 1` (server still running after step 10's grace) → `running-after-detach`
+    - Otherwise → `done`
+
+    **Never** fall back to direct execution. If OC failed for any reason, the report carries the error — the main session decides what to do.
+
+13. **Return structured report** (verbatim format below — nothing else):
+    ```
+    status:   <done|error|aborted-perm|running-after-detach|declined>
     session:  <cc SESSION>
     oc_sid:   <OC_SID or "(none)">
     files:    +<add> -<del> (<files_changed> files)
     diff:     <SESSION_DIR>/diff.patch
-    surface:  <SURFACE or "(no cmux)">
+    server:   <SERVER_STATUS or "(unknown)">
     notes:    <one-line reason; relevant error message if non-done>
     ```
 
@@ -144,3 +142,4 @@ Resolve `PLUGIN=${CLAUDE_PLUGIN_ROOT}` — the cc-opencode-cmux directory. All b
 - **Never auto-approve permissions.** The SSE watcher auto-denies. Main session decides.
 - **No re-delegation loops.** Single dispatch attempt. If it fails, report.
 - **`--dir` is mandatory.** Always pass `$PWD` or the spec's absolute path. The HTTP API silently ignores directory; CLI honors it.
+- **No cmux split.** v0.5.0 dropped the right-split pane. Progress is observable via `$SESSION_DIR/events.ndjson` (raw NDJSON stream from OC CLI) and `$SESSION_DIR/sse.ndjson` (filtered SSE side-channel) if the user wants to tail them manually.
