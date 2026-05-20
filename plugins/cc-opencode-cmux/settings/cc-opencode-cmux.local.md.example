@@ -11,18 +11,16 @@ host: 127.0.0.1
 # Auto-start the serve daemon on SessionStart. Costs one idle daemon but saves
 # the ensure-on-first-call latency (~1–3s).
 auto_start: false
-
-# Keep the cmux split surface open after each delegation finishes (default:
-# auto-close after 5s grace). Useful when reviewing slow runs.
-keep_surface: false
 ---
 
 # cc-opencode-cmux local settings
 
 This file is git-ignored. Use it for per-machine overrides. The plugin's `bin/`
-scripts read these as env vars: `CC_OC_PORT`, `CC_OC_HOST`, `CC_OC_AUTOSTART`,
-`CC_OC_KEEP_SURFACE`. You can also export them in your shell profile instead of
-using this file.
+scripts read these as env vars: `CC_OC_PORT`, `CC_OC_HOST`, `CC_OC_AUTOSTART`.
+You can also export them in your shell profile instead of using this file.
+
+> v0.5.0 dropped the right-split cmux pane. The `CC_OC_KEEP_SURFACE` /
+> `keep_surface` setting no longer exists.
 
 ## Authentication
 

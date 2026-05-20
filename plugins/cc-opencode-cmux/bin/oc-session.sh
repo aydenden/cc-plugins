@@ -95,6 +95,39 @@ cmd_list() {
 cmd_get()   { req GET    "/session/$1" ; }
 cmd_abort() { req POST   "/session/$1/abort" '{}' ; }
 
+# Resolve current server-side status of a session to a single lowercase token
+# (e.g. "idle", "pending", "running", "error", "completed", "") on stdout.
+# Returns "" when the response cannot be parsed — caller should treat that as
+# "fall back to MSG_EXIT" rather than as a failure.
+cmd_status_of() {
+  local sid="$1"
+  req GET "/session/$sid" 2>/dev/null | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+def find_status(d):
+    if not isinstance(d, dict):
+        return None
+    s = d.get("status")
+    if isinstance(s, dict):
+        return s.get("type")
+    if isinstance(s, str):
+        return s
+    info = d.get("info") or {}
+    if isinstance(info, dict):
+        s = info.get("status")
+        if isinstance(s, dict):
+            return s.get("type")
+        if isinstance(s, str):
+            return s
+    return None
+v = find_status(d) or ""
+print(str(v).lower())
+'
+}
+
 cmd_fork() {
   local sid="$1" mid="$2"
   local body
@@ -106,6 +139,7 @@ case "${1:-}" in
   create)  shift; cmd_create "$@" ;;
   list)    shift; cmd_list "$@" ;;
   get)     shift; cmd_get "$@" ;;
+  status)  shift; cmd_status_of "$@" ;;
   abort)   shift; cmd_abort "$@" ;;
   fork)    shift; cmd_fork "$@" ;;
   *) cat >&2 <<EOF
@@ -115,6 +149,7 @@ usage:
   oc-session.sh create [--title T] [--agent A] [--dir D] [--raw]
   oc-session.sh list [--limit N]
   oc-session.sh get <sid>
+  oc-session.sh status <sid>   # prints lowercase status token ("idle", "running", ...) or "" if unparseable
   oc-session.sh abort <sid>
   oc-session.sh fork <sid> <messageID>
 EOF
