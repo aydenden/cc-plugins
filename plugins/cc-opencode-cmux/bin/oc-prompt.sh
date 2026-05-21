@@ -1,16 +1,30 @@
 #!/usr/bin/env bash
-# oc-prompt.sh — POST a prompt to an existing v2 session.
+# oc-prompt.sh — POST a prompt to an existing session (SYNCHRONOUS).
 #
 #   oc-prompt.sh <sid> <prompt-file> --dir D [--out PATH] [--timeout SEC]
 #
-# v0.6.0+: replaces `opencode run --attach` CLI dispatch with direct HTTP API v2 call.
-# Endpoint: POST /api/session/:sessionID/prompt
-# Payload : {"prompt": {"text": "<verbatim prompt body>"}}
-# Headers : x-opencode-directory: <urlencoded path>   (replaces CLI --dir)
+# Endpoint: POST /session/:sessionID/message            (v1 — works in v1.15.5)
+# Payload : {"parts":[{"type":"text","text":"<verbatim prompt body>"}]}
+# Headers : x-opencode-directory: <urlencoded path>     (replaces CLI --dir)
+# Response: 200 with full assistant message JSON when the agent loop completes.
 #
-# POST returns as soon as the message is queued — the agent loop runs server-side.
-# Caller is responsible for awaiting completion (typically by waiting on the
-# background oc-sse-watch.sh process to exit on `session.status: idle`).
+# This is synchronous: the POST blocks until OC finishes the agent loop. Set
+# --timeout to a value comfortably larger than the longest expected task (oc-
+# delegate.sh defaults to 900s / 15min).
+#
+# Response body is the assistant Session.Message — can be 10s of KB. To avoid
+# polluting the caller's context, always pass --out FILE; curl writes the body
+# to the file and emits nothing on stdout.
+#
+# Why not the other endpoints? In opencode v1.15.5:
+#   * `POST /api/session/:id/prompt`        (v2)  is a no-op stub returning {},
+#     causing "BadRequest: Expected Session.Message, got {}" (response schema
+#     fails on empty handler return).
+#   * `POST /session/:id/prompt_async`      (v1)  returns 204 but does not
+#     actually trigger the agent loop — session stays cold, SSE never fires
+#     session.status events. (Likely an internal queue issue in 1.15.x.)
+#   * `POST /session/:id/message`           (v1)  works correctly — synchronous
+#     and reliable. Used by `opencode run --attach` internally.
 set -euo pipefail
 
 META="${CC_OC_META:-/tmp/cc-oc-serve.env}"
@@ -45,14 +59,15 @@ import json, sys
 src, dst = sys.argv[1], sys.argv[2]
 with open(src, "r", encoding="utf-8") as f:
     text = f.read()
+body = {"parts": [{"type": "text", "text": text}]}
 with open(dst, "w", encoding="utf-8") as f:
-    json.dump({"prompt": {"text": text}}, f, ensure_ascii=False)
+    json.dump(body, f, ensure_ascii=False)
 PY
 
 # URL-encode the working directory for the routing header.
 DIR_ENC="$(python3 -c 'import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$DIR")"
 
-URL="${CC_OC_ATTACH_URL}/api/session/${SID}/prompt"
+URL="${CC_OC_ATTACH_URL}/session/${SID}/message"
 
 CURL_ARGS=(
   -fsS -m "$TIMEOUT"
