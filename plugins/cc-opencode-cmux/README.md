@@ -120,7 +120,7 @@ brew install jq
 - 추론 얕음 — 아키텍처 결정 없음
 - 사용자가 Opus 품질 명시 요청 안 함
 
-토큰 예산:
+### 토큰 예산 (사이징)
 
 | 출력 유형 | 토큰/줄 | Safe 단일 delegate | Hard wall |
 |---|---|---|---|
@@ -130,6 +130,84 @@ brew install jq
 | Parquet / DB seed / binary | — | **never** | — |
 
 > 70K 또는 binary → CC 메인이 fixture 먼저 생성, 그 후 fixture를 읽는 코드만 위임.
+
+### Spec variants (TASK_TYPE별 필드)
+
+`research` — 외부 정보 수집:
+
+```
+TASK_TYPE: research
+TOPIC: <one-line>
+
+KEY QUESTIONS:
+- ...
+
+SOURCE GUIDELINES:
+- 공식 문서/1st-party/최신 자료 우선
+
+OUTPUT SCHEMA:
+- H2 per question, bullets with citations
+- 각 fact: 주장 + 출처 URL + 조회일자
+OUTPUT_FILE: <absolute path>
+```
+
+`--dir`는 writable scratch (예: `/tmp/cc-oc-scratch-<id>`). OC `research` agent profile은 webfetch/websearch 권한 있음.
+
+`compose` — 주어진 research로 문서 렌더:
+
+```
+TASK_TYPE: compose
+INPUT_RESEARCH: <absolute path to raw research markdown>
+OUTPUT_FILE: <absolute path>
+
+FRONTMATTER: <YAML schema>
+BODY SECTIONS:
+- <section 1>
+- <section 2>
+
+CONVENTIONS:
+- <project rules>
+- Do NOT edit files outside OUTPUT_FILE
+```
+
+`--dir`는 vault root 또는 OUTPUT_FILE이 있는 디렉토리. OC edit 권한은 `--dir` 내부에서만.
+
+`analyze` — 읽기 전용 문서 평가:
+
+```
+TASK_TYPE: analyze
+INPUTS:
+- <path or glob 1>
+
+EVALUATION:
+- <추출/비교/검증 항목>
+
+OUTPUT: <결과 쓸 경로 또는 "stdout">
+```
+
+OC는 read/grep/glob만 허용. edit·web 차단.
+
+### Knowledge pipeline 패턴
+
+research + composition을 묶을 때:
+
+1. Caller(CC)가 로컬 lookup·dedup 체크
+2. `delegate-oc` with `research` spec → raw markdown이 OUTPUT_FILE로
+3. Caller가 짧게 검토 (sanity, 누락 확인)
+4. `delegate-oc` with `compose` spec, raw research 참조 → 최종 문서
+5. (선택) `delegate-oc` with `analyze` spec → 컨벤션 검증
+6. Caller가 도메인 후처리 (backlinks, index 갱신, 이슈 연결)
+
+caller plugin이 도메인 지식 보유, delegate-oc는 안전하게 위임만 담당.
+
+### Anti-patterns
+
+- ❌ "이 기능 구현해줘" 같은 모호한 spec — OC는 대화 히스토리 없음
+- ❌ OC에게 아키텍처 결정 위임 — 임의로 고름
+- ❌ `done` 상태에서 `oc-result-review` 건너뜀 — 작은 오류 누적
+- ❌ 동일 파일 영역에 병렬 delegation — 순차 또는 격리된 `--dir`
+- ❌ 검증 목적으로 SESSION_DIR 파일 Read — 위임 의의 무력화. `oc-result-review`에서만 의도적으로 읽기
+- ❌ 컨트롤러를 여러 Bash 호출로 쪼개기 — v0.6.1에서 단일 호출로 통합한 이유가 토큰 절감
 
 ## 세션 디렉토리
 
