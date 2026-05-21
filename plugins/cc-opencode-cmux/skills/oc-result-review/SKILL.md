@@ -1,41 +1,35 @@
 ---
 name: oc-result-review
-description: Use when reviewing the diff produced by a `cc-opencode-cmux:oc-implementer` Agent call (delegated via the `delegate-oc` skill), or whenever the `post-oc-run.sh` hook emits "OpenCode delegation finished" with a session path. Walks Opus through critique, hallucination detection, and decide accept / reject / re-delegate / manual-fix.
+description: Use when reviewing the diff produced by a `cc-opencode-cmux:delegate-oc` Skill call, or whenever a delegate-oc report carries a SESSION_DIR path. Walks Opus through critique, hallucination detection, and decides accept / reject / re-delegate / manual-fix. This is the **only** place where the session output files may be Read for content inspection.
 ---
 
 # oc-result-review
 
-After OpenCode finishes a delegation, the agent report and the session directory contain everything you need to decide whether to accept the diff, fix small issues yourself, re-delegate with constraints, or reject and try again.
+After OpenCode finishes a delegation, the report and the session directory contain everything you need to decide whether to accept the diff, fix small issues yourself, re-delegate with constraints, or reject and try again.
 
 ## Inputs
 
-Resolve the session directory from the agent report (`session:` field): `/tmp/cc-oc-<session>/`. Expected contents:
+Resolve the session directory from the delegate-oc report (`session:` field). As of v0.6.0 it lives in the project's `.claude/oc-sessions/<uuid>/` (or `/tmp/cc-oc-<uuid>/` on the read-only fallback path). Expected contents:
 
 - `prompt.md` — the spec sent to OpenCode
-- `events.ndjson` — raw OpenCode CLI event stream (text deltas, tool calls, status, errors)
-- `events.ndjson.err` — opencode CLI stderr (empty on clean runs)
-- `sse.ndjson` — filtered SSE side-channel (own-session events only; auto-deny log)
+- `sse.ndjson` — filtered SSE event stream (own-session events only; permission auto-deny log + status transitions)
 - `done` — two lines: exit code, then a one-line reason (e.g. `0\nsession idle`)
 - `diff.patch` — full `git diff` of the working directory at end of run
-- `oc_sid` — the OpenCode session id (for `session.fork` or `session-cont` patterns)
+- `oc_sid` — the OpenCode session id (for follow-up via `oc-session.sh fork`)
 - `watch.stdout` / `watch.stderr` — SSE watcher logs (mostly diagnostic)
 
-The agent report also has a `server:` line carrying the last server-side status token observed (`idle`, `running`, `error`, …). Use it together with the `status:` line for sanity checking.
+Note: as of v0.6.0 there is **no `events.ndjson`** — `opencode run --attach` (which produced it) has been replaced by direct HTTP API calls. All in-flight observability flows through `sse.ndjson`.
 
-If the agent report says `status: done`, expect `done` line-1 to be `0`. Any other status means the diff is partial — read `done` first.
+If the report says `status: done`, expect `done` line-1 to be `0`. Any other status means the diff is partial — read `done` first.
 
 ## Review checklist (run in order)
 
 ### 1. Status sanity check
 
-- `status: done` + `done` first line `0` + `server: idle|completed` → proceed.
-- `status: error` → read `events.ndjson.err` and the last 20 lines of `events.ndjson`. The diff may be partial; decide whether to keep or `git restore .`.
-- `status: aborted-perm` → OC asked a permission the watcher auto-denied. Look at the spec — is it implicitly asking OC to write outside `--dir`, run `git push`, or touch a denied tool? Re-spec or reject.
-- `status: running-after-detach` → opencode CLI returned but the server-side session was still active after the agent's ~6s grace polling. The `diff.patch` is a **partial snapshot** at detach time. Options:
-  1. Re-poll: `${PLUGIN}/bin/oc-session.sh status <oc_sid>`. If now idle, re-capture `git diff` and proceed with the normal checklist.
-  2. Wait and re-capture if the task was nearly done.
-  3. Abort the runaway session: `${PLUGIN}/bin/oc-session.sh abort <oc_sid>` — then treat the partial diff as an `error` case.
-  Common cause: opencode v1.15.x dropping `--attach` on a step boundary. Not a model failure.
+- `status: done` + `done` first line `0` → proceed.
+- `status: error` → read `watch.stderr` (small) and `tail -c 1000 sse.ndjson`. Look for `session.error` events. The diff may be partial; decide whether to keep or `git restore .`.
+- `status: aborted-perm` → OC asked a permission the watcher auto-denied. Look at the spec — is it implicitly asking OC to write outside `OC_DIR`, run `git push`, or touch a denied tool? Re-spec or reject.
+- `status: timeout` → the agent loop ran past `CC_OC_WAIT_TIMEOUT` (default 900s). The session has already been aborted by delegate-oc. The `diff.patch` is a **partial snapshot** at abort time. Decide whether to keep, manually finish, or restore.
 - `status: declined` → token budget exceeded before dispatch. Split the work; don't re-delegate the same spec.
 
 ### 2. Scope adherence
@@ -54,7 +48,7 @@ OpenCode models invent things. Verify:
 
 ### 4. Test coverage
 
-- Did OC actually run the acceptance test from the spec? Grep `events.ndjson` for a `session.next.tool.called` event with the test command. If absent, the spec's ACCEPTANCE TEST was skipped — run it yourself.
+- Did OC actually run the acceptance test from the spec? Grep `sse.ndjson` for tool-call events matching the test command. If absent, the spec's ACCEPTANCE TEST was skipped — run it yourself.
 - New code without new tests is a yellow flag.
 - Existing tests changed? Why? Lower the bar for accepting test edits than implementation edits.
 
@@ -85,14 +79,13 @@ status: done  &&  1-2 minor issues
 
 status: done  &&  multiple issues OR scope drift
   → RE-DELEGATE: write a corrective spec listing specific fixes,
-     call `Skill(cc-opencode-cmux:delegate-oc, args)` or
-     `Agent({subagent_type:"cc-opencode-cmux:oc-implementer"})` again.
+     call `Skill(cc-opencode-cmux:delegate-oc, args)` again.
 
-status: running-after-detach
-  → INSPECT first: re-poll `oc-session.sh status` once, re-capture diff if now idle.
-     If still running and not progressing → `oc-session.sh abort`, then treat as error.
+status: timeout
+  → INSPECT the partial diff. If most of the work is done, manually finish
+     the rest. Otherwise treat as error and `git restore`.
 
-status: aborted-* OR error OR major hallucinations
+status: aborted-perm OR error OR major hallucinations
   → REJECT: `git restore` the touched paths (or discard the working tree),
      rewrite the spec with tighter constraints, retry with a stronger model.
 ```
@@ -116,7 +109,7 @@ ACCEPTANCE: <test command> must pass.
 WORKING_DIRECTORY: <absolute path — same as prior delegation>
 ```
 
-Pass this as the `prompt` to a fresh Agent call. Do not re-use the same `oc_sid` unless you specifically want `session.fork` semantics (advanced — see `oc-session.sh fork`).
+Pass this as the `args` to a fresh `Skill(cc-opencode-cmux:delegate-oc, ...)` call. Do not re-use the same `oc_sid` unless you specifically want `session.fork` semantics (advanced — see `oc-session.sh fork`).
 
 ## When to escalate to Opus directly
 

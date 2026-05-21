@@ -48,10 +48,24 @@ elif [ "$AUTH_OK" = "1" ] && ! command -v jq >/dev/null 2>&1; then
   emit_warn "jq not installed — OC agent registration skipped. Install: brew install jq"
 fi
 
-# Auto-start serve daemon if CC_OC_AUTOSTART=1 (otherwise oc-implementer ensures on demand)
+# Auto-start serve daemon if CC_OC_AUTOSTART=1 (otherwise delegate-oc skill ensures on demand)
 if [ "${CC_OC_AUTOSTART:-0}" = "1" ]; then
   if [ -x "$PLUGIN_ROOT/bin/oc-daemon.sh" ]; then
     "$PLUGIN_ROOT/bin/oc-daemon.sh" ensure >&2 || emit_warn "auto-start of opencode daemon failed"
+  fi
+fi
+
+# v0.6.0+: ensure project's .claude/.gitignore excludes oc-sessions/ so per-session
+# artifacts (prompt.md / events.ndjson / diff.patch / sse.ndjson) don't pollute commits.
+# Only touches existing .claude/ — does not create one for projects that don't use it.
+PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+CLAUDE_DIR="$PROJECT_ROOT/.claude"
+if [ -d "$CLAUDE_DIR" ]; then
+  GI="$CLAUDE_DIR/.gitignore"
+  if [ -f "$GI" ]; then
+    grep -qxF 'oc-sessions/' "$GI" 2>/dev/null || echo 'oc-sessions/' >> "$GI"
+  else
+    echo 'oc-sessions/' > "$GI"
   fi
 fi
 
