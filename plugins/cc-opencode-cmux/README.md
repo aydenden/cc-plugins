@@ -2,7 +2,7 @@
 
 Claude Code (Opus, orchestrator) → OpenCode (cheap-model implementer) 위임 플러그인.
 
-**v0.6.0 (2026-05-21)**: 서브에이전트 경유 제거. 메인 Opus가 `delegate-oc` Skill의 절차를 따라 **직접** OpenCode HTTP API v2를 호출합니다. 중간 haiku 에이전트가 사라져 토큰 누수 위험이 구조적으로 제거되고, `opencode run --attach` CLI 의존성도 함께 제거되어 v1.15.x의 `--attach` 조기 detach 이슈에서 자유로워졌습니다.
+**v0.6.1 (2026-05-21)**: 단일 컨트롤러 스크립트(`bin/oc-delegate.sh`) 도입. 메인 Opus는 컨트롤러 1회 호출 + 약속된 exit code 분기만 수행하므로, 파이프라인 단계 사이 판단에 드는 토큰이 사라졌습니다. v0.6.0에서 도입한 Skill-only 진입점 + HTTP API v2 + AGENTS.md 자동 인식은 그대로 유지.
 
 ## 진입점 (총 2개, Skill 전용)
 
@@ -15,18 +15,45 @@ v0.5.x의 `Agent({subagent_type:"cc-opencode-cmux:oc-implementer"})` 진입점�
 
 ## 무엇을 하는가
 
-`Skill(cc-opencode-cmux:delegate-oc, args)` 한 줄 호출 → 메인 Opus가 절차를 따라 직접 실행:
+`Skill(cc-opencode-cmux:delegate-oc, args)` 한 줄 호출 → 메인 Opus가 컨트롤러 1회 실행:
 
-1. `opencode serve` daemon 확인·기동 (`oc-daemon.sh ensure`, idempotent)
-2. `$CLAUDE_PROJECT_DIR/.claude/oc-sessions/<uuid>/` SESSION_DIR 생성 (실패 시 `/tmp` 폴백)
-3. `oc-session.sh create`로 OC 세션 생성 (v1 `POST /session`)
-4. `oc-sse-watch.sh` 백그라운드 시작 — `permission.asked` 자동 deny + `session.status: idle` 감지 시 `done` 파일 쓰고 exit
-5. `oc-prompt.sh`로 **HTTP API v2 `POST /api/session/:id/prompt`** 호출 (헤더 `x-opencode-directory`로 작업 디렉토리 지정 — `--dir` 완전 대체). 메시지가 큐에 들어가면 즉시 리턴.
-6. SSE watcher 프로세스를 `wait` — `session.status: idle` 감지 시 자동 종료 → 메인 unblock
-7. `git diff` 캡처 후 `grep -c`로 카운트만 산출
-8. 7줄 구조화 보고 반환
+```bash
+"${CLAUDE_PLUGIN_ROOT}/bin/oc-delegate.sh" --dir "$PWD" <<'EOF'
+<spec body>
+EOF
+echo "$?"   # 약속된 exit code (0/10~13/20/30)
+```
 
-메인 Opus 컨텍스트에는 raw tool output, NDJSON, OC의 텍스트 델타가 들어오지 않습니다. 보고만 들어옵니다. 사후 검토는 `oc-result-review` Skill에서 의도적으로 수행.
+컨트롤러(`bin/oc-delegate.sh`) 내부에서 다음을 모두 처리:
+
+1. `$CLAUDE_PROJECT_DIR/.claude/oc-sessions/<uuid>/` SESSION_DIR 생성 (실패 시 `/tmp` 폴백)
+2. `oc-daemon.sh ensure` (idempotent)
+3. `oc-session.sh create` — OC 세션 생성 (v1 `POST /session`)
+4. `oc-sse-watch.sh` 백그라운드 — `permission.asked` 자동 deny + `session.status: idle` 감지 시 `done` 파일 쓰고 exit
+5. `oc-prompt.sh` — **HTTP API v2 `POST /api/session/:id/prompt`** (헤더 `x-opencode-directory`로 디렉토리 지정). 메시지 큐잉 후 즉시 리턴.
+6. `wait $WATCH_PID` — `--timeout`(기본 900s) 가드 포함
+7. `git diff` 캡처 + `grep -c`로 카운트
+8. 상태 분류 후 7줄 리포트 stdout으로 출력 + 약속된 exit code로 종료
+
+메인 Opus 컨텍스트로 들어오는 것은 **7줄 리포트 + exit code 1개**뿐. 단계별 raw 출력, NDJSON, OC 텍스트 델타는 전혀 들어오지 않음. 사후 검토는 `oc-result-review` Skill에서 의도적으로 수행.
+
+### Exit code 계약
+
+| Code | Status | 의미 |
+|---|---|---|
+| 0 | `done` | 정상 완료 |
+| 10 | `error` | daemon ensure 실패 |
+| 11 | `error` | 세션 생성 실패 |
+| 12 | `error` | HTTP POST 실패 |
+| 13 | `error` | OC 세션이 `session.error` 발생 |
+| 20 | `aborted-perm` | watcher가 권한 요청 auto-deny |
+| 30 | `timeout` | wait 타임아웃 (세션 abort 후 보고) |
+
+## v0.6.1 주요 변경
+
+- **신규**: `bin/oc-delegate.sh` 단일 컨트롤러 — 메인이 호출하는 진입점이 1개로 통합. 파이프라인 단계 사이 판단 토큰 제거.
+- **Skill 본문 축소**: 8개 step bash 절차 → 호출 한 줄 + exit code 표. 약 40% 짧아짐.
+- 호환성: 외부 호출자(`obsidian-knowledge:research-agent` 등)는 `Skill(cc-opencode-cmux:delegate-oc, args)` 인터페이스 그대로 사용 — 변경 없음.
 
 ## v0.6.0 주요 변경
 

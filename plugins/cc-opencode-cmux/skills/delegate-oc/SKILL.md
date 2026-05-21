@@ -5,234 +5,107 @@ description: Use when Claude Code (Opus orchestrator) is about to do repetitive 
 
 # delegate-oc
 
-Offload a task to OpenCode (cheaper model) instead of executing it in this Opus session. **The main session orchestrates the delegation directly** — no subagent indirection. The skill is a procedure for the calling session to follow.
+Offload a task to OpenCode via a **single controller script call**. The main Opus session:
 
-## Architecture (v0.6.0+)
+1. Decides delegation eligibility (Skill-level decision).
+2. Composes the spec verbatim.
+3. Runs `${CLAUDE_PLUGIN_ROOT}/bin/oc-delegate.sh` **once**.
+4. Branches on the exit code per the contract below.
 
-```
-[main Opus session]
-  │
-  │  1. Decide: is this task delegable?
-  │  2. Compose spec (verbatim)
-  │  3. Bash: oc-daemon ensure → session create → SSE watcher bg → oc-prompt → wait → diff capture
-  │  4. Classify status, surface report (grep-only — no Read of session output)
-  │
-  └─> [opencode serve daemon @ localhost:4096]
-        └─> v2 HTTP API: POST /api/session/:id/prompt
-              + x-opencode-directory header (replaces CLI --dir)
-              SSE /event side-channel for permission auto-deny + idle signal
-```
-
-Removed in v0.6.0:
-- ❌ `agents/oc-implementer.md` haiku subagent (was the source of mid-flight token leaks)
-- ❌ `bin/oc-message.sh` (`opencode run --attach` CLI wrapper — replaced by direct HTTP API)
-- ❌ `templates/AGENTS.md.snippet` prepend hack (OpenCode auto-loads `AGENTS.md` from `--dir` via `findUp`)
-- ❌ `hooks/subagent-stop.sh` (no subagent → no SubagentStop)
+The controller script handles the entire pipeline internally (daemon ensure → session create → SSE watcher → HTTP API v2 prompt → wait → diff → classify → report). The main session does not orchestrate intermediate steps and therefore does not pay tokens for them.
 
 ## When to delegate
 
 Delegate when **all** hold:
 
-- Task is mechanical or pattern-following (CRUD scaffolding, boilerplate, renames, simple refactors, docstring writing, file summarization, external research with clear questions, structured document composition from given research).
-- Expected output is large (>200 lines or >5 files touched, or several pages of prose).
-- Reasoning required is shallow — no architectural decisions, no ambiguous requirements, no cross-cutting concerns.
-- User has not explicitly asked for Opus-quality output.
+- Task is mechanical or pattern-following (CRUD scaffold, rename, boilerplate, summarization, structured research, composition).
+- Expected output is large (>200 lines or >5 files or several pages of prose).
+- Reasoning is shallow — no architecture decisions, no ambiguous requirements.
+- User did not explicitly ask for Opus-quality output.
 
 ## When NOT to delegate
 
-- Architecture decisions, API surface design, cross-module coordination.
-- User asked to "think hard" or explicitly requested Opus.
-- Task small enough to do in this session for fewer tokens than delegation overhead (~3K tokens with v0.6.0; no subagent overhead).
-- No clear acceptance criterion — Opus must make judgment calls iteratively.
-- Codebase requires understanding subtle conventions not written down (let OpenCode read `AGENTS.md` for those instead).
-- **Output exceeds OC's step-loop Write budget** (see "Sizing" below). Split the work: CC produces fixture/binary, then delegates only the code that consumes it.
+- Architecture / API surface / cross-module coordination.
+- User asked to "think hard" or specified Opus.
+- Task small enough that delegation overhead (~3K tokens) exceeds savings.
+- No clear acceptance criterion — Opus must judge iteratively.
+- Output > 70K tokens or any binary — split first (CC produces fixture, then delegates the consuming code).
 
-## Sizing & token budget (estimate BEFORE delegating)
+For LOC-based estimates, use `wc -l <path>` — **do not Read source files just to estimate size**.
 
-| Output type | Tokens/line | Safe single-delegate LOC | Hard wall |
-|---|---|---|---|
-| Source code (Rust/Python/TS) | ~50–80 | ≤ 1000 LOC | ~1100 |
-| Markdown / Korean doc | ~60–100 | ≤ 800 LOC | ~900 |
-| JSONL / CSV fixture | ~150–300 | ≤ 250 LOC | ~300 |
-| Parquet / DB seed / binary | n/a | 0 — never delegate | — |
+## Sizing budget
 
-- < 30K tokens → safe single delegate
-- 30–70K → still single, but split if natural seams exist
-- > 70K or any binary → **must split** (CC produces the fixture, then delegates only the code that reads it)
+| Output type | Tokens/line | Safe single-delegate LOC |
+|---|---|---|
+| Source code (Rust/Py/TS) | 50–80 | ≤ 1000 LOC |
+| Markdown / Korean doc | 60–100 | ≤ 800 LOC |
+| JSONL / CSV fixture | 150–300 | ≤ 250 LOC |
+| Parquet / DB / binary | — | never delegate |
 
-For LOC-based estimation, use `wc -l <path>` via Bash — **do not Read source files** just to estimate size.
+## How to call (the whole procedure)
 
-## Procedure (main session runs all bash directly)
-
-`PLUGIN=${CLAUDE_PLUGIN_ROOT}` (the cc-opencode-cmux directory). Replace as appropriate if invoked from a different working set; usually CC resolves it automatically.
-
-### Step 0 — eligibility check (decide first)
-
-If the task fails any "When to delegate" / passes any "When NOT" — stop now and do it in this session. Don't start the pipeline.
-
-### Step 1 — bootstrap session directory
+**Single Bash invocation** — spec via heredoc, `OC_DIR` via `--dir`:
 
 ```bash
-PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
-SESSION_DIR="$PROJECT_ROOT/.claude/oc-sessions/$(uuidgen)"
-mkdir -p "$SESSION_DIR" 2>/dev/null || SESSION_DIR="/tmp/cc-oc-$(uuidgen)"
-mkdir -p "$SESSION_DIR"
+"${CLAUDE_PLUGIN_ROOT}/bin/oc-delegate.sh" --dir "$PWD" <<'EOF'
+TASK_TYPE: implement | refactor | summarize | doc | research | compose | analyze
+TASK: <one-line summary>
 
-OC_DIR="$PWD"   # OpenCode's working directory — almost always $PWD.
-                # Override only if the spec names an absolute path.
-```
+FILES TO TOUCH:
+- <absolute path 1> (create / modify)
+- <absolute path 2> (modify)
 
-The session directory lives in the project's `.claude/oc-sessions/<uuid>/`. The
-`session-start.sh` hook ensures `.claude/.gitignore` already excludes
-`oc-sessions/`, so artifacts don't pollute commits. Fallback to `/tmp` if the
-project is read-only.
+BEHAVIOR:
+- <bullet 1>
+- <bullet 2>
 
-### Step 2 — ensure opencode daemon
+CONVENTIONS:
+- <project rules — e.g. "use anyhow::Result for fallible">
 
-```bash
-${PLUGIN}/bin/oc-daemon.sh ensure
-```
-
-On failure → abort the whole delegation with `status: error / reason: daemon ensure failed`. Do **not** silently fall back to direct execution.
-
-### Step 3 — write the spec verbatim
-
-```bash
-cat > "$SESSION_DIR/prompt.md" <<'EOF'
-<spec body — see "Spec template" below — goes here verbatim>
+ACCEPTANCE TEST:
+- $ <command that verifies success>
 EOF
 ```
 
-The spec body is what you'd describe to a junior engineer. **Do not paraphrase, summarize, or "simplify"** the user's request before writing.
+The script prints a 7-line report to stdout and exits with a code from the contract table. Read both — the exit code drives the branch, the report carries the data.
 
-**No `WORKING_DIRECTORY:` header is needed.** v0.6.0 passes the directory via the `x-opencode-directory` HTTP header (in step 6), and OpenCode auto-loads `AGENTS.md` from that directory via `findUp` — so project conventions are picked up automatically.
+### Optional flags
 
-### Step 4 — create OpenCode session
+- `--prompt-file FILE` — pass spec via file path instead of stdin.
+- `--session-dir DIR` — override session dir (default `$CLAUDE_PROJECT_DIR/.claude/oc-sessions/<uuid>`, `/tmp` fallback).
+- `--title TITLE` — OC session title.
+- `--timeout SEC` — wait timeout (default `$CC_OC_WAIT_TIMEOUT` or 900).
 
-```bash
-OC_SID=$(${PLUGIN}/bin/oc-session.sh create --title "cc-delegate-$(date +%s)")
-echo "$OC_SID" > "$SESSION_DIR/oc_sid"
-```
+## Exit-code contract (branch table)
 
-The v1 `POST /session` body has no `directory` field (silently ignored — known issue). The directory is set per-request via the `x-opencode-directory` header in step 6.
+| Code | Status field | Meaning | Recommended action |
+|---|---|---|---|
+| **0** | `done` | Session completed normally | Optionally `Skill(cc-opencode-cmux:oc-result-review, args: "<session>")` for diff review |
+| **10** | `error` | `oc-daemon.sh ensure` failed | Surface `notes:`; check `opencode` install/auth |
+| **11** | `error` | `oc-session.sh create` failed | Surface `notes:`; daemon may be unhealthy — try once more then escalate |
+| **12** | `error` | `oc-prompt.sh` POST failed | Surface `notes:`; check daemon log at `controller.log` |
+| **13** | `error` | OC emitted `session.error` mid-flight | Surface `notes:`; `oc-result-review` for diagnostic |
+| **20** | `aborted-perm` | Watcher auto-denied a `permission.asked` | Spec asked for something outside policy — re-spec or abandon |
+| **30** | `timeout` | Exceeded `--timeout` (default 900s) | Session already aborted server-side; partial diff retained — may still be salvageable |
 
-### Step 5 — start SSE side-channel (background)
+The Skill never needs to know the internal pipeline. It only needs:
+1. The agreed exit-code table above.
+2. The 7-line report format on stdout.
+3. The Bash invocation shape.
 
-The SSE watcher does two jobs:
-1. **Auto-deny** any `permission.asked` event for our session ID (safety).
-2. **Detect completion** by exiting on `session.status: idle` and writing `$SESSION_DIR/done`.
-
-```bash
-${PLUGIN}/bin/oc-sse-watch.sh "$OC_SID" \
-  --out "$SESSION_DIR/sse.ndjson" \
-  --done-file "$SESSION_DIR/done" \
-  > "$SESSION_DIR/watch.stdout" 2>> "$SESSION_DIR/watch.stderr" &
-WATCH_PID=$!
-
-# tiny grace period so the SSE stream is attached before the prompt fires.
-sleep 0.3
-```
-
-### Step 6 — send prompt via HTTP API v2 (async)
-
-```bash
-${PLUGIN}/bin/oc-prompt.sh "$OC_SID" "$SESSION_DIR/prompt.md" --dir "$OC_DIR"
-PROMPT_EXIT=$?
-```
-
-`oc-prompt.sh` POSTs to `/api/session/:id/prompt` with the `x-opencode-directory` header and returns as soon as the message is queued (typically <1s). The actual agent loop runs server-side.
-
-If `PROMPT_EXIT != 0` → kill the watcher (`kill -TERM $WATCH_PID`) and report `status: error / reason: oc-prompt POST failed`.
-
-### Step 7 — wait for completion (SSE-driven)
-
-```bash
-WAIT_TIMEOUT="${CC_OC_WAIT_TIMEOUT:-900}"   # 15 minutes default
-
-if command -v timeout >/dev/null 2>&1; then
-  timeout "$WAIT_TIMEOUT" bash -c "wait $WATCH_PID" 2>/dev/null
-  WAIT_RC=$?
-else
-  # macOS without coreutils — poll the done-file instead
-  SECS=0
-  while [ ! -f "$SESSION_DIR/done" ] && [ "$SECS" -lt "$WAIT_TIMEOUT" ]; do
-    sleep 1; SECS=$((SECS + 1))
-  done
-  [ -f "$SESSION_DIR/done" ] && WAIT_RC=0 || WAIT_RC=124
-fi
-```
-
-`WAIT_RC == 124` → timeout. Abort the runaway session:
-
-```bash
-${PLUGIN}/bin/oc-session.sh abort "$OC_SID" >/dev/null 2>&1 || true
-```
-
-Then report `status: timeout`.
-
-### Step 8 — reap the watcher and read the done signal
-
-```bash
-kill -TERM $WATCH_PID 2>/dev/null || true
-wait $WATCH_PID 2>/dev/null || true
-
-DONE_CODE=""
-DONE_REASON=""
-if [ -f "$SESSION_DIR/done" ]; then
-  DONE_CODE=$(sed -n '1p' "$SESSION_DIR/done")
-  DONE_REASON=$(sed -n '2p' "$SESSION_DIR/done")
-fi
-```
-
-### Step 9 — capture diff in OC_DIR (metadata only)
-
-```bash
-( cd "$OC_DIR" && git diff > "$SESSION_DIR/diff.patch" ) 2>/dev/null || true
-FILES_CHANGED=$(grep -c '^diff --git' "$SESSION_DIR/diff.patch" 2>/dev/null || echo 0)
-ADD=$(grep -c '^+[^+]'                "$SESSION_DIR/diff.patch" 2>/dev/null || echo 0)
-DEL=$(grep -c '^-[^-]'                "$SESSION_DIR/diff.patch" 2>/dev/null || echo 0)
-```
-
-**Never** `Read` or `cat` the diff or any session file just to "verify" what OC did. Content review belongs to `oc-result-review`.
-
-### Step 10 — classify status (grep only — never Read these files)
-
-```bash
-HAS_PERM=$(grep -c '"permission.asked"' "$SESSION_DIR/sse.ndjson" 2>/dev/null || echo 0)
-HAS_ERR=$(grep -c  '"session.error"'    "$SESSION_DIR/sse.ndjson" 2>/dev/null || echo 0)
-```
-
-Priority (first match wins):
-
-| Condition | `status:` |
-|---|---|
-| `PROMPT_EXIT != 0` | `error` |
-| `WAIT_RC == 124` (timeout) | `timeout` |
-| `HAS_ERR > 0` or `DONE_CODE == 2` | `error` |
-| `HAS_PERM > 0` (and watcher auto-denied) | `aborted-perm` |
-| otherwise | `done` |
-
-### Step 11 — surface the report
-
-Report verbatim format:
+## Report format
 
 ```
-status:   <done|error|aborted-perm|timeout|declined>
-session:  <SESSION_DIR>
+status:   <done|error|aborted-perm|timeout>
+session:  <SESSION_DIR>                  # .claude/oc-sessions/<uuid> or /tmp fallback
 oc_sid:   <OC_SID or "(none)">
-files:    +<add> -<del> (<files_changed> files)
+files:    +<add> -<del> (<n> files)
 diff:     <SESSION_DIR>/diff.patch
-done:     <DONE_CODE> <DONE_REASON>
-notes:    <one-line reason; relevant error message if non-done>
+done:     <code> <reason>                 # from SSE watcher (0=idle / 2=error / empty=timeout)
+notes:    <one-line>
 ```
 
-Then, if you want a structured review of the diff, invoke:
-
-```
-Skill(cc-opencode-cmux:oc-result-review, args: "<SESSION_DIR>")
-```
-
-`oc-result-review` is the **only** place where session output may be Read for content inspection — and it lives in this same main session, so it doesn't double the token cost.
+Surface this to the caller (user or invoking plugin) verbatim. Do not paraphrase fields — downstream parsers depend on the format.
 
 ## Spec template (general code work)
 
@@ -249,15 +122,15 @@ BEHAVIOR:
 - <bullet 2>
 
 CONVENTIONS:
-- <project rules — e.g. "use anyhow::Result for fallible functions">
+- <project rules>
 
 ACCEPTANCE TEST:
 - $ <command that verifies success>
 ```
 
-Notes vs v0.5.x:
-- No `WORKING_DIRECTORY:` header — directory is set via the HTTP header in step 6.
-- OpenCode auto-loads `AGENTS.md` from `OC_DIR` (and parents, via findUp), so you do **not** need to list project conventions that already live there. Only mention spec-specific conventions.
+Notes:
+- **No `WORKING_DIRECTORY:` header.** `--dir` argument supplies it via the `x-opencode-directory` HTTP header.
+- **OpenCode auto-loads `AGENTS.md`** from the OC_DIR (and parent dirs via `findUp`). Project conventions documented there are picked up automatically — don't duplicate them in the spec.
 
 ## Spec variants for knowledge work
 
@@ -280,7 +153,7 @@ OUTPUT SCHEMA:
 OUTPUT_FILE: <absolute path>
 ```
 
-OC has webfetch/websearch capability via its `research` agent profile (registered via `bin/install-agents.sh`). Set `OC_DIR=/tmp/cc-oc-scratch-<id>` (or any writable scratch) and pass `OUTPUT_FILE` as an absolute path; OC's edit is permitted inside `OC_DIR`.
+Call with `--dir /tmp/cc-oc-scratch-<id>` (writable scratch); OC edit permitted inside `--dir`.
 
 ### `compose` — render a document from given research
 
@@ -299,7 +172,7 @@ CONVENTIONS:
 - Do NOT edit files outside OUTPUT_FILE
 ```
 
-`OC_DIR` should be the vault root (or wherever the OUTPUT_FILE lives). OC has edit allowed inside the working directory; web denied.
+Call with `--dir` = vault root (or wherever OUTPUT_FILE lives).
 
 ### `analyze` — read-only document evaluation
 
@@ -315,48 +188,32 @@ EVALUATION:
 OUTPUT: <where to write the result, or "stdout">
 ```
 
-OC has read/grep/glob only. Edit and web denied.
+OC has read/grep/glob only.
 
 ## Knowledge pipeline pattern
 
 When the work bundles research + composition:
 
 1. Caller (CC, in this session) does local lookup, dedup check.
-2. Run `delegate-oc` with a `research` spec → raw markdown lands at OUTPUT_FILE.
+2. Call `delegate-oc` with a `research` spec → raw markdown at OUTPUT_FILE.
 3. Caller briefly reviews (sanity, gaps).
-4. Run `delegate-oc` with a `compose` spec referencing the raw research → final document.
-5. (optional) Run `delegate-oc` with an `analyze` spec → validates final doc against conventions.
+4. Call `delegate-oc` with a `compose` spec referencing the raw research → final document.
+5. (optional) Call `delegate-oc` with an `analyze` spec → validates final doc against conventions.
 6. Caller handles domain post-processing (backlinks, index updates, issue linking).
-
-The caller plugin keeps domain knowledge; this skill just delegates safely.
-
-## Result handling
-
-After Step 11:
-
-- `status: done` → diff at the path in the report. For structured review, invoke `Skill(cc-opencode-cmux:oc-result-review, args: "<SESSION_DIR>")`.
-- `status: error` → surface the `notes:` line. Common causes: daemon ensure failure, oc-prompt POST failed, session.error event.
-- `status: aborted-perm` → OC asked for a permission the watcher auto-denied. Reconsider whether the spec is asking for something out of policy.
-- `status: timeout` → the agent loop ran past `CC_OC_WAIT_TIMEOUT` (default 900s). The session has been aborted; the partial diff in the report may still be useful.
-- `status: declined` → token budget exceeded before dispatch. Split the work.
-
-**Never silently re-execute the task yourself.** If OC fails, the report says so; the caller decides next steps.
 
 ## Hard constraints
 
-- **Read-only invariant**: never `Read`, `cat`, `head`, or `tail -n big` on `events.ndjson`, `sse.ndjson`, `diff.patch`, `watch.stdout/stderr`, or any source file in `FILES TO TOUCH`. Use `grep -c`, `grep -q`, `wc -l`, `tail -c <small N>` only. Content review is exclusively the `oc-result-review` skill's job.
-- **No subagent dispatch**: as of v0.6.0 there is no `oc-implementer` agent. The Skill itself is the procedure. `Agent({subagent_type: "cc-opencode-cmux:oc-implementer", ...})` no longer exists; calling it will fail.
-- **No fallback to direct execution.** If OC fails, surface the error. The user/caller decides.
-- **No re-delegation loops.** One dispatch per call. If you need a second attempt with corrections, write a fresh spec and call the skill again — explicitly, not silently.
-- **`--dir` (now: x-opencode-directory header) is mandatory.** `oc-prompt.sh --dir` enforces this; the HTTP API silently ignores `directory` in `POST /session` body so this header is the only path that works.
-- **Never pass `--dangerously-skip-permissions` to opencode.** Watcher auto-denies; main session decides if any `aborted-perm` deserves a re-spec.
+- **Read-only invariant.** Never `Read`, `cat`, `head`, or `tail -n big` on any file under `SESSION_DIR`. Use `grep -c`, `grep -q`, `wc -l`, `tail -c <small N>` if you ever need to peek (you shouldn't — let `oc-result-review` do it). Content review is exclusively the `oc-result-review` skill's job.
+- **No subagent dispatch.** v0.6.0+ removed `oc-implementer`. `Agent({subagent_type: "cc-opencode-cmux:oc-implementer", ...})` no longer exists.
+- **No fallback to direct execution.** If OC fails, surface the error. The user/caller decides what to do.
+- **No re-delegation loops.** One controller invocation per call. To retry with corrections, write a fresh spec and call again — explicitly.
+- **No `--dangerously-skip-permissions`.** Watcher auto-denies; main session decides if any `aborted-perm` deserves a re-spec.
 
 ## Anti-patterns
 
 - ❌ Vague specs like "implement the feature" — OC has no conversation history.
-- ❌ Asking OC to make architectural decisions — it picks arbitrary.
-- ❌ Skipping diff review (`oc-result-review`) — small wrong details accumulate.
-- ❌ Parallel delegations touching the same files — sequence them or use isolated working directories.
-- ❌ Leaking caller-plugin domain knowledge into this skill — inline schema in the spec instead, or rely on `AGENTS.md` in OC_DIR.
-- ❌ Reading session output files in this skill to "verify" — that defeats the entire point of delegation. Use `oc-result-review` if you must inspect content.
-- ❌ Calling `Bash` to invoke `opencode run --attach` directly or any legacy `safe-oc.sh` — those paths are gone.
+- ❌ Asking OC architectural decisions.
+- ❌ Skipping diff review (`oc-result-review`) on `done` runs.
+- ❌ Parallel delegations on overlapping files — sequence them or use isolated `--dir`s.
+- ❌ Reading session output files in this skill to "verify" — defeats the entire point of delegation.
+- ❌ Splitting the controller into multiple Bash calls in the main session — costs you the tokens we just saved by introducing `oc-delegate.sh`.
