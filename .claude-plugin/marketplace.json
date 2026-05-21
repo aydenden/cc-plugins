@@ -43,8 +43,8 @@
     {
       "name": "cc-opencode-cmux",
       "source": "./plugins/cc-opencode-cmux",
-      "description": "CC Opus가 OpenCode(저비용)에 작업을 위임하는 단일 진입점 플러그인. Agent({subagent_type:'oc-implementer'}) 또는 Skill(delegate-oc) 한 줄 호출 → daemon ensure → opencode run --attach --dir → 서버측 status polling 완료 검증 → diff 캡처 → 7줄 보고. v0.5.1: oc-implementer Read 도구 제거 + read-only invariant 명시(events.ndjson/diff.patch/source 읽기 금지) — haiku 토큰 누수 차단. opencode v1.15.5 핀.",
-      "version": "0.5.1"
+      "description": "CC Opus가 OpenCode(저비용)에 작업을 위임하는 Skill 전용 플러그인. Skill(cc-opencode-cmux:delegate-oc) 한 줄 호출 → 메인이 직접 HTTP API v2(POST /api/session/:id/prompt + x-opencode-directory 헤더)로 위임 → SSE watcher의 session.status: idle 감지로 완료 → diff 캡처 → 7줄 보고. v0.6.0: 서브에이전트(oc-implementer/haiku) 완전 제거로 중간 토큰 누수 위험 구조적 차단, opencode run --attach CLI 의존성 제거(running-after-detach 이슈 해소), AGENTS.md 자동 findUp 로딩 채택(prepend hack 제거), SESSION_DIR을 .claude/oc-sessions/로 이동(자동 gitignore). opencode v1.15.5 핀.",
+      "version": "0.6.0"
     },
     {
       "name": "cc-deep-tutor",

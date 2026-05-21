@@ -76,7 +76,7 @@ echo "[install-agents] plugin agents now available: $PLUGIN_AGENTS" >&2
 echo "[install-agents] backup: $BACKUP" >&2
 
 # If a daemon is running, it has the OLD config cached. Stop it so the next
-# oc-implementer dispatch triggers `oc-daemon.sh ensure` with the new agent defs.
+# delegate-oc Skill invocation triggers `oc-daemon.sh ensure` with the new agent defs.
 META_FILE="/tmp/cc-oc-serve.env"
 if [ -f "$META_FILE" ]; then
   PLUGIN_BIN="$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "$0")")"

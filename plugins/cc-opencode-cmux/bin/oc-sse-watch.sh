@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
-# oc-sse-watch.sh — minimal SSE side-channel for cc-opencode-cmux v0.5.0+.
+# oc-sse-watch.sh — SSE side-channel for cc-opencode-cmux v0.6.0+.
 #
 #   oc-sse-watch.sh <sid> [--out NDJSON] [--done-file PATH] [--no-auto-deny]
 #
-# Role (since v0.5.0):
+# Role:
 #   * Subscribe to opencode `/event` SSE and filter by sessionID == <sid>.
 #   * Auto-deny any `permission.asked` for our session (safety; the main Opus
 #     session decides whether to re-spec).
-#   * Exit 0 on `session.status: idle` for our session, exit 2 on
-#     `session.error` / `session.status: error`.
-#
-# Not the source of truth for completion: the synchronous exit of
-# `oc-message.sh send-cont` is what the oc-implementer agent uses. This
-# watcher exists for permission interception and as a secondary done signal
-# (via --done-file) — nothing more.
+#   * **Primary completion signal** for delegate-oc skill: exits 0 on
+#     `session.status: idle`, exit 2 on `session.error` / `session.status: error`.
+#     Since v0.6.0 dropped `opencode run --attach`, oc-prompt.sh POSTs to v2
+#     HTTP API and returns immediately — the main session then waits for *this*
+#     watcher to exit (via `wait $WATCH_PID` or polling `--done-file`).
 #
 # Removed vs. earlier versions: cmux surface feeding, tool counters, agent /
 # model tracking, progress percentages. Those existed only for the cmux right
