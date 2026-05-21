@@ -147,8 +147,11 @@ fi
 echo "$OC_SID" > "$SESSION_DIR/oc_sid"
 log "OC_SID=$OC_SID"
 
-# ── Step 4: SSE watcher (background) ────────────────────────────────────────
-log "step 4: start oc-sse-watch.sh"
+# ── Step 4: SSE watcher (background) — permission auto-deny + event log ─────
+# Since /session/:id/message is synchronous (blocks until idle), the SSE
+# watcher's primary role is permission auto-deny + recording session events.
+# The POST itself signals completion via its HTTP response.
+log "step 4: start oc-sse-watch.sh (permission interceptor)"
 "$PLUGIN_DIR/bin/oc-sse-watch.sh" "$OC_SID" \
   --out "$SESSION_DIR/sse.ndjson" \
   --done-file "$SESSION_DIR/done" \
@@ -156,36 +159,21 @@ log "step 4: start oc-sse-watch.sh"
 WATCH_PID=$!
 sleep 0.3   # SSE handshake grace
 
-# ── Step 5: prompt POST (async — returns once queued) ───────────────────────
-log "step 5: oc-prompt.sh"
-if ! "$PLUGIN_DIR/bin/oc-prompt.sh" "$OC_SID" "$PROMPT" --dir "$OC_DIR" >>"$LOG" 2>&1; then
-  kill -TERM "$WATCH_PID" 2>/dev/null || true
-  wait "$WATCH_PID" 2>/dev/null || true
-  emit_report "error" "$OC_SID" 0 0 0 "" "" "oc-prompt.sh POST failed — see $LOG"
-  exit $EC_ERR_PROMPT
-fi
+# ── Step 5: synchronous prompt POST (blocks until OC completes the loop) ────
+log "step 5: oc-prompt.sh (sync POST, timeout=${TIMEOUT}s)"
+"$PLUGIN_DIR/bin/oc-prompt.sh" "$OC_SID" "$PROMPT" \
+  --dir "$OC_DIR" \
+  --out "$SESSION_DIR/response.json" \
+  --timeout "$TIMEOUT" \
+  >>"$LOG" 2>&1
+PROMPT_EXIT=$?
+log "prompt exit=$PROMPT_EXIT"
 
-# ── Step 6: wait for completion (watcher exits on session.status: idle) ─────
-log "step 6: wait $WATCH_PID (timeout=${TIMEOUT}s)"
-WAIT_RC=0
-if command -v timeout >/dev/null 2>&1; then
-  timeout "$TIMEOUT" bash -c "wait $WATCH_PID" 2>/dev/null
-  WAIT_RC=$?
-else
-  # macOS without coreutils — poll the done file
-  SECS=0
-  while [ ! -f "$SESSION_DIR/done" ] && [ "$SECS" -lt "$TIMEOUT" ]; do
-    sleep 1; SECS=$((SECS + 1))
-  done
-  [ -f "$SESSION_DIR/done" ] && WAIT_RC=0 || WAIT_RC=124
-fi
-log "wait rc=$WAIT_RC"
-
-# Reap watcher unconditionally
+# ── Step 6: stop watcher (session has settled — POST returned or errored) ───
 kill -TERM "$WATCH_PID" 2>/dev/null || true
 wait "$WATCH_PID" 2>/dev/null || true
 
-# ── Step 7: read done signal ────────────────────────────────────────────────
+# ── Step 7: read done signal (if watcher captured one before being killed) ──
 DONE_CODE=""
 DONE_REASON=""
 if [ -f "$SESSION_DIR/done" ]; then
@@ -197,26 +185,39 @@ log "done_code=$DONE_CODE done_reason=$DONE_REASON"
 # ── Step 8: diff capture (counts only — never Read) ─────────────────────────
 log "step 8: git diff capture"
 ( cd "$OC_DIR" && git diff > "$SESSION_DIR/diff.patch" ) 2>/dev/null || true
-FILES_CHANGED=$(grep -c '^diff --git' "$SESSION_DIR/diff.patch" 2>/dev/null || echo 0)
-ADD=$(grep -c '^+[^+]'                "$SESSION_DIR/diff.patch" 2>/dev/null || echo 0)
-DEL=$(grep -c '^-[^-]'                "$SESSION_DIR/diff.patch" 2>/dev/null || echo 0)
+FILES_CHANGED=0; ADD=0; DEL=0
+if [ -f "$SESSION_DIR/diff.patch" ]; then
+  FILES_CHANGED=$(grep -c '^diff --git' "$SESSION_DIR/diff.patch") || FILES_CHANGED=0
+  ADD=$(grep -c '^+[^+]'                "$SESSION_DIR/diff.patch") || ADD=0
+  DEL=$(grep -c '^-[^-]'                "$SESSION_DIR/diff.patch") || DEL=0
+fi
 
 # ── Step 9: classify + emit ─────────────────────────────────────────────────
-HAS_PERM=$(grep -c '"permission.asked"' "$SESSION_DIR/sse.ndjson" 2>/dev/null || echo 0)
-HAS_ERR=$(grep -c  '"session.error"'    "$SESSION_DIR/sse.ndjson" 2>/dev/null || echo 0)
+HAS_PERM=0; HAS_ERR=0
+if [ -f "$SESSION_DIR/sse.ndjson" ]; then
+  HAS_PERM=$(grep -c '"permission.asked"' "$SESSION_DIR/sse.ndjson") || HAS_PERM=0
+  HAS_ERR=$(grep -c  '"session.error"'    "$SESSION_DIR/sse.ndjson") || HAS_ERR=0
+fi
 
-# Timeout takes precedence — abort runaway session before classifying others.
-if [ "$WAIT_RC" -eq 124 ]; then
-  log "TIMEOUT — aborting OC session"
+# curl exit code 28 = --max-time exceeded. Abort runaway session.
+if [ "$PROMPT_EXIT" -eq 28 ]; then
+  log "TIMEOUT (curl --max-time) — aborting OC session"
   "$PLUGIN_DIR/bin/oc-session.sh" abort "$OC_SID" >/dev/null 2>&1 || true
   emit_report "timeout" "$OC_SID" "$FILES_CHANGED" "$ADD" "$DEL" \
-    "$DONE_CODE" "$DONE_REASON" "exceeded ${TIMEOUT}s — session aborted, partial diff retained"
+    "$DONE_CODE" "$DONE_REASON" "exceeded ${TIMEOUT}s (curl rc=28) — session aborted, partial diff retained"
   exit $EC_TIMEOUT
+fi
+
+# Any other non-zero curl exit = transport / HTTP error.
+if [ "$PROMPT_EXIT" -ne 0 ]; then
+  emit_report "error" "$OC_SID" "$FILES_CHANGED" "$ADD" "$DEL" \
+    "$DONE_CODE" "$DONE_REASON" "oc-prompt.sh exit=$PROMPT_EXIT — see $LOG"
+  exit $EC_ERR_PROMPT
 fi
 
 if [ "$HAS_ERR" -gt 0 ] || [ "$DONE_CODE" = "2" ]; then
   emit_report "error" "$OC_SID" "$FILES_CHANGED" "$ADD" "$DEL" \
-    "$DONE_CODE" "$DONE_REASON" "session.error emitted — inspect $SESSION_DIR/sse.ndjson via oc-result-review"
+    "$DONE_CODE" "$DONE_REASON" "session.error emitted — inspect sse.ndjson / response.json via oc-result-review"
   exit $EC_ERR_SESSION_EVT
 fi
 
