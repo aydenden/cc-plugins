@@ -1,6 +1,6 @@
 ---
 name: delegate-oc
-description: Use when Claude Code (Opus orchestrator) is about to do repetitive coding work that fits the cc-opencode-cmux delegation policy — multi-file boilerplate implementation, mechanical refactors, code summarization, Korean/Chinese documentation, knowledge research, or document composition. Triggers on user requests like "구현해줘", "리팩터링", "이 파일들 요약", "한국어 문서 만들어줘", "조사해줘", or when Opus detects a task with low reasoning complexity but high token volume. Other plugins (obsidian-knowledge, cc-deep-tutor, pm, ...) call this skill via the Skill tool to delegate their own large-output subtasks.
+description: Use when Claude Code (Opus orchestrator) is about to do repetitive coding work that fits the cc-opencode-cmux delegation policy — multi-file boilerplate implementation, mechanical refactors, code summarization, Korean/Chinese documentation, knowledge research, or document composition. Triggers on user requests like "구현해줘", "리팩터링", "이 파일들 요약", "한국어 문서 만들어줘", "조사해줘", or when Opus detects a task with low reasoning complexity but high token volume. **For ≥2 independent sub-tasks fired together** — triggers on "병렬로 위임", "동시에 위임", "한꺼번에", "여러 개 한 번에" — use `oc-fanout.sh` (see Parallel fan-out section). Other plugins (obsidian-knowledge, cc-deep-tutor, pm, ...) call this skill via the Skill tool to delegate their own large-output subtasks.
 ---
 
 # delegate-oc
@@ -58,6 +58,30 @@ Flags: `--prompt-file FILE`, `--session-dir DIR`, `--title TITLE`, `--timeout SE
 | 30 | `timeout` | Session already aborted; partial diff may be salvageable |
 
 Stdout always carries a 7-line report (`status:` / `session:` / `oc_sid:` / `files:` / `diff:` / `done:` / `notes:`). Surface to caller verbatim — downstream parsers depend on the format.
+
+## Parallel fan-out (≥2 independent sub-tasks)
+
+When the user explicitly asks for parallel delegation ("병렬로 위임", "동시에 위임", "한꺼번에") **or** there are ≥2 independent specs ready, fire them in one Bash call so the daemon receives them simultaneously. Sequential `oc-delegate.sh` calls serialize on Opus's turn boundaries (each turn waits for the previous report).
+
+Write each spec to a separate file, then one Bash call (run in background so Opus can yield the turn):
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/bin/oc-fanout.sh" --dir "$PWD" --timeout 900 \
+  /tmp/spec-1.md /tmp/spec-2.md /tmp/spec-3.md
+```
+
+Output: summary line (`fanout: N specs  wall=...ms  ratio=...`) + ASCII timeline + N×7-line reports concatenated with `--- [i] <SESSION_DIR> ---` separators. Exit code = max of individual delegate exit codes.
+
+Measured scaling (read-only analyze task on local daemon, v1.15.5):
+
+| N | wall (ms) | ratio | efficiency |
+|---|---|---|---|
+| 1 | 23 184 | 1.00 | 100 % |
+| 3 | 23 310 | 2.73 |  91 % |
+| 5 | 21 273 | 4.87 |  97 % |
+| 8 | 26 317 | 6.76 |  84 % |
+
+Use `Bash(run_in_background: true)` for the fan-out call so Opus's turn is not held for the duration. Then `BashOutput` to collect the consolidated report when CC signals completion.
 
 ## Hard constraints
 
