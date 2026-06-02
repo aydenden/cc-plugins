@@ -52,6 +52,12 @@ done
 [ -n "$DIR" ]   || { echo "ERROR: --dir required (sent as x-opencode-directory header)" >&2; exit 1; }
 [ -f "$PFILE" ] || { echo "ERROR: prompt file not found: $PFILE" >&2; exit 1; }
 
+# agent 미지정 시 기본 agent 로 fallback (defense-in-depth). agent 가 비면 세션이
+# opencode top-level 기본 model 로 떨어지는데, 그 기본이 무효 model 이면 message
+# 엔드포인트가 동기 응답하지 못하고 hang 한다. oc-delegate 는 항상 agent 를 주지만
+# 직접 호출·미래 경로를 위해 여기서도 안전장치를 둔다. CC_OC_DEFAULT_AGENT 로 override.
+AGENT="${AGENT:-${CC_OC_DEFAULT_AGENT:-oc-implement}}"
+
 # Compose JSON body in a temp file (safe for large prompts beyond argv limits).
 BODY_FILE="$(mktemp -t oc-prompt-body.XXXXXX)"
 trap 'rm -f "$BODY_FILE"' EXIT
