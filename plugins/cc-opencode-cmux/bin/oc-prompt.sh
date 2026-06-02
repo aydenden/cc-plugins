@@ -38,11 +38,13 @@ shift
 
 DIR=""
 OUT=""
+AGENT=""
 TIMEOUT="${CC_OC_PROMPT_TIMEOUT:-30}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --dir)     DIR="$2"; shift 2 ;;
     --out)     OUT="$2"; shift 2 ;;
+    --agent)   AGENT="$2"; shift 2 ;;
     --timeout) TIMEOUT="$2"; shift 2 ;;
     *) echo "ERROR: unknown flag $1" >&2; exit 1 ;;
   esac
@@ -54,12 +56,17 @@ done
 BODY_FILE="$(mktemp -t oc-prompt-body.XXXXXX)"
 trap 'rm -f "$BODY_FILE"' EXIT
 
-python3 - "$PFILE" "$BODY_FILE" <<'PY'
+python3 - "$PFILE" "$BODY_FILE" "$AGENT" <<'PY'
 import json, sys
-src, dst = sys.argv[1], sys.argv[2]
+src, dst, agent = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(src, "r", encoding="utf-8") as f:
     text = f.read()
 body = {"parts": [{"type": "text", "text": text}]}
+# agent 를 지정하면 그 agent 의 model/tools/permission 으로 실행된다. 미지정 시
+# opencode 의 top-level 기본 model 로 떨어지는데, 그 기본이 무효 model 이면
+# message 엔드포인트가 ProviderModelNotFoundError 를 동기 응답하지 못하고 hang 한다.
+if agent:
+    body["agent"] = agent
 with open(dst, "w", encoding="utf-8") as f:
     json.dump(body, f, ensure_ascii=False)
 PY
