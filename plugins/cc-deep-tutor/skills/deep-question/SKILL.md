@@ -5,7 +5,7 @@ description: KB 자료에서 소크라테스식 문제 출제와 후속 질문. 
 
 # Deep Question
 
-KB(memsearch) 자료를 기반으로 출제 → 학습자 답변 → 소크라테스식 후속 질문.
+KB(마크다운 위키) 자료를 기반으로 출제 → 학습자 답변 → 소크라테스식 후속 질문.
 
 ## 환경 준비
 
@@ -18,13 +18,13 @@ eval "$("$PLUGIN_ROOT/scripts/resolve-config.sh")"
 
 ## 워크플로우
 
-### 1. 토픽·자료 수집 (CC 직접)
-- `$ARGUMENTS`가 토픽이면 `memsearch search "<토픽>" -k 8`로 청크 수집
-- 청크 hash들 모아 `memsearch expand`로 풀 컨텐츠
-- 청크들을 `/tmp/cc-dt-question/<session>/chunks.md`에 저장 (CC 컨텍스트 폭주 방지)
+### 1. 토픽·자료 수집 (CC 직접, kb-search 규칙)
+- `$ARGUMENTS`가 토픽이면 `Grep "summary:"`/`Grep "tags:"` 에 키워드 + `Glob` 파일명 (대상 `$CC_DEEP_TUTOR_MATERIALS_DIR/**/*.md`, `_wiki/` 제외)으로 후보 노트 경로 수집
+- miss 시 `_wiki/INDEX.md` 로드 후 관련 id 선택
+- 후보 노트 경로 목록만 확보 (raw 본문은 CC 컨텍스트에 안 올림 — generator/OC가 read)
 
 ### 2. 출제 — `question-generator` agent
-- 입력: 토픽 + chunks.md 경로 + 문제 수
+- 입력: 토픽 + KB 노트 경로 목록(또는 glob) + 문제 수
 - generator가 내부에서 delegate-oc Skill 호출 → 결과 JSON을 파일로 받음
 - delegate-oc 실패 시 generator가 cc-only fallback으로 직접 Write
 - 출력: `/tmp/cc-dt-question/<session>/questions.json`
@@ -45,7 +45,7 @@ eval "$("$PLUGIN_ROOT/scripts/resolve-config.sh")"
 
 ## 인자
 
-`$ARGUMENTS`: 출제 토픽. 비어 있으면 최근 학습 토픽 추천 (beads ready + memsearch recent).
+`$ARGUMENTS`: 출제 토픽. 비어 있으면 최근 학습 토픽 추천 (beads ready + `_wiki/INDEX.md` 최신 항목).
 
 ## 사용 예
 
