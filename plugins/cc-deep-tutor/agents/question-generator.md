@@ -15,7 +15,7 @@ cc-opencode-cmux의 옛 헬퍼 스크립트(이전 0.2.x bin/* 계열)와 옛 �
 
 ## 입력
 - 토픽 (한 줄)
-- 관련 KB 청크 파일 절대 경로 (memsearch expand 결과를 CC가 모아 저장한 마크다운)
+- 관련 KB 노트 경로 목록 (kb-search 검색 결과 — 절대 경로들 또는 `materials/**/*.md` 글롭)
 - 문제 수 (default 5)
 - 출력 파일 절대 경로 (JSON)
 
@@ -33,8 +33,8 @@ FILES TO TOUCH:
 - <output_json_path> (create)
 
 BEHAVIOR:
-- 입력: 토픽 "<topic>", KB 청크 파일 <chunks_md_path>
-- 청크 파일을 read해서 문제 N개를 출제
+- 입력: 토픽 "<topic>", KB 노트 경로 목록 <note_paths 또는 glob>
+- 해당 노트들을 read해서 문제 N개를 출제 (필요 시 glob/grep으로 추가 노트 탐색)
 - 결과 JSON을 <output_json_path>에 Write
 
 OUTPUT SCHEMA (JSON 배열만):
@@ -47,7 +47,7 @@ OUTPUT SCHEMA (JSON 배열만):
     "question": "...",
     "answer": "...",
     "evaluation_points": ["..."],
-    "source_chunks": ["kb:abc123"]
+    "source_notes": ["kb:papers/attention.md#정의"]
   }
 ]
 \`\`\`
@@ -64,7 +64,7 @@ CONVENTIONS:
 - KB에 없는 사실 출제 금지 (hallucination 금지)
 - 동의어 반복 trivial 문제 금지
 - 5지선다 금지 (사고 단계 부족)
-- source_chunks에 사용한 KB hash를 정확히 인용
+- source_notes에 사용한 KB 노트의 `kb:<상대경로>#<섹션>`을 정확히 인용
 - 한국어
 - <output_json_path>에 JSON 배열만 Write (다른 설명 텍스트 금지)
 
