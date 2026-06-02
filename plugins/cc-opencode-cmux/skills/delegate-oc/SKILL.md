@@ -83,6 +83,42 @@ Measured scaling (read-only analyze task on local daemon, v1.15.5):
 
 Use `Bash(run_in_background: true)` for the fan-out call so Opus's turn is not held for the duration. Then `BashOutput` to collect the consolidated report when CC signals completion.
 
+## Workflow 모드 (phase 기반 대규모 위임)
+
+**선택 기준**: phase ≥ 2 또는 총 워커 ≥ 6 → `--workflow`. 그 외 단일/평면은 기존 `oc-delegate`/`oc-fanout`.
+
+**사전 준비**: A가 phase별 spec 파일 + `manifest.json` 작성.
+
+manifest 스키마:
+```json
+{
+  "workdir": "/abs/path/to/workdir",
+  "concurrency": 3,
+  "notify": "on-complete",
+  "phases": [
+    { "id": "p1", "specs": [{ "id": "s1", "task_type": "implement", "prompt_file": "/tmp/s1.md", "dir": "/abs/dir" }] }
+  ]
+}
+```
+
+**호출**:
+```bash
+"${CLAUDE_PLUGIN_ROOT}/bin/oc-delegate.sh" --workflow \
+  --manifest /tmp/manifest.json --dir "$PWD"
+```
+
+**비블로킹 권장**: `Bash(run_in_background: true)`로 호출 → 완료 통지 후 `result.json`/`failures.json` 분석.
+
+**결과**:
+- `<workdir>/result.json` — status, phase별 done/failed 집계
+- `<workdir>/failures.json` — 실패한 워커만 추출
+- 성공물: `<workdir>/phase-<id>/<spec>/` (report.txt, diff.patch 등)
+
+**제약**:
+- cmux 필수 (없으면 exit 3)
+- 실패 워커는 phase를 막지 않고 failures 에 누적
+- phase 는 배리어 — 이전 phase 전부 완료 후 다음 phase 진입
+
 ## Hard constraints
 
 - **Never Read session output files.** `SESSION_DIR/{prompt.md,sse.ndjson,diff.patch,controller.log,watch.*}` are for `oc-result-review` only. Use `grep -c` / `wc -l` / `tail -c <small>` if you absolutely must peek.

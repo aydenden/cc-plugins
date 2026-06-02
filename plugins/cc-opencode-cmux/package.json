@@ -1,0 +1,6 @@
+{
+  "name": "cc-opencode-cmux-workflow",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test 'bin/workflow/__tests__/*.test.js'" }
+}
