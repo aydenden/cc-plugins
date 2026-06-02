@@ -155,9 +155,12 @@ obsidian-knowledge recall 패턴을 학습 도메인에 이식한 6단계:
 - OC가 `fs_read`로 노트 읽고 + websearch 보충 + 본문 집필까지 전담.
 - memsearch hash expand가 하던 "풀 컨텐츠 가져오기"를 OC `fs_read`가 대체.
 
-> **검증 필요**: OC `fs_*` 와일드카드가 grep/glob 스캔까지 포함하는지(아니면 read만)는
-> 실측 대상. read만 되더라도 위 설계(CC가 grep→경로, OC가 read+집필)는 확실히
-> 동작하므로 블로커 아님. grep도 되면 후보 탐색마저 OC로 넘길 수 있다.
+> **검증 완료 (2026-06-02)**: OC `analyze` 프로파일에 glob 입력만 주고(정확한 경로 없이)
+> needle 포함 노트를 찾게 한 위임 실측 결과 `status: done`으로 성공 — OC가 스스로
+> grep/glob 스캔 → frontmatter `id`/`summary` 추출. SSE auto-deny에 막히지 않음.
+> → **grep/glob 가용 확정.** 검색 ①②(키워드 스캔 + 후보 탐색)까지 OC research 워커에
+> 넘길 수 있다. CC는 토픽 분류만 수행한다. (주의: OC가 결과에 절대경로를 자동
+> 기입하지 않았으므로 spec에서 "매칭 파일의 절대경로를 출력하라"를 명시할 것.)
 
 ### kb-search 명령 매핑 (memsearch 대체)
 
@@ -223,8 +226,8 @@ memsearch는 이미 optional(`command -v memsearch || exit 0` graceful skip) 구
 
 ## 미해결 / 후속
 
-- **OC fs_* grep/glob 가용성 실측** — 구현 첫 단계에서 확인. 결과에 따라 검색 ①② 단계의
-  CC/OC 분담 조정.
+- ~~**OC fs_* grep/glob 가용성 실측**~~ — **완료 (2026-06-02)**. glob 입력 analyze 위임이
+  `status: done`으로 성공, OC가 grep/glob 자체 수행 확인. 검색 ①②를 OC에 위임 가능.
 - **하이브리드 fallback(선택)** — 검색 ⑤로도 miss 시 로컬 bge-m3 임베딩을 *선택적*으로
   붙이는 경량 hybrid. 코퍼스가 수백 문서를 크게 넘을 때만 고려. 현재 범위 제외(YAGNI).
 - **기존 memsearch 인덱스 마이그레이션** — 기존 사용자는 재인덱싱 불필요(노트 파일은 그대로,
