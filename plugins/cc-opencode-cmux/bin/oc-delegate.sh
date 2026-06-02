@@ -73,6 +73,8 @@ while [ $# -gt 0 ]; do
     --session-dir)  SESSION_DIR="$2";   shift 2 ;;
     --title)        TITLE="$2";         shift 2 ;;
     --timeout)      TIMEOUT="$2";       shift 2 ;;
+    --workflow)     WORKFLOW=1;         shift ;;
+    --manifest)     MANIFEST="$2";     shift 2 ;;
     -h|--help)
       sed -n '2,/^set -uo/p' "$0" | sed -n 's/^# \?//;s/^set -uo.*//p; T; p'
       exit 0
@@ -80,6 +82,19 @@ while [ $# -gt 0 ]; do
     *) echo "ERROR: unknown flag $1" >&2; exit 1 ;;
   esac
 done
+
+if [ "${WORKFLOW:-0}" = "1" ]; then
+  [ -n "${MANIFEST:-}" ] || { echo "ERROR: --workflow requires --manifest" >&2; exit 1; }
+  PANEL="$PLUGIN_DIR/bin/oc-cmux-panel.sh"
+  WORKDIR="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["workdir"])' "$MANIFEST")"
+  SURF="$("$PANEL" open "$WORKDIR")" || exit $?
+  SIG="done-$SURF"
+  "$PANEL" run "$SURF" "node '$PLUGIN_DIR/bin/oc-workflow-tui.js' --manifest '$MANIFEST' --signal '$SIG' --timeout '$TIMEOUT'"
+  "$PANEL" wait "$SIG" "${TIMEOUT}" || true
+  echo "workflow_result: $WORKDIR/result.json"
+  echo "workflow_failures: $WORKDIR/failures.json"
+  exit 0
+fi
 
 [ -n "$OC_DIR" ] || { echo "ERROR: --dir required (x-opencode-directory header)" >&2; exit 1; }
 
@@ -160,9 +175,23 @@ WATCH_PID=$!
 sleep 0.3   # SSE handshake grace
 
 # ── Step 5: synchronous prompt POST (blocks until OC completes the loop) ────
-log "step 5: oc-prompt.sh (sync POST, timeout=${TIMEOUT}s)"
+# spec 의 TASK_TYPE 을 install-agents.sh 가 등록한 oc-* agent 로 매핑한다.
+# agent 를 지정하지 않으면 opencode top-level 기본 model 로 떨어지는데, 그 기본이
+# 무효 model 이면 message 엔드포인트가 동기 응답하지 못하고 hang 한다 (결함 B).
+OC_AGENT=oc-implement
+case "$(grep -m1 '^TASK_TYPE:' "$PROMPT" | sed 's/^TASK_TYPE:[[:space:]]*//' | tr -d '[:space:]')" in
+  implement) OC_AGENT=oc-implement ;;
+  refactor)  OC_AGENT=oc-refactor ;;
+  summarize) OC_AGENT=oc-summarize ;;
+  doc)       OC_AGENT=oc-cjk-doc ;;
+  research)  OC_AGENT=oc-research ;;
+  compose)   OC_AGENT=oc-compose ;;
+  analyze)   OC_AGENT=oc-analyze ;;
+esac
+log "step 5: oc-prompt.sh (sync POST, agent=$OC_AGENT, timeout=${TIMEOUT}s)"
 "$PLUGIN_DIR/bin/oc-prompt.sh" "$OC_SID" "$PROMPT" \
   --dir "$OC_DIR" \
+  --agent "$OC_AGENT" \
   --out "$SESSION_DIR/response.json" \
   --timeout "$TIMEOUT" \
   >>"$LOG" 2>&1
