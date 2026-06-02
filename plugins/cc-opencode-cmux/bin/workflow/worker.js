@@ -16,6 +16,9 @@ export function makeRunWorker(delegatePath, timeout) {
       const child = spawn(delegatePath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
       let out = '';
       child.stdout.on('data', (d) => { out += d; });
+      // stderr 는 oc-delegate 가 controller.log 로 리다이렉트하므로 버린다.
+      // 읽지 않으면 child 가 stderr 에 다량 출력 시 파이프 버퍼가 차서 블록될 수 있다.
+      child.stderr.resume();
       child.on('close', (code) => {
         writeFileSync(`${sessionDir}/report.txt`, out);
         resolve({ ...parseReport(out), exit_code: code });
