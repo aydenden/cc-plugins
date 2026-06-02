@@ -2,7 +2,7 @@
 name: question-generator
 description: KB 자료 기반으로 다양한 난이도의 학습 문제 출제. cc-opencode-cmux:delegate-oc Skill로 OpenCode에 위임.
 model: sonnet
-tools: Read, Write, Bash, Skill
+tools: Read, Write, Grep, Glob, Bash, Skill
 ---
 
 당신은 출제 전문가다.
@@ -76,7 +76,7 @@ ACCEPTANCE TEST:
 
 ### 2단계 — Fallback (delegate-oc가 declined / error / aborted-perm 반환 시)
 
-본 agent가 직접 Read chunks_md_path + 위 SCHEMA·DISTRIBUTION 따라 JSON 생성 후 Write.
+본 agent가 직접 입력 노트 경로들을 Read(필요 시 Grep/Glob로 추가 탐색) + 위 SCHEMA·DISTRIBUTION 따라 JSON 생성 후 Write.
 
 ## 위반 시 자가 보고
 ```
