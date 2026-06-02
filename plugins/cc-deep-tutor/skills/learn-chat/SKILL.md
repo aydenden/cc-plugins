@@ -16,16 +16,16 @@ eval "$("$PLUGIN_ROOT/scripts/resolve-config.sh")"
 
 ## 동작 규칙
 
-### 1. KB 자동 검색
+### 1. KB 자동 검색 (kb-search 규칙)
 - 사용자 질문에서 키워드 추출
-- `memsearch search "<키워드>" -k 5` 자동 실행 (memsearch 가용 시)
-- 점수 0.4 이상 청크만 컨텍스트에 부착
-- 부착 시 출처 표시 (파일 + 청크 hash)
+- `Grep "summary:"`/`Grep "tags:"` 에 키워드 + `Glob` 파일명 (대상 `$CC_DEEP_TUTOR_MATERIALS_DIR/**/*.md`, `_wiki/` 제외) → 후보 노트
+- 후보를 Read 해 관련 섹션만 컨텍스트에 부착 (miss 시 `_wiki/INDEX.md` 로드 후 선택)
+- 부착 시 출처 표시 (`kb:<상대경로>#<섹션>`)
 
 ### 2. 답변 스타일
 - 정의 → 예시 → 반례 → 한계 순서
 - 수식은 LaTeX, 코드는 코드블록
-- 각 주장에 출처 (KB hash 또는 외부 URL)
+- 각 주장에 출처 (`kb:<상대경로>#<섹션>` 또는 외부 URL)
 - 한국어 default
 
 ### 3. 이해도 체크 (선택)

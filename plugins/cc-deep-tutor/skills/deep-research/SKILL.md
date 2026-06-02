@@ -26,10 +26,11 @@ OC 위임은 모든 sub-agent와 compose 단계가 자체적으로 `Skill(cc-ope
 ### 2. 조사 (병렬) — `topic-researcher` agent N개
 - 한 메시지에 여러 Agent 호출 (concurrent)
 - 동시 실행 최대 `$CC_DEEP_TUTOR_MAX_PARALLEL_TOPICS`개
-- 각 researcher는 내부에서 `Skill(cc-opencode-cmux:delegate-oc, args: <compose spec>)`로 본문 작성 위임
+- 각 researcher는 내부에서 `Skill(cc-opencode-cmux:delegate-oc, args: <research spec>)`로 위임 — OC가 `materials/**/*.md` 글롭을 grep/glob 검색 + 웹 보충 + 본문 작성까지 전담 (CC는 자료수집 안 함)
 - 결과는 파일 경로로 받음 (CC 컨텍스트에 raw 본문 미진입)
 - 각 researcher 입력:
   - 서브토픽 + 부모 주제 컨텍스트
+  - KB 검색 루트 (`$CC_DEEP_TUTOR_MATERIALS_DIR`, `_wiki/` 제외)
   - 출력 파일 경로 (`/tmp/cc-dt-research/<session>/T<n>.md`)
 
 ### 3. 노트 압축 — `note-compressor` agent
@@ -53,7 +54,7 @@ OC 위임은 모든 sub-agent와 compose 단계가 자체적으로 `Skill(cc-ope
 
 ### 6. 자동 인덱싱
 - `auto_index_on_write=true`면 hook이 자동 처리
-- 비활성 시 사용자에게 "memsearch 인덱싱할까?" 묻기
+- 비활성 시에도 별도 인덱싱 불필요 — 노트 Write 시 PostToolUse hook이 `_wiki/INDEX.md`를 갱신
 
 ## Compose 위임 패턴 (CC orchestrator)
 
@@ -106,6 +107,6 @@ ACCEPTANCE TEST:
 ```
 
 ## 주의
-- 모든 인용은 출처 ID 보존 (memsearch hash, URL, 파일 경로 + 페이지)
+- 모든 인용은 출처 ID 보존 (`kb:<상대경로>#<섹션>`, URL, 파일 경로 + 페이지)
 - 한국어 보고서 (default)
 - delegate-oc 위임 실패 시 각 단계가 cc-only fallback으로 자체 처리
