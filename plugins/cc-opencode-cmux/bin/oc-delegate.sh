@@ -73,6 +73,8 @@ while [ $# -gt 0 ]; do
     --session-dir)  SESSION_DIR="$2";   shift 2 ;;
     --title)        TITLE="$2";         shift 2 ;;
     --timeout)      TIMEOUT="$2";       shift 2 ;;
+    --workflow)     WORKFLOW=1;         shift ;;
+    --manifest)     MANIFEST="$2";     shift 2 ;;
     -h|--help)
       sed -n '2,/^set -uo/p' "$0" | sed -n 's/^# \?//;s/^set -uo.*//p; T; p'
       exit 0
@@ -80,6 +82,19 @@ while [ $# -gt 0 ]; do
     *) echo "ERROR: unknown flag $1" >&2; exit 1 ;;
   esac
 done
+
+if [ "${WORKFLOW:-0}" = "1" ]; then
+  [ -n "${MANIFEST:-}" ] || { echo "ERROR: --workflow requires --manifest" >&2; exit 1; }
+  PANEL="$PLUGIN_DIR/bin/oc-cmux-panel.sh"
+  WORKDIR="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["workdir"])' "$MANIFEST")"
+  SURF="$("$PANEL" open "$WORKDIR")" || exit $?
+  SIG="done-$SURF"
+  "$PANEL" run "$SURF" "node '$PLUGIN_DIR/bin/oc-workflow-tui.js' --manifest '$MANIFEST' --signal '$SIG'"
+  "$PANEL" wait "$SIG" "${TIMEOUT}" || true
+  echo "workflow_result: $WORKDIR/result.json"
+  echo "workflow_failures: $WORKDIR/failures.json"
+  exit 0
+fi
 
 [ -n "$OC_DIR" ] || { echo "ERROR: --dir required (x-opencode-directory header)" >&2; exit 1; }
 
