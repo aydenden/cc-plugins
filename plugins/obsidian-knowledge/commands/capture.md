@@ -1,165 +1,76 @@
 ---
-description: 대화 지식 또는 웹 페이지를 Obsidian 볼트에 저장한다
-argument-hint: <노트 제목 또는 URL>
+description: 웹 페이지 또는 대화 지식을 LLM Wiki 볼트에 ingest한다
+argument-hint: <URL 또는 노트 제목>
 ---
 
-"$ARGUMENTS"를 Obsidian 볼트에 저장해줘.
+"$ARGUMENTS"를 LLM Wiki 볼트에 ingest해줘.
 
-## 환경변수
-
-볼트 경로: `OBSIDIAN_VAULT_PATH` 환경변수에서 가져온다. 설정되지 않았으면 사용자에게 안내하고 중단.
-
-## 소스 감지
-
-인자를 분석해서 소스 유형을 판단한다:
-
-| 조건 | 유형 | 동작 |
-|------|------|------|
-| URL 형태 (`http://`, `https://`) | 웹 클리핑 | WebFetch로 본문 추출 후 노트 생성 |
-| 그 외 | 대화 지식 저장 | 현재 대화에서 핵심 내용 추출 후 노트 생성 |
-
-## 1. 웹 클리핑 (URL)
-
-1. WebFetch로 URL 본문 추출 (제목, 핵심 내용 요약 요청)
-2. 볼트 하위 폴더를 판단하여 Write로 노트 생성
-3. frontmatter에 `source: URL` 포함
-
-## 2. 대화 지식 저장 (기본)
-
-현재 대화에서 핵심 지식을 추출하여 노트를 생성한다.
-
-1. 적절한 하위 디렉토리를 판단
-2. Write 도구로 직접 파일 생성
-
-## 노트 작성 절차
-
-### A. 엔티티 타입 결정
-
-콘텐츠를 분석하여 타입을 결정한다:
-
-| 시그널 | 타입 |
-|--------|------|
-| npm/pip 패키지, 프레임워크, SDK, API | `library` |
-| 추상 아이디어, 디자인 패턴, 방법론 | `concept` |
-| A vs B 비교, 트레이드오프 분석 | `comparison` |
-| 인물, 연구자, 저자, 조직 | `person` |
-| 아티클, 논문, 책, 영상 요약 | `source-summary` |
-| 코드베이스, 프로덕트, 서비스 | `project` |
-| 일지, 회고, 세션 노트 | `journal` |
-
-### B. 템플릿 로드
-
-`Read ${CLAUDE_PLUGIN_ROOT}/templates/{type}.md` 로 해당 타입의 템플릿을 읽는다.
-템플릿의 frontmatter 필드와 섹션 구조를 따라 노트를 작성한다.
-
-### C. source_hash 생성 (URL 소스만)
-
-웹 클리핑인 경우, WebFetch로 받은 본문 첫 500자로 해시를 생성한다:
+## 볼트 경로
 
 ```bash
-echo -n "{본문_첫_500자}" | shasum -a 256 | cut -c1-8
+WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 ```
 
-대화 지식 저장인 경우 source_hash는 생략하고 `source: "Claude Code session"` 설정.
+둘 다 미설정이면 사용자에게 안내하고 중단.
 
-### D. confidence 결정
+## 0. 오리엔테이션 (wiki-schema 스킬, 필수)
 
-| 소스 | confidence |
-|------|------------|
-| 공식 문서, 1차 소스 | `high` |
-| 블로그, 2차 소스 | `medium` |
-| 포럼, LLM 생성, 미검증 | `low` |
+이 세션에서 아직 안 했다면: `SCHEMA.md` Read → `index.md`에서 주제 키워드 Grep → `tail -40 log.md`. 스키마 규칙(타입, frontmatter, 태그 택소노미, Page Thresholds)은 전부 SCHEMA.md를 따른다.
 
-### E. Write로 노트 작성
+## 1. 소스 캡처 (Layer 1)
 
-템플릿 구조에 맞춰 Write 도구로 파일을 생성한다.
+인자를 분석해서 소스 유형별로 처리:
 
-## 자동 정리 (저장 후 반드시 수행)
+### URL (`http://`, `https://`)
 
-### 1. 중복 검사
-Grep으로 볼트 내 유사 제목/태그 검색. 중복이면 기존 노트에 append 제안.
+1. WebFetch로 본문 추출 (제목 + 전체 내용)
+2. `raw/articles/` 에 서술적 파일명으로 저장 (예: `raw/articles/karpathy-llm-wiki-2026.md`). 논문 PDF는 `raw/papers/`.
+3. raw frontmatter 필수:
+   ```yaml
+   ---
+   source_url: <원본 URL>
+   ingested: YYYY-MM-DD
+   sha256: <frontmatter 제외 본문의 sha256>
+   ---
+   ```
+   ```bash
+   # 본문(frontmatter 닫는 --- 이후)만 해시
+   shasum -a 256 <본문 파일> 방식으로 계산
+   ```
+4. **재ingest 감지**: 같은 `source_url`이 raw/에 이미 있으면 새 sha256과 비교 — 동일하면 처리 생략 보고, 다르면 drift 플래그 후 갱신.
 
-### 2. 태그 정규화
-Grep으로 기존 태그 패턴 확인 후 일관된 태그 사용 (예: `js`와 `javascript` 혼용 방지).
+### 대화 지식 (URL이 아닌 경우)
 
-### 3. 교차참조 삽입
+현재 대화에서 핵심 지식을 추출한다. 일회성 대화는 raw/ 캡처를 생략하고 Layer 2에 직접 합성하되, frontmatter `sources:`에 `claude-code-session (YYYY-MM-DD)`를 기재한다. 원문 보존 가치가 있는 긴 내용(트러블슈팅 전문, 외부에서 붙여넣은 텍스트)은 `raw/transcripts/`에 저장 후 진행.
 
-새 노트의 제목과 상위 2-3개 태그를 추출한 뒤:
+## 2. 기존 페이지 확인
 
-1. Grep으로 볼트 내 관련 노트를 탐색 (tags/summary/본문에서 키워드 매칭)
-2. 관련 노트 **최대 5개**에 대해:
-   - 해당 노트를 Read
-   - `## 관련 노트` 섹션에 `- [[새노트제목]]` 을 **Edit으로 직접 삽입**
-   - 섹션이 없으면 파일 끝에 `## 관련 노트` 섹션을 추가
-3. 어떤 노트에 역링크를 삽입했는지 사용자에게 보고
+index.md와 Grep으로 언급된 엔티티/개념의 기존 페이지를 찾는다. **이 단계가 위키와 중복 더미를 가르는 차이다.**
 
-`_wiki/index.md`, `_wiki/log.md`, `.obsidian/` 내 파일은 교차참조 대상에서 제외.
+## 3. 위키 페이지 작성/갱신 (Layer 2)
 
-### 4. 모순 감지
+- **신규 페이지**: SCHEMA.md의 Page Thresholds 충족 시에만 (2+ 소스 등장 또는 단일 소스의 중심 주제). type별 디렉토리(entities/concepts/comparisons/queries)에 저장.
+- **기존 페이지**: 새 정보 추가, `updated` 날짜 범프. 충돌 시 SCHEMA.md Update Policy (양쪽 병기 + `contested`/`contradictions` frontmatter).
+- **frontmatter**: SCHEMA.md 형식 (`title/created/updated/type/tags/sources` + 선택 quality 필드). `sources:`에는 raw 파일 경로 또는 세션 표기.
+- **교차참조**: 페이지당 outbound `[[wikilink]]` 최소 2개. 관련 기존 페이지 최대 5개에 역링크 Edit 삽입.
+- **태그**: SCHEMA.md 택소노미만. 새 태그는 택소노미에 먼저 추가.
+- **confidence**: 공식 문서/1차 소스 다수=high, 1·2차 혼재=medium, 포럼/미검증=low. 의견성·단일 소스 주장은 medium 이하.
 
-동일 엔티티/주제에 대한 기존 노트를 Grep으로 탐색. 상충하는 정보가 있으면 새 노트 본문 상단에 삽입:
+하나의 소스가 5~15개 페이지 갱신을 일으킬 수 있다 — 이것이 정상이고 복리 효과다. 단, 기존 페이지 10개 이상을 건드리게 되면 진행 전에 범위를 사용자에게 확인.
 
-```markdown
-> [!warning] 충돌 감지
-> [[기존-노트-제목]]의 내용과 상충할 수 있음. 검토 필요.
-```
+## 4. 네비게이션 갱신
 
-### 5. index.md 갱신
+1. `index.md` — 해당 type 섹션 테이블에 `| [[노트]] | 한 줄 요약 |` 행 추가 (기존 포맷 유지), 헤더의 `Last updated`/`Total pages` 갱신
+2. `log.md` — 파일 **끝에** append:
+   ```markdown
+   ## [YYYY-MM-DD] ingest | {소스 제목}
+   - Raw: `raw/articles/{파일}.md` (또는 "raw 생략 — 대화 지식")
+   - Created/Updated: {파일 목록}
+   - 역링크: [[노트1]], [[노트2]]
+   ```
 
-1. `$OBSIDIAN_VAULT_PATH/_wiki/index.md` 를 Read (없으면 아래 형식으로 생성)
-2. 새 노트의 type에 해당하는 카테고리 섹션을 찾아 행 추가
-3. Edit으로 갱신
+## 5. 보고
 
-index.md 기본 구조:
-```markdown
----
-type: index
-date: YYYY-MM-DD
----
+생성/갱신한 모든 파일 목록과 역링크 삽입 위치를 사용자에게 보고한다.
 
-# Wiki Index
-
-> 자동 관리됨 — capture/research/lint 작업 후 갱신
-
-## Libraries
-| 노트 | 요약 |
-|------|------|
-
-## Concepts
-| 노트 | 요약 |
-|------|------|
-
-## Comparisons
-| 노트 | 요약 |
-|------|------|
-
-## Persons
-| 노트 | 요약 |
-|------|------|
-
-## Source Summaries
-| 노트 | 요약 |
-|------|------|
-
-## Projects
-| 노트 | 요약 |
-|------|------|
-
-## Journals
-| 노트 | 요약 |
-|------|------|
-```
-
-### 6. log.md append
-
-`$OBSIDIAN_VAULT_PATH/_wiki/log.md` 상단에 엔트리를 추가한다 (없으면 생성):
-
-```markdown
-## [YYYY-MM-DD] capture | {노트 제목}
-- 파일: `{하위폴더/파일명.md}`
-- 타입: {entity_type}
-- source_hash: {hash 또는 "없음"}
-- 백링크 삽입: [[노트1]], [[노트2]]
-```
-
-노트 제목: $ARGUMENTS
+인자: $ARGUMENTS

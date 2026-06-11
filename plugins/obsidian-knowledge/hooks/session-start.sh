@@ -1,19 +1,26 @@
 #!/usr/bin/env bash
-# session-start.sh — verify Obsidian vault path.
-# Never blocks session start; emits one-line stderr notice if vault missing.
+# session-start.sh — verify LLM Wiki vault path and structure.
+# Never blocks session start; emits one-line stderr notices only.
 set -uo pipefail
 
-if [ -z "${OBSIDIAN_VAULT_PATH:-}" ]; then
-  echo "[obsidian-knowledge] OBSIDIAN_VAULT_PATH not set — research/capture/lint will fail. Set it in your shell." >&2
+WIKI="${WIKI_PATH:-${OBSIDIAN_VAULT_PATH:-}}"
+
+if [ -z "$WIKI" ]; then
+  echo "[obsidian-knowledge] Neither WIKI_PATH nor OBSIDIAN_VAULT_PATH is set — capture/recall/research/lint will fail. Set WIKI_PATH in your shell." >&2
   exit 0
 fi
 
-if [ ! -d "$OBSIDIAN_VAULT_PATH" ]; then
-  echo "[obsidian-knowledge] OBSIDIAN_VAULT_PATH=$OBSIDIAN_VAULT_PATH does not exist." >&2
+if [ ! -d "$WIKI" ]; then
+  echo "[obsidian-knowledge] Wiki path $WIKI does not exist." >&2
   exit 0
 fi
 
-# cc-opencode-cmux 위임은 research-agent가 호출 시점에 Skill(cc-opencode-cmux:delegate-oc)
-# 로 자동 처리한다. 별도 daemon 사전 감지/안내는 하지 않는다.
+if [ ! -f "$WIKI/SCHEMA.md" ]; then
+  echo "[obsidian-knowledge] $WIKI has no SCHEMA.md — vault is not initialized as an LLM Wiki. Schema rules (SSoT) cannot be applied." >&2
+  exit 0
+fi
+
+# cc-opencode-cmux delegation is handled by research-agent via
+# Skill(cc-opencode-cmux:delegate-oc) at call time. No daemon pre-check here.
 
 exit 0
