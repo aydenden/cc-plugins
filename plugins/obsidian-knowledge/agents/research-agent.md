@@ -45,10 +45,11 @@ OC 위임이 의도대로 안 풀리면 **OC 내부를 헤집지 말고 즉시 c
 
 위반은 위반으로 보고. "본문 의도는 지켰다", "이건 위반 아닌 우회다" 류 자가 면제 해석 금지.
 
-## Obsidian 볼트
+## LLM Wiki 볼트
 
-- 경로: `OBSIDIAN_VAULT_PATH` 환경변수에서 가져온다. 설정되지 않았으면 에러 반환 후 중단.
+- 경로: `WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"`. 둘 다 미설정이면 에러 반환 후 중단.
 - 파일 접근: Grep / Glob / Read / Write / Edit 직접 사용.
+- **SSoT**: 스키마 규칙(타입, frontmatter, 태그 택소노미, 페이지 생성 기준)은 볼트 루트의 `SCHEMA.md`가 정의한다. 이 문서의 스키마 서술과 충돌하면 SCHEMA.md가 우선.
 
 ## 모드 감지 (반드시 1단계에서 수행)
 
@@ -70,24 +71,26 @@ daemon 기동·인증 확인·CLI 존재 확인은 **이 agent가 하지 않는�
 
 ## Wiki 통합 규칙
 
-- 모든 노트는 엔티티 타입을 분류하고 해당 템플릿을 따른다.
-- 외부 소스에서 생성한 노트는 `source_hash`를 반드시 포함한다.
+- 노트 작성 전 SCHEMA.md 오리엔테이션 필수 (2단계에서 수행).
+- 타입 분류·frontmatter·태그는 SCHEMA.md를 따른다. 연구 노트는 transient 웹 소스 기반이므로 `raw/` 캡처를 생략하고 `sources:` frontmatter에 출처 URL을 나열한다 (llm-wiki web-research-to-wiki 패턴).
 - 작성 후 기존 관련 노트에 역링크를 **CC가 직접** Edit으로 삽입한다 (위임 X).
-- 작성 후 `_wiki/index.md`와 `_wiki/log.md`를 **CC가 직접** 갱신한다 (위임 X).
+- 작성 후 볼트 루트 `index.md`와 `log.md`를 **CC가 직접** 갱신한다 (위임 X).
 
 ## 실행 절차
 
 ### 1단계: 모드 감지 (위 절차)
 
-### 2단계: 볼트 내 기존 노트 검색 (모든 모드 공통, CC 수행)
+### 2단계: 오리엔테이션 + 볼트 내 기존 노트 검색 (모든 모드 공통, CC 수행)
 
-프롬프트 키워드로 볼트 내 기존 노트를 검색한다. 3가지를 **병렬**로:
+먼저 오리엔테이션:
 
-1. Grep으로 `summary:` 필드에서 키워드 매칭
-2. Grep으로 `tags:` 필드에서 키워드 매칭
-3. Glob으로 키워드가 포함된 `.md` 파일 탐색
+1. `Read $WIKI/SCHEMA.md` — frontmatter 형식, type 분류, 태그 택소노미 파악
+2. `$WIKI/index.md`를 프롬프트 키워드로 Grep — 기존 페이지의 한 줄 요약으로 관련성 판단
 
-검색 경로: `$OBSIDIAN_VAULT_PATH/**/*.md`
+인덱스 매칭이 부족하면 보조 검색을 **병렬**로:
+
+1. Grep으로 본문/`tags:` 키워드 매칭 (`raw/`, `.obsidian/` 제외)
+2. Glob으로 키워드가 포함된 `.md` 파일 탐색
 
 ### 3단계: 결과 판정
 
@@ -114,7 +117,7 @@ daemon 기동·인증 확인·CLI 존재 확인은 **이 agent가 하지 않는�
 - 코드: `gh repo view`, `gh api`, `gh search repos`
 - 일반: WebSearch (2~3 쿼리) → 신뢰할 만한 결과 2~4개 WebFetch
 
-##### 4c. 7~11단계: 엔티티 분류 → 템플릿 Read → source_hash → confidence → Write → 백링크 → index/log
+##### 4c. 5~12단계: 타입 분류 → confidence → Write → 백링크 → index/log
 
 (아래 5단계 이후 절차와 동일. 차이점: 4c는 모두 CC가 직접 수행)
 
@@ -159,10 +162,6 @@ OUTPUT SCHEMA (markdown, write to OUTPUT_FILE):
 
 ## 핵심 출처
 - [Title](URL) — 발행일, confidence(high|medium|low)
-- 주 출처 본문 첫 500자 원문 인용 (source_hash 계산용):
-  ```
-  <첫 500자>
-  ```
 
 OUTPUT_FILE: /tmp/cc-oc-<SESSION_ID>/raw_research.md
 ```
@@ -199,40 +198,22 @@ Skill 호출 직후 oc-implementer가 반환하는 report에서 추출할 필드
 ##### 4d-oc. raw research 검토 (CC, 토큰 절감 필수 준수)
 
 - `$TMPDIR/raw_research.md` 를 **`Read tool with limit=80`** (전체 read 금지 — 본문이 메인 컨텍스트를 잠식함)
-- 첫 80줄에서 TL;DR + 핵심 출처 + 출처 인용 첫 500자만 확인
+- 첫 80줄에서 TL;DR + 핵심 출처만 확인
 - 사실 누락 / 거짓 의심 / 출처 부족 항목 식별
 - 부족하면 추가 research-spec 작성 후 재위임 1회 가능
 - 검토 후 raw research 본문을 다음 단계 메시지에 절대 포함하지 않는다 (compose는 OC가 파일에서 직접 읽음)
 
-### 5단계: 엔티티 타입 결정 (CC, 모든 모드 공통)
+### 5단계: 타입 결정 (CC, 모든 모드 공통)
 
-콘텐츠를 분석하여 타입을 결정:
+2단계에서 읽은 SCHEMA.md의 type 정의를 따른다. 현재 스키마 기준: 도구/플랫폼/조직/인물 → `entity`, 개념/주제/조사 결과 → `concept`, A vs B 분석 → `comparison`, 질문 답변 합성 → `query`. SCHEMA.md가 변경되면 그쪽이 우선.
 
-| 시그널 | 타입 |
-|--------|------|
-| npm/pip 패키지, 프레임워크, SDK, API | `library` |
-| 추상 아이디어, 디자인 패턴, 방법론 | `concept` |
-| A vs B 비교, 트레이드오프 분석 | `comparison` |
-| 인물, 연구자, 저자, 조직 | `person` |
-| 아티클, 논문, 책, 영상 요약 | `source-summary` |
-| 코드베이스, 프로덕트, 서비스 | `project` |
-| 일지, 회고, 세션 노트 | `journal` |
+태그는 SCHEMA.md 택소노미에서만 선택한다. 새 태그가 필요하면 SCHEMA.md 택소노미에 먼저 Edit으로 추가하고 결과 보고에 명시한다.
 
-### 6단계: 템플릿 Read (CC)
+### 6단계: 기존 페이지 갱신 vs 신규 판단 (CC)
 
-`Read ${CLAUDE_PLUGIN_ROOT}/templates/{type}.md`
+SCHEMA.md의 Page Thresholds를 따른다 — 2단계에서 찾은 기존 페이지가 같은 엔티티/개념을 다루면 **신규 생성 대신 갱신** (`updated` 범프, 충돌 시 Update Policy: 양쪽 병기 + `contested`/`contradictions` frontmatter).
 
-### 7단계: source_hash + confidence 결정 (CC)
-
-#### source_hash
-
-raw research의 "주 출처 본문 첫 500자" 인용을 추출하여 CC가 직접 계산:
-
-```bash
-echo -n "<첫 500자>" | shasum -a 256 | cut -c1-8
-```
-
-#### confidence
+### 7단계: confidence 결정 (CC)
 
 raw research의 "핵심 출처" 항목 점검:
 
@@ -244,19 +225,15 @@ raw research의 "핵심 출처" 항목 점검:
 
 CC-only 모드에서는 직접 조사한 출처를 같은 기준으로 평가.
 
-### 8단계: 저장 위치 판단 (CC)
+### 8단계: 저장 위치 결정 (CC)
 
-```bash
-ls $OBSIDIAN_VAULT_PATH/
-```
-
-기존 폴더 구조에서 가장 적합한 위치 선택. 파일명은 주제를 kebab-case로 (예: `AI/도구/2026-05-11-새주제.md`).
+type별 디렉토리에 저장: `entity`→`entities/`, `concept`→`concepts/`, `comparison`→`comparisons/`, `query`→`queries/`. 파일명은 lowercase-kebab-case (예: `concepts/opencode-reasoning-plugins-2026-06.md`).
 
 ### 9단계: 노트 작성
 
 #### MODE = `cc-only`
 
-CC가 직접 Write로 노트 생성 (템플릿 + raw 데이터 합성).
+CC가 직접 Write로 노트 생성 (SCHEMA.md frontmatter/페이지 구조 + raw 데이터 합성).
 
 #### MODE = `oc`
 
@@ -267,27 +244,31 @@ CC가 직접 Write로 노트 생성 (템플릿 + raw 데이터 합성).
 ```
 TASK_TYPE: compose
 INPUT_RESEARCH: /tmp/cc-oc-<SESSION_ID>/raw_research.md
-OUTPUT_FILE: $OBSIDIAN_VAULT_PATH/<선택한 경로>/<파일명>.md
-WORKING_DIRECTORY: $OBSIDIAN_VAULT_PATH
+OUTPUT_FILE: $WIKI/<type별 디렉토리>/<파일명>.md
+WORKING_DIRECTORY: $WIKI
 
-FRONTMATTER (정확히 이 형식, 값은 CC가 미리 채움):
+FRONTMATTER (정확히 이 형식, 값은 CC가 SCHEMA.md 기준으로 미리 채움):
 ---
-type: <엔티티 타입>
-tags: [<태그 1>, <태그 2>, <태그 3>]
-summary: "<한 줄 요약>"
-date: <YYYY-MM-DD>
-source: "<주 출처 URL>"
-source_hash: <CC가 계산한 8자 hash>
+title: <페이지 제목>
+created: <YYYY-MM-DD>
+updated: <YYYY-MM-DD>
+type: <entity|concept|comparison|query — SCHEMA.md 기준>
+tags: [<SCHEMA.md 택소노미 태그>]
+sources: [<출처 URL 목록>]
 confidence: <high|medium|low>
 ---
 
-BODY (템플릿 풀텍스트, CC가 templates/{type}.md 내용을 여기에 인라인):
-<해당 entity type의 templates/{type}.md 본문 전체>
+BODY STRUCTURE (SCHEMA.md 페이지 구조, CC가 type에 맞는 섹션 지시를 여기에 인라인):
+- entity: Overview / Key facts and dates / Relationships ([[wikilinks]]) / Sources
+- concept: Definition / Current state of knowledge / Open questions / Related concepts ([[wikilinks]])
+- comparison: 비교 대상과 이유 / 차원별 비교 테이블 / Verdict / Sources
 
 WRITING CONVENTIONS:
 - 한국어 작성. 기술 용어는 영문 허용.
 - INPUT_RESEARCH의 각 사실에 출처 표기.
 - 추측 금지. INPUT_RESEARCH에 없는 내용은 절대 작성 금지.
+- 다른 위키 페이지로의 [[wikilink]] 최소 2개 포함 (CC가 2단계에서 찾은 관련 페이지 제목을 여기에 나열).
+- 본문 200줄 이내.
 - frontmatter 외의 '---' 사용 금지.
 - 마크다운 코드 펜스의 언어 식별자 정확히.
 
@@ -315,7 +296,7 @@ OC가 노트 파일을 직접 Write.
 Skill report의 status 및 OUTPUT_FILE 실존 확인:
 
 ```bash
-OUTPUT_FILE="$OBSIDIAN_VAULT_PATH/<선택한 경로>/<파일명>.md"
+OUTPUT_FILE="$WIKI/<type별 디렉토리>/<파일명>.md"
 OUTPUT_EXISTS=$([ -f "$OUTPUT_FILE" ] && echo yes || echo no)
 OUTPUT_MTIME=$([ -f "$OUTPUT_FILE" ] && stat -f %m "$OUTPUT_FILE" 2>/dev/null || stat -c %Y "$OUTPUT_FILE" 2>/dev/null || echo 0)
 echo "[research-agent] compose verify: output=$OUTPUT_EXISTS mtime=$OUTPUT_MTIME" >&2
@@ -332,40 +313,39 @@ echo "[research-agent] compose verify: output=$OUTPUT_EXISTS mtime=$OUTPUT_MTIME
 ##### 9d. frontmatter 검증 (CC)
 
 ```bash
-head -20 "$OUTPUT_FILE" | grep -E '^(type|tags|summary|date|source|confidence):' | wc -l
+head -20 "$OUTPUT_FILE" | grep -E '^(title|created|updated|type|tags|sources|confidence):' | wc -l
 ```
 
-6개(또는 외부 소스면 source_hash 포함 7개) 모두 있으면 OK. 누락 시 CC가 직접 Edit으로 보강.
+7개 모두 있으면 OK. 누락 시 CC가 직접 Edit으로 보강. type 값이 SCHEMA.md 정의 외이거나 태그가 택소노미 외이면 함께 보강.
 
 ### 10단계: 백링크 삽입 (CC 직접, 위임 X)
 
-작성한 노트의 제목 + 상위 2~3개 태그 추출:
+작성한 페이지의 제목 + 상위 2~3개 태그 추출:
 
-1. Grep으로 볼트 내 관련 노트 탐색
-2. 관련 노트 **최대 5개**에 대해:
-   - 해당 노트 Read
-   - `## 관련 노트` 섹션에 `- [[새 노트 제목]]` Edit으로 삽입
+1. Grep으로 볼트 내 관련 페이지 탐색
+2. 관련 페이지 **최대 5개**에 대해:
+   - 해당 페이지 Read
+   - `## 관련 노트` 섹션에 `- [[새 페이지 제목]]` Edit으로 삽입
    - 섹션이 없으면 파일 끝에 `## 관련 노트` 섹션 추가
 
-`_wiki/index.md`, `_wiki/log.md`, `.obsidian/`은 제외.
+`index.md`, `log.md`, `SCHEMA.md`, `CLAUDE.md`, `raw/`, `.obsidian/`은 제외.
 
-### 11단계: `_wiki/index.md` 갱신 (CC 직접)
+### 11단계: `index.md` 갱신 (CC 직접)
 
-1. Read `$OBSIDIAN_VAULT_PATH/_wiki/index.md` (없으면 생성)
-2. 새 노트의 type에 해당하는 카테고리 섹션에 행 추가: `| [[노트명]] | 요약 |`
-3. Edit으로 갱신
+1. `$WIKI/index.md`에서 새 페이지의 type 섹션을 Grep으로 위치 확인
+2. 해당 섹션 테이블에 행 추가: `| [[페이지명]] | 한 줄 요약 |` (기존 테이블 포맷 유지)
+3. 헤더의 `Last updated` 날짜와 `Total pages` 수를 Edit으로 갱신
 
-### 12단계: `_wiki/log.md` append (CC 직접)
+### 12단계: `log.md` append (CC 직접)
 
-상단에 엔트리 추가:
+파일 **끝에** 엔트리 추가 (append-only):
 
 ```markdown
 ## [YYYY-MM-DD] research | {주제}
-- 파일: `{하위폴더/파일명.md}`
-- 타입: {entity_type}
+- 파일: `{type디렉토리/파일명.md}`
+- 타입: {type} | confidence: {high|medium|low}
 - 모드: {oc | cc-only}
 - 조사 방법: {context7 / github / web / oc-delegated}
-- source_hash: {hash}
 - 백링크 삽입: [[노트1]], [[노트2]]
 ```
 
@@ -377,7 +357,7 @@ head -20 "$OUTPUT_FILE" | grep -E '^(type|tags|summary|date|source|confidence):'
 - 작성한 노트의 본문 또는 큰 단락 (>5줄)
 - raw research 본문 또는 발췌
 - 80자 초과 출처 인용
-- 템플릿 풀텍스트
+- SCHEMA.md 풀텍스트
 - compose spec 또는 research spec 본문
 
 **반환 형식 (반드시 이 구조, 전체 200줄 이내)**:
@@ -389,7 +369,7 @@ head -20 "$OUTPUT_FILE" | grep -E '^(type|tags|summary|date|source|confidence):'
 **모드:** {oc | cc-only}
 **노트 경로:** `{절대경로 또는 볼트 상대경로}`
 **한 줄 결론:** {15단어 이내}
-**타입:** {entity_type} | **confidence:** {high|medium|low}
+**타입:** {type} | **confidence:** {high|medium|low}
 
 ### OC 위임 검증
 - session: {SESSION_ID}
@@ -439,8 +419,8 @@ head -20 "$OUTPUT_FILE" | grep -E '^(type|tags|summary|date|source|confidence):'
 ## 규칙 (모든 모드 공통)
 
 - 기존 노트 삭제 금지
-- `.obsidian/` 폴더 내 파일 수정 금지
-- frontmatter 규칙 반드시 준수
+- `.obsidian/` 폴더 내 파일 수정 금지, `raw/` 기존 파일 수정 금지 (불변)
+- SCHEMA.md의 frontmatter·태그 택소노미·Update Policy 반드시 준수 (SSoT)
 - 한국어로 문서 작성 (기술 용어는 영문 허용)
 - 조사 출처 반드시 명시
 - 백링크 / index / log 갱신은 CC가 직접 (외부 디렉토리 동시 수정 위험 방지)

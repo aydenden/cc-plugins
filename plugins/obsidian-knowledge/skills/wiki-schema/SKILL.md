@@ -1,84 +1,75 @@
 ---
 name: wiki-schema
-description: Obsidian 볼트에 노트를 작성하거나 수정할 때 자동 적용. 엔티티 타입 분류, 출처 추적(source provenance), 교차참조 강제, 모순 감지 규칙을 적용한다. capture, research, 볼트 Write/Edit 작업 시 트리거.
+description: Obsidian 볼트(LLM Wiki)에 노트를 작성하거나 수정할 때 자동 적용. 볼트 루트의 SCHEMA.md를 SSoT로 삼아 오리엔테이션(SCHEMA→index→log)을 강제하고, frontmatter·태그 택소노미·교차참조·모순 처리·index/log 갱신 규칙을 적용한다. capture, research, 볼트 Write/Edit 작업 시 트리거.
 ---
 
-Obsidian 볼트에 노트를 쓸 때 아래 규칙을 반드시 따른다.
+볼트에 노트를 쓰기 전 반드시 이 절차를 따른다.
 
-# 규칙 1: 엔티티 타입 분류
+# 원칙: 볼트의 SCHEMA.md가 SSoT다
 
-노트 생성 전 콘텐츠를 분석하여 타입을 결정하고, 해당 템플릿을 로드한다.
+스키마 규칙(타입 분류, frontmatter 필드, 태그 택소노미, 페이지 생성 기준)은 이 스킬이 아니라 **볼트 루트의 `SCHEMA.md`에 정의**되어 있다. 이 스킬은 그 규칙을 읽고 따르도록 강제하는 래퍼다. 이 문서와 SCHEMA.md가 충돌하면 SCHEMA.md가 우선한다.
 
-| 시그널 | 타입 | 템플릿 |
-|--------|------|--------|
-| npm/pip 패키지, 프레임워크, SDK, API | `library` | `${CLAUDE_PLUGIN_ROOT}/templates/library.md` |
-| 추상 아이디어, 디자인 패턴, 방법론, 알고리즘 | `concept` | `${CLAUDE_PLUGIN_ROOT}/templates/concept.md` |
-| A vs B 비교, 트레이드오프 분석 | `comparison` | `${CLAUDE_PLUGIN_ROOT}/templates/comparison.md` |
-| 인물, 연구자, 저자, 조직 | `person` | `${CLAUDE_PLUGIN_ROOT}/templates/person.md` |
-| 아티클, 논문, 책, 영상 요약 (웹 클리핑) | `source-summary` | `${CLAUDE_PLUGIN_ROOT}/templates/source-summary.md` |
-| 코드베이스, 프로덕트, 서비스, 오픈소스 프로젝트 | `project` | `${CLAUDE_PLUGIN_ROOT}/templates/project.md` |
-| 일지, 회고, 세션 노트, 학습 기록 | `journal` | `${CLAUDE_PLUGIN_ROOT}/templates/journal.md` |
+볼트 경로 결정:
 
-**적용 방법:**
-1. 타입을 결정한다
-2. `Read ${CLAUDE_PLUGIN_ROOT}/templates/{type}.md` 로 템플릿 로드
-3. 템플릿의 frontmatter 필드와 섹션 구조를 채워서 노트를 작성
-
-# 규칙 2: 출처 추적 (Source Provenance)
-
-모든 노트의 frontmatter에 다음 필드를 포함한다:
-
-```yaml
----
-type: library | concept | comparison | person | source-summary | project | journal
-tags: [소문자-태그]
-summary: "1-2문장 핵심 요약. 검색 판단용."
-date: YYYY-MM-DD
-source: "context7 | github:org/repo | web:URL | Claude Code session | recall synthesis"
-source_hash: "sha256 앞 8자리"
-confidence: high | medium | low
----
+```bash
+WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 ```
 
-**source_hash 생성 규칙:**
-- 외부 소스(URL, 문서)에서 생성한 노트: 원본 내용 첫 500자의 sha256 앞 8자리
-  ```bash
-  echo -n "{원본_첫_500자}" | shasum -a 256 | cut -c1-8
-  ```
-- 대화 지식(`source: "Claude Code session"`)이나 recall 합성(`source: "recall synthesis"`): source_hash 생략
+둘 다 미설정이면 사용자에게 안내하고 중단.
 
-**confidence 기준:**
-- `high`: 공식 문서, 1차 소스, 직접 검증된 정보
-- `medium`: 블로그, 2차 소스, 신뢰할 만한 커뮤니티
-- `low`: 포럼, LLM 생성, 미검증 정보
+# 규칙 1: 오리엔테이션 (세션당 1회, 볼트 쓰기 전 필수)
 
-# 규칙 3: 교차참조 강제
+① `Read $WIKI/SCHEMA.md` — 도메인, 컨벤션, frontmatter 정의, 태그 택소노미, 페이지 생성 기준(Page Thresholds), Update Policy를 파악한다.
+② `$WIKI/index.md` — 헤더(Total pages, 섹션 구성)를 확인하고, 작업 주제 키워드로 Grep하여 관련 기존 페이지를 식별한다. 인덱스가 작으면(50항목 미만) 전체 Read 가능.
+③ `Bash: tail -40 "$WIKI/log.md"` — 최근 활동을 파악해 중복 작업을 방지한다.
 
-노트를 Write로 작성한 **후** 반드시 수행:
+오리엔테이션 없이 쓰기 시작하면 중복 페이지 생성, 교차참조 누락, 스키마 위반이 발생한다.
 
-1. 새 노트의 제목과 상위 2-3개 태그를 추출
-2. Grep으로 볼트 내 관련 노트를 탐색 (tags/summary/본문에서 키워드 매칭)
-3. 관련 노트 **최대 5개**에 대해:
-   - 해당 노트를 Read
-   - `## 관련 노트` 섹션에 `- [[새노트제목]]` 을 Edit으로 직접 삽입
-   - 섹션이 없으면 파일 끝에 `## 관련 노트` 섹션을 추가
-4. 어떤 노트에 역링크를 삽입했는지 보고
+# 규칙 2: 레이어 구분
 
-**주의:** `_wiki/index.md`, `_wiki/log.md`, `.obsidian/` 내 파일은 교차참조 대상에서 제외.
+| 레이어 | 경로 | 쓰기 권한 |
+|--------|------|-----------|
+| Raw Sources | `raw/` (articles/papers/transcripts 등) | 추가만 가능. **기존 파일 수정 절대 금지** |
+| Wiki | `entities/` `concepts/` `comparisons/` `queries/` | 생성·갱신 가능 |
+| Schema | `SCHEMA.md` | 택소노미에 새 태그 추가 시에만 Edit (사용 전에 추가) |
 
-# 규칙 4: 모순 감지
+관리 파일 `index.md` / `log.md`는 규칙 5의 절차로만 갱신한다. `.obsidian/` 수정 금지.
 
-노트를 Write로 작성하기 **전** 수행:
+# 규칙 3: 페이지 작성
 
-1. 동일 엔티티/주제에 대한 기존 노트를 Grep으로 탐색
-2. 기존 노트의 핵심 주장과 새 노트의 내용을 비교
-3. 상충하는 정보가 있으면 새 노트 본문 상단에 콜아웃 삽입:
+1. **타입 분류와 저장 위치**: SCHEMA.md의 type 정의를 따르고, type에 해당하는 디렉토리에 저장한다 (entity→`entities/`, concept→`concepts/`, comparison→`comparisons/`, query→`queries/`).
+2. **생성 기준**: SCHEMA.md의 Page Thresholds를 따른다 — 2개 이상 소스에서 등장하거나 단일 소스의 중심 주제일 때만 새 페이지. 스치는 언급은 기존 페이지에 추가하거나 생략.
+3. **frontmatter**: SCHEMA.md의 Frontmatter 섹션 형식을 그대로 사용한다 (`title/created/updated/type/tags/sources` + 선택 `confidence/contested/contradictions`). 갱신 시 `updated` 날짜를 반드시 올린다.
+4. **태그**: SCHEMA.md 택소노미에 있는 태그만 사용. 새 태그가 필요하면 SCHEMA.md 택소노미에 먼저 추가한 뒤 사용하고, 보고에 명시한다.
+5. **파일명**: lowercase-kebab-case, 공백 없음.
+6. **분량**: 200줄 초과 시 하위 주제로 분리하고 상호 링크.
+
+# 규칙 4: 교차참조
+
+- 모든 신규/갱신 페이지는 다른 페이지로 향하는 `[[wikilink]]`를 **최소 2개** 포함한다.
+- 작성 후 관련 기존 페이지 **최대 5개**에 새 페이지로의 역링크를 Edit으로 삽입하고, 어디에 삽입했는지 보고한다.
+- 제외 대상: `index.md`, `log.md`, `SCHEMA.md`, `CLAUDE.md`, `raw/`, `.obsidian/`.
+
+# 규칙 5: index.md / log.md 갱신 (쓰기 후 필수)
+
+**index.md** — 기존 포맷을 그대로 따른다 (현재 섹션별 `| [[노트]] | 요약 |` 테이블). 새 페이지를 해당 type 섹션에 한 줄 요약과 함께 추가하고, 헤더의 `Last updated` 날짜와 `Total pages` 수를 갱신한다. 기존 인덱스에 다른 포맷을 강요하지 않는다.
+
+**log.md** — 파일 **끝에 append** (append-only):
 
 ```markdown
-> [!warning] 충돌 감지
-> [[기존-노트-제목]]의 내용과 상충할 수 있음. 검토 필요.
-> - 기존: "기존 주장 요약"
-> - 신규: "새로운 주장 요약"
+## [YYYY-MM-DD] action | 제목
+- 생성/갱신한 파일 목록
 ```
 
-명백한 모순만 플래그한다. 보충/확장 관계는 모순이 아니다.
+action은 log.md 헤더에 정의된 것(ingest, update, query, lint, create, archive, delete 등)을 사용. 500항목 초과 시 `log-YYYY.md`로 회전.
+
+# 규칙 6: 모순 처리 (SCHEMA.md Update Policy)
+
+새 정보가 기존 페이지와 충돌하면:
+
+1. 날짜 확인 — 최신 소스가 일반적으로 우선
+2. 진짜 모순이면 양쪽 주장을 날짜·출처와 함께 본문에 병기
+3. frontmatter에 `contested: true`, `contradictions: [상대-페이지-slug]` 표기
+4. 사용자 검토가 필요함을 보고에 명시
+
+조용히 덮어쓰지 않는다. 보충/확장 관계는 모순이 아니다.
