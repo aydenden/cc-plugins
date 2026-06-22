@@ -1,0 +1,30 @@
+{
+  "description": "Guard CC auto memory: block oversized MEMORY.md writes (PreToolUse) and run a once-a-day stale/bloat check on topic files (SessionStart).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/index-guard.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory-check.sh",
+            "asyncRewake": true,
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
