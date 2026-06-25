@@ -4,8 +4,8 @@
 # stale/bloated/broken items it exits 2 so the result surfaces to the main
 # session as a system reminder, where the agent does the semantic judgement.
 #
-# Deterministic only (free, no LLM): broken internal links, oversized topic
-# files, oversized index, and date-based staleness. Never deletes anything.
+# Deterministic only (free, no LLM): broken internal links, oversized index,
+# and date-based staleness. Never deletes anything.
 #
 # Concurrency: a single `mkdir` of a per-project, per-day lock dir is atomic,
 # so among N sessions starting the same day exactly one runs the check.
@@ -14,7 +14,6 @@ set -euo pipefail
 # --- Limits ---
 INDEX_MAX_BYTES=24000
 INDEX_MAX_LINES=190
-TOPIC_MAX_BYTES=10240   # 10KB: report (not block) oversized topic files
 STALE_DAYS=90
 
 command -v jq >/dev/null 2>&1 || exit 0
@@ -53,6 +52,13 @@ NOW=$(date +%s)
 CAND=""
 add() { CAND="${CAND}  $1"$'\n'; }
 
+# --- Known memory name: slugs (for wikilink resolution by frontmatter slug) ---
+# Wikilinks [[name]] resolve by the target memory's frontmatter `name:` slug,
+# which differs from its filename (files carry type prefixes like project_).
+# Collect every file's first `name:` value so slug-based links are not flagged.
+NAME_SLUGS=$(grep -hm1 -E '^name:[[:space:]]*\S' "$MEMORY_DIR"/*.md 2>/dev/null \
+  | sed -E 's/^name:[[:space:]]*//; s/[[:space:]]+$//' || true)
+
 # --- Index size ---
 IDX_BYTES=$(wc -c < "$INDEX" | tr -d ' ')
 IDX_LINES=$(wc -l < "$INDEX" | tr -d ' ')
@@ -67,14 +73,6 @@ for f in "$MEMORY_DIR"/*.md; do
   [ -f "$f" ] || continue
   base=$(basename "$f")
 
-  # Oversized topic file (skip the index here; handled above).
-  if [ "$base" != "MEMORY.md" ]; then
-    fb=$(wc -c < "$f" | tr -d ' ')
-    if [ "$fb" -gt "$TOPIC_MAX_BYTES" ]; then
-      add "topic-oversized: $base ${fb}B (limit ${TOPIC_MAX_BYTES}B)"
-    fi
-  fi
-
   # Broken markdown links to .md files (internal, relative to memory dir).
   while IFS= read -r target; do
     [ -z "$target" ] && continue
@@ -84,10 +82,12 @@ for f in "$MEMORY_DIR"/*.md; do
     fi
   done < <(grep -oE '\]\([^)]*\.md\)' "$f" 2>/dev/null | sed -E 's/.*\(//; s/\)$//' || true)
 
-  # Broken wikilinks [[name]] or [[name|alias]].
+  # Broken wikilinks [[name]] or [[name|alias]]. A link resolves if it matches
+  # a file by name OR a known frontmatter `name:` slug (the documented form).
   while IFS= read -r name; do
     [ -z "$name" ] && continue
-    if [ ! -e "$MEMORY_DIR/$name.md" ] && [ ! -e "$MEMORY_DIR/$name" ]; then
+    if [ ! -e "$MEMORY_DIR/$name.md" ] && [ ! -e "$MEMORY_DIR/$name" ] \
+       && ! printf '%s\n' "$NAME_SLUGS" | grep -Fxq "$name"; then
       add "broken-wikilink: $base -> [[$name]]"
     fi
   done < <(grep -oE '\[\[[^]]+\]\]' "$f" 2>/dev/null | sed -E 's/^\[\[//; s/\]\]$//; s/\|.*$//' || true)
@@ -112,7 +112,7 @@ done
   echo "[memory-guard] Daily memory check found items needing attention in $MEMORY_DIR:"
   printf '%s' "$CAND"
   echo "Action (do NOT auto-delete):"
-  echo "  - oversized index/topic: move detail into topic files, keep index lines lean"
+  echo "  - index-oversized      : move detail into topic files, keep index lines lean"
   echo "  - broken-link/wikilink : fix the link, or remove the dead reference"
   echo "  - stale-date           : verify the underlying source; keep / update / archive"
   echo "  Archive to $MEMORY_DIR/archive/ (or mark) and confirm with the user."
