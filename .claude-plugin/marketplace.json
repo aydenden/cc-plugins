@@ -55,8 +55,8 @@
     {
       "name": "memory-guard",
       "source": "./plugins/memory-guard",
-      "description": "CC auto memory 비대·stale 방지 — MEMORY.md 인덱스를 키우는 write를 한도(24KB/190줄/항목 250자) 기준으로 차단(정리 방향은 통과)하고, 하루 1회 SessionStart 점검으로 토픽 파일의 깨진 링크·비대·노후를 결정적으로 검출해 메인 세션에 리포트(자동 삭제 없음). 프로젝트 메모리 경로 자동 인식.",
-      "version": "0.1.0"
+      "description": "CC auto memory 비대·stale 방지 — MEMORY.md 인덱스를 키우는 write를 한도(24KB/190줄/항목 250자) 기준으로 차단(정리 방향은 통과)하고, 하루 1회 SessionStart 점검으로 토픽 파일의 깨진 링크·노후를 결정적으로 검출해 메인 세션에 리포트(자동 삭제 없음). 프로젝트 메모리 경로 자동 인식.",
+      "version": "0.1.1"
     }
   ]
 }

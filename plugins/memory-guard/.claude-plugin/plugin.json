@@ -1,7 +1,7 @@
 {
   "name": "memory-guard",
-  "version": "0.1.0",
-  "description": "CC auto memory(MEMORY.md 인덱스) 비대·stale 방지 플러그인. 인덱스 write를 한도 기준으로 차단하고, 하루 1회 토픽 파일의 깨진 링크/비대/노후를 점검해 정리를 유도한다.",
+  "version": "0.1.1",
+  "description": "CC auto memory(MEMORY.md 인덱스) 비대·stale 방지 플러그인. 인덱스 write를 한도 기준으로 차단하고, 하루 1회 토픽 파일의 깨진 링크/노후를 점검해 정리를 유도한다.",
   "author": {
     "name": "nyh",
     "email": "aydenden@gmail.com"
