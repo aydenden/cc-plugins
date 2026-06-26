@@ -21,6 +21,9 @@ Thumbs.db
 .memsearch
 .beads
 
+# Node
+node_modules/
+
 # Environment
 .env
 

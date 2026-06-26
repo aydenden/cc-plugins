@@ -1,0 +1,7 @@
+{
+  "name": "cc-plugins",
+  "private": true,
+  "workspaces": [
+    "plugins/obsidian-knowledge"
+  ]
+}
