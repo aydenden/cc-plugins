@@ -1,0 +1,31 @@
+{
+  "name": "@aydenden/plugin-obsidian-knowledge",
+  "publishConfig": {
+    "access": "public"
+  },
+  "version": "0.4.0",
+  "description": "Obsidian 볼트 기반 LLM Wiki — Claude Code + OpenCode 양쪽에서 사용 가능. CC 플러그인 구조(commands/skills/agents)를 OC config 훅으로 주입.",
+  "main": "src/index.ts",
+  "files": [
+    "src/",
+    "commands/",
+    "agents/",
+    "skills/"
+  ],
+  "keywords": [
+    "opencode",
+    "claude-code",
+    "obsidian",
+    "knowledge",
+    "wiki",
+    "llm-wiki",
+    "vault"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@opencode-ai/plugin": ">=1.0.0"
+  },
+  "engines": {
+    "opencode": ">=1.0.0"
+  }
+}

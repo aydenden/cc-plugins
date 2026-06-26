@@ -1,6 +1,6 @@
 # obsidian-knowledge
 
-Obsidian 볼트를 [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 패턴으로 운영하는 Claude Code 인터페이스. 스키마 규칙은 플러그인이 아니라 **볼트 루트의 `SCHEMA.md`(SSoT)** 가 정의하며, 플러그인은 그 규칙을 읽고 따르도록 강제한다. hermes agent의 `llm-wiki` 스킬과 같은 볼트를 같은 컨벤션으로 공유한다.
+Obsidian 볼트를 [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 패턴으로 운영하는 Claude Code 및 OpenCode 인터페이스. 스키마 규칙은 플러그인이 아니라 **볼트 루트의 `SCHEMA.md`(SSoT)** 가 정의하며, 플러그인은 그 규칙을 읽고 따르도록 강제한다. hermes agent의 `llm-wiki` 스킬과 같은 볼트를 같은 컨벤션으로 공유한다.
 
 ## 아키텍처: 3계층
 
@@ -76,3 +76,66 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 ## hermes llm-wiki와의 관계
 
 hermes agent(`~/.hermes/skills/research/llm-wiki`)가 같은 볼트를 같은 SCHEMA.md로 운영한다. 이 플러그인은 그 컨벤션의 Claude Code 측 구현체다 — 어느 쪽이 쓰든 같은 위키가 자란다.
+
+## OpenCode 지원
+
+이 플러그인은 Claude Code와 OpenCode 양쪽에서 사용 가능하다. CC 플러그인 디렉토리에 `src/index.ts`와 `package.json`을 추가하여, 동일한 마크다운 파일(commands/agents/skills)을 양쪽이 공유한다.
+
+### 설치
+
+```json
+// opencode.json
+{
+  "plugin": ["@aydenden/plugin-obsidian-knowledge"]
+}
+```
+
+또는 GitHub repo에서 직접:
+
+```json
+{
+  "plugin": ["github:aydenden/cc-plugins"]
+}
+```
+
+### 작동 방식
+
+OpenCode 플러그인(`src/index.ts`)이 시작 시 CC 플러그인 디렉토리의 마크다운 파일을 읽어 OpenCode config에 주입한다:
+
+| CC 구성 | OC 변환 | 주입 방식 |
+|---|---|---|
+| `commands/*.md` | `config.command` | frontmatter `description` + 본문 `template` |
+| `agents/*.md` | `config.agent` | frontmatter `description` → OC 형식(`mode: subagent`, `permission` 변환), 본문 `prompt` |
+| `skills/` | `config.skills.paths` | 디렉토리 경로 추가 (OC가 `SKILL.md` 자동 스캔) |
+
+CC 마크다운 파일은 전혀 수정하지 않는다. 플러그인이 런타임에 읽어서 OC 형식으로 변환한다.
+
+### 디렉토리 구조
+
+```
+plugins/obsidian-knowledge/
+├── .claude-plugin/plugin.json   # CC 플러그인 메타데이터
+├── commands/                     # CC + OC 공용 (슬래시 명령어)
+├── skills/                       # CC + OC 공용 (SKILL.md)
+├── agents/                       # CC + OC 공용 (서브에이전트)
+├── hooks/                        # CC 전용 (OC는 훅 시스템이 다름)
+├── src/
+│   └── index.ts                  # OC 플러그인 진입점 (config 훅)
+└── package.json                  # OC npm 패키지 메타데이터
+```
+
+### Agent 모델 정책
+
+OpenCode에서는 CC의 `model: sonnet` 대신 OpenCode Go 모델을 사용한다:
+
+| 역할 | CC 모델 | OC 모델 |
+|---|---|---|
+| research-agent | `sonnet` | `opencode-go/deepseek-v4-pro` |
+
+`src/index.ts`의 `DEFAULT_AGENT_MODEL` 상수로 변경 가능.
+
+### 제약사항
+
+- **hooks**: CC의 `hooks/session-start.sh`는 OC에서 작동하지 않음. WIKI_PATH 검증은 OC 세션 시작 시 수동 확인 필요
+- **OC 위임 모드**: CC의 `cc-opencode-cmux:delegate-oc` Skill 위임은 OC에서 직접 조사/작성으로 대체 (OC가 저비용 모델을 직접 사용)
+- **명령어 이름**: CC는 `/obsidian-knowledge:capture`, OC는 `/capture` (플러그인 prefix 없음)
