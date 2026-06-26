@@ -20,6 +20,7 @@ permissions:
 jobs:
   detect:
     name: Detect version bumps
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       plugins: ${{ steps.detect.outputs.plugins }}
@@ -53,7 +54,7 @@ jobs:
   publish:
     name: Publish ${{ matrix.plugin }}
     needs: detect
-    if: needs.detect.outputs.plugins != '[]'
+    if: github.event_name == 'push' && needs.detect.outputs.plugins != '[]'
     strategy:
       fail-fast: false
       matrix:
