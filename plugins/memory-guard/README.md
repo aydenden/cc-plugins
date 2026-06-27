@@ -63,6 +63,65 @@ claude --plugin-dir ./plugins/memory-guard
 >
 > stale 점검(②)의 `asyncRewake`는 비교적 최신 CC hook 기능이다. 미지원 버전에서는 조용히 무시되거나 동기 실행될 수 있다(인덱스 차단 hook ①은 영향 없음). 최신 Claude Code 사용을 권장한다.
 
+## OpenCode 지원
+
+`opencode-claude-memory` 플러그인과 같은 CC auto memory 경로(`~/.claude/projects/<encoded>/memory/`)를 공유한다. OpenCode에서 `memory_save` 도구로 memory를 저장할 때 동일한 한도·점검 로직이 적용된다.
+
+### 구조 (하이브리드)
+
+```
+plugins/memory-guard/
+├── .claude-plugin/plugin.json     # CC 플러그인 메타데이터
+├── hooks/                         # CC hook (shell 스크립트)
+│   ├── hooks.json
+│   └── scripts/
+│       ├── index-guard.sh         # CC: PreToolUse → MEMORY.md write 차단
+│       └── memory-check.sh        # CC: SessionStart → 하루 1회 stale 점검
+├── package.json                   # OC 플러그인 패키지 (@aydenden/plugin-memory-guard)
+├── src/
+│   └── index.ts                   # OC Plugin 엔트리 (TypeScript)
+└── README.md
+```
+
+### OpenCode 동작 방식
+
+| CC hook | OpenCode Plugin API | 설명 |
+|---|---|---|
+| `PreToolUse` (Write\|Edit) → `index-guard.sh` | `tool.execute.before` | `memory_save` 도구 실행 전 MEMORY.md 인덱스 크기 가드 (TypeScript) |
+| `SessionStart` → `memory-check.sh` | `experimental.chat.system.transform` | 하루 1회 stale·깨진 링크 점검 (TypeScript, system prompt에 결과 주입) |
+| `${CLAUDE_PLUGIN_ROOT}` | `import.meta.dir` / `worktree` | 플러그인 루트 경로 참조 |
+
+### OpenCode 설치
+
+```bash
+npm install -g @aydenden/plugin-memory-guard
+```
+
+`opencode.json`에 추가:
+
+```jsonc
+{
+  "plugin": ["opencode-claude-memory", "@aydenden/plugin-memory-guard"]
+}
+```
+
+> `opencode-claude-memory`가 먼저 로드되어 `memory_save` 도구를 등록해야 한다. memory-guard는 이 도구의 실행을 가로채서 가드한다.
+
+### 경로 계산
+
+CC와 동일한 로직으로 memory 경로를 계산한다:
+1. `worktree` → `git rev-parse --git-common-dir` → canonical git root
+2. 경로의 `/`를 `-`로 sanitize
+3. `~/.claude/projects/<sanitized>/memory/`
+
+`CLAUDE_CONFIG_DIR` 환경변수로 CC config 디렉토리를 오버라이드할 수 있다.
+
 ## 의존성
 
+### CC
+
 `jq`, coreutils(`wc`, `grep`, `sed`, `awk`, `sort`, `date`). macOS/Linux의 `date`·`wc -m`(UTF-8) 모두 대응.
+
+### OpenCode
+
+`@opencode-ai/plugin` SDK, `git` (경로 계산용). Bun 런타임이 TypeScript를 직접 실행하므로 빌드 단계가 없다.
