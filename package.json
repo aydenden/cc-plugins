@@ -2,6 +2,7 @@
   "name": "cc-plugins",
   "private": true,
   "workspaces": [
-    "plugins/obsidian-knowledge"
+    "plugins/obsidian-knowledge",
+    "plugins/memory-guard"
   ]
 }
