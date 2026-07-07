@@ -27,7 +27,7 @@
 #   --prompt-file FILE   Read spec from FILE. If omitted, reads stdin.
 #   --session-dir DIR    Override SESSION_DIR (default auto).
 #   --title TITLE        OC session title (default cc-delegate-<unix-ts>).
-#   --timeout SEC        Wait timeout (default $CC_OC_WAIT_TIMEOUT or 900).
+#   --timeout SEC        Wait timeout (default $CC_OC_WAIT_TIMEOUT or 300).
 #
 # Stdout (always 7 lines, even on failure):
 #   status:   <done|error|aborted-perm|timeout>
@@ -64,7 +64,7 @@ OC_DIR=""
 PROMPT_FILE=""
 SESSION_DIR=""
 TITLE="cc-delegate-$(date +%s)"
-TIMEOUT="${CC_OC_WAIT_TIMEOUT:-900}"
+TIMEOUT="${CC_OC_WAIT_TIMEOUT:-300}"
 
 while [ $# -gt 0 ]; do
   case "$1" in

@@ -63,13 +63,20 @@ if [ -z "$MODEL" ] && [ -z "$AGENT" ]; then
   MODEL="${CC_OC_DEFAULT_MODEL:-opencode-go/deepseek-v4-pro}"
 fi
 
+# Tools disabled in every delegation (headless safety). Overridable via env;
+# empty string disables the restriction entirely.
+#   task/task_status/cancel_task — OC spawning subagents hangs the REST message
+#     endpoint indefinitely (sst/opencode#6573). We never want OC subagents.
+#   question — an interactive prompt that can never be answered headless → hang.
+DISABLE_TOOLS="${CC_OC_DISABLE_TOOLS-task task_status cancel_task question}"
+
 # Compose JSON body in a temp file (safe for large prompts beyond argv limits).
 BODY_FILE="$(mktemp -t oc-prompt-body.XXXXXX)"
 trap 'rm -f "$BODY_FILE"' EXIT
 
-python3 - "$PFILE" "$BODY_FILE" "$MODEL" "$VARIANT" "$AGENT" <<'PY'
+python3 - "$PFILE" "$BODY_FILE" "$MODEL" "$VARIANT" "$AGENT" "$DISABLE_TOOLS" <<'PY'
 import json, sys
-src, dst, model, variant, agent = sys.argv[1:6]
+src, dst, model, variant, agent, disable_tools = sys.argv[1:7]
 with open(src, "r", encoding="utf-8") as f:
     text = f.read()
 body = {"parts": [{"type": "text", "text": text}]}
@@ -83,6 +90,9 @@ if model:
         body["variant"] = variant
 elif agent:
     body["agent"] = agent
+names = disable_tools.split()
+if names:
+    body["tools"] = {n: False for n in names}
 with open(dst, "w", encoding="utf-8") as f:
     json.dump(body, f, ensure_ascii=False)
 PY
