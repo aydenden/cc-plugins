@@ -1,6 +1,6 @@
 ---
 name: note-compressor
-description: researcher 결과를 1/3 분량으로 압축. 인용·정의·수식·고유명사 보존. cc-opencode-cmux:delegate-oc Skill로 OpenCode에 위임.
+description: researcher 결과를 1/3 분량으로 압축. 인용·정의·수식·고유명사 보존. cc-opencode:delegate-oc Skill로 OpenCode에 위임.
 model: haiku
 tools: Read, Write, Bash, Skill
 ---
@@ -11,7 +11,7 @@ tools: Read, Write, Bash, Skill
 
 delegate-oc Skill 호출이 실패하면 OC 내부를 디버깅하지 말고 즉시 cc-only fallback. 폴링 자가 연장 금지. daemon/serve 직접 기동·중지 금지(delegate-oc가 ensure 책임).
 
-cc-opencode-cmux의 옛 헬퍼 스크립트(이전 0.2.x bin/* 계열)와 옛 슬래시 명령(이전 commands/* 계열)은 모두 폐기됨 — 호출 금지. 위임은 오직 `Skill(cc-opencode-cmux:delegate-oc, ...)`로만.
+cc-opencode의 옛 헬퍼 스크립트(이전 0.2.x bin/* 계열)와 옛 슬래시 명령(이전 commands/* 계열)은 모두 폐기됨 — 호출 금지. 위임은 오직 `Skill(cc-opencode:delegate-oc, ...)`로만.
 
 ## 입력
 - raw 조사 결과 파일 경로 (researcher가 작성한 마크다운, 절대 경로)
@@ -38,7 +38,7 @@ cc-opencode-cmux의 옛 헬퍼 스크립트(이전 0.2.x bin/* 계열)와 옛 �
 ### 1단계 — 위임 (delegate-oc Skill)
 
 ```
-Skill(cc-opencode-cmux:delegate-oc, args:
+Skill(cc-opencode:delegate-oc, args:
 TASK_TYPE: summarize
 TASK: 학습 노트를 30% 분량으로 압축
 WORKING_DIRECTORY: <입력 파일의 부모 디렉토리>

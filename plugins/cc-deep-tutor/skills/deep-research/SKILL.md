@@ -1,6 +1,6 @@
 ---
 name: deep-research
-description: 큰 학습 주제를 서브토픽으로 분해 후 병렬 리서치하여 인용 포함 보고서 작성. "리서치", "조사", "research", "정리"에 활성화. cc-opencode-cmux 설치 시 조사/압축/종합을 OpenCode에 위임(저토큰).
+description: 큰 학습 주제를 서브토픽으로 분해 후 병렬 리서치하여 인용 포함 보고서 작성. "리서치", "조사", "research", "정리"에 활성화. cc-opencode 설치 시 조사/압축/종합을 OpenCode에 위임(저토큰).
 ---
 
 # Deep Research
@@ -15,7 +15,7 @@ eval "$("$PLUGIN_ROOT/scripts/resolve-config.sh")"
 echo "[deep-research] max_parallel=$CC_DEEP_TUTOR_MAX_PARALLEL_TOPICS" >&2
 ```
 
-OC 위임은 모든 sub-agent와 compose 단계가 자체적으로 `Skill(cc-opencode-cmux:delegate-oc, ...)`을 호출해 결정한다. delegate-oc가 자체적으로 daemon ensure + 가용성 판단을 처리하므로 본 skill에서 별도 모드 감지를 하지 않는다. delegate-oc가 `status: declined / error / aborted-perm`을 반환하면 각 agent가 cc-only fallback으로 자체 처리.
+OC 위임은 모든 sub-agent와 compose 단계가 자체적으로 `Skill(cc-opencode:delegate-oc, ...)`을 호출해 결정한다. delegate-oc가 자체적으로 daemon ensure + 가용성 판단을 처리하므로 본 skill에서 별도 모드 감지를 하지 않는다. delegate-oc가 `status: declined / error / aborted-perm`을 반환하면 각 agent가 cc-only fallback으로 자체 처리.
 
 ## 워크플로우
 
@@ -26,7 +26,7 @@ OC 위임은 모든 sub-agent와 compose 단계가 자체적으로 `Skill(cc-ope
 ### 2. 조사 (병렬) — `topic-researcher` agent N개
 - 한 메시지에 여러 Agent 호출 (concurrent)
 - 동시 실행 최대 `$CC_DEEP_TUTOR_MAX_PARALLEL_TOPICS`개
-- 각 researcher는 내부에서 `Skill(cc-opencode-cmux:delegate-oc, args: <research spec>)`로 위임 — OC가 `materials/**/*.md` 글롭을 grep/glob 검색 + 웹 보충 + 본문 작성까지 전담 (CC는 자료수집 안 함)
+- 각 researcher는 내부에서 `Skill(cc-opencode:delegate-oc, args: <research spec>)`로 위임 — OC가 `materials/**/*.md` 글롭을 grep/glob 검색 + 웹 보충 + 본문 작성까지 전담 (CC는 자료수집 안 함)
 - 결과는 파일 경로로 받음 (CC 컨텍스트에 raw 본문 미진입)
 - 각 researcher 입력:
   - 서브토픽 + 부모 주제 컨텍스트
@@ -35,7 +35,7 @@ OC 위임은 모든 sub-agent와 compose 단계가 자체적으로 `Skill(cc-ope
 
 ### 3. 노트 압축 — `note-compressor` agent
 - 각 researcher 결과 파일을 30% 분량으로 압축
-- agent 내부에서 `Skill(cc-opencode-cmux:delegate-oc, args: <summarize spec>)` 호출
+- agent 내부에서 `Skill(cc-opencode:delegate-oc, args: <summarize spec>)` 호출
 - 결과는 파일 경로로 받음
 
 ### 4. 동적 확장
@@ -46,7 +46,7 @@ OC 위임은 모든 sub-agent와 compose 단계가 자체적으로 `Skill(cc-ope
 - 출력 위치 결정:
   - 사용자 명시 → 그 경로
   - 명시 없으면 `$CC_DEEP_TUTOR_MATERIALS_DIR/notes/research-<slug>-<date>.md`
-- CC orchestrator가 직접 `Skill(cc-opencode-cmux:delegate-oc, ...)`을 호출해 compose 위임:
+- CC orchestrator가 직접 `Skill(cc-opencode:delegate-oc, ...)`을 호출해 compose 위임:
   - spec에 모든 압축 노트 파일 경로 + 출력 경로 전달
   - OC가 파일들 read → 보고서 작성 → 출력 파일에 Write
   - **CC는 raw/압축본 본문을 컨텍스트에 받지 않음** (토큰 절감 핵심)
@@ -59,7 +59,7 @@ OC 위임은 모든 sub-agent와 compose 단계가 자체적으로 `Skill(cc-ope
 ## Compose 위임 패턴 (CC orchestrator)
 
 ```
-Skill(cc-opencode-cmux:delegate-oc, args:
+Skill(cc-opencode:delegate-oc, args:
 TASK_TYPE: compose
 TASK: <ARGUMENTS> 종합 리서치 보고서 작성
 WORKING_DIRECTORY: $CC_DEEP_TUTOR_MATERIALS_DIR/notes

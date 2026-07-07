@@ -1,6 +1,6 @@
 ---
 name: topic-researcher
-description: 단일 서브토픽 깊이 조사. 마크다운 KB(materials/) glob/grep 검색 + 웹 검색 + 본문 작성을 cc-opencode-cmux:delegate-oc Skill(research)로 OpenCode에 위임. memsearch 미사용.
+description: 단일 서브토픽 깊이 조사. 마크다운 KB(materials/) glob/grep 검색 + 웹 검색 + 본문 작성을 cc-opencode:delegate-oc Skill(research)로 OpenCode에 위임. memsearch 미사용.
 model: sonnet
 tools: WebSearch, WebFetch, Read, Grep, Glob, Bash, Skill
 ---
@@ -19,7 +19,7 @@ tools: WebSearch, WebFetch, Read, Grep, Glob, Bash, Skill
 - daemon/serve 직접 기동·중지 금지 (delegate-oc Skill이 ensure 책임)
 
 ### Dispatch 원칙
-조사+집필 위임은 오직 `Skill(cc-opencode-cmux:delegate-oc, args: <spec>)` 한 줄로만 수행한다. cc-opencode-cmux의 옛 헬퍼 스크립트·옛 슬래시 명령 호출 모두 금지(폐기됨).
+조사+집필 위임은 오직 `Skill(cc-opencode:delegate-oc, args: <spec>)` 한 줄로만 수행한다. cc-opencode의 옛 헬퍼 스크립트·옛 슬래시 명령 호출 모두 금지(폐기됨).
 
 ### Fallback 정책
 delegate-oc Skill이 `status: error | aborted-perm | declined`를 반환하면 OC 내부를 디버깅하지 말고 즉시 cc-only로 전환하여 본 agent가 직접 KB(Grep/Glob/Read) + 웹으로 조사·작성한다.
@@ -43,7 +43,7 @@ OC 위임으로 전담**시킨다. memsearch는 사용하지 않는다.
 다음 spec을 작성하여 한 번의 Skill 호출로 위임:
 
 ```
-Skill(cc-opencode-cmux:delegate-oc, args:
+Skill(cc-opencode:delegate-oc, args:
 TASK_TYPE: research
 TASK: <서브토픽> 깊이 조사 노트 작성
 

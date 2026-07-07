@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# oc-sse-watch.sh — SSE side-channel for cc-opencode-cmux v0.6.0+.
+# oc-sse-watch.sh — SSE side-channel for cc-opencode v0.6.0+.
 #
 #   oc-sse-watch.sh <sid> [--out NDJSON] [--done-file PATH] [--no-auto-deny]
 #

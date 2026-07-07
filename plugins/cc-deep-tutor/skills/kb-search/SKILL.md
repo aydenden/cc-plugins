@@ -46,7 +46,7 @@ OC `analyze`/`research` 프로파일은 glob/grep을 직접 수행할 수 있다
 - `INPUTS: <materials_dir>/**/*.md` (단 `_wiki/` 제외)
 - "매칭 노트의 **절대경로**를 결과에 명시할 것" (OC가 경로를 누락하지 않도록)
 
-자세한 위임 패턴은 `cc-opencode-cmux:delegate-oc` Skill을 통한다.
+자세한 위임 패턴은 `cc-opencode:delegate-oc` Skill을 통한다.
 
 ## 명령 라우팅
 

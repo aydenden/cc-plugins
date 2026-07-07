@@ -6,7 +6,7 @@ set -uo pipefail
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 emit_warn() {
-  echo "[cc-opencode-cmux] $1" >&2
+  echo "[cc-opencode] $1" >&2
 }
 
 if ! command -v opencode >/dev/null 2>&1; then
@@ -37,16 +37,8 @@ if ! command -v curl >/dev/null 2>&1; then
   emit_warn "curl not found. SSE hang detection requires curl."
 fi
 
-# Register plugin's OC agent definitions into the user's OC config (idempotent, marker-gated).
-# Without this, `opencode run --agent oc-research` falls back to default `build` agent and
-# breaks ndjson streaming → REST polling overhead.
-if [ "$AUTH_OK" = "1" ] && command -v jq >/dev/null 2>&1; then
-  if [ -x "$PLUGIN_ROOT/bin/install-agents.sh" ]; then
-    "$PLUGIN_ROOT/bin/install-agents.sh" >&2 || emit_warn "agent registration failed (non-fatal)"
-  fi
-elif [ "$AUTH_OK" = "1" ] && ! command -v jq >/dev/null 2>&1; then
-  emit_warn "jq not installed — OC agent registration skipped. Install: brew install jq"
-fi
+# Model selection is now direct (message body carries model:{providerID,modelID}),
+# so there is no OC agent registration step — delegate-oc maps TASK_TYPE → model.
 
 # Auto-start serve daemon if CC_OC_AUTOSTART=1 (otherwise delegate-oc skill ensures on demand)
 if [ "${CC_OC_AUTOSTART:-0}" = "1" ]; then

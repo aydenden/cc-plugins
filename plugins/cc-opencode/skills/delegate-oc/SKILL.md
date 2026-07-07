@@ -1,6 +1,6 @@
 ---
 name: delegate-oc
-description: Use when Claude Code (Opus orchestrator) is about to do repetitive coding work that fits the cc-opencode-cmux delegation policy — multi-file boilerplate implementation, mechanical refactors, code summarization, Korean/Chinese documentation, knowledge research, or document composition. Triggers on user requests like "구현해줘", "리팩터링", "이 파일들 요약", "한국어 문서 만들어줘", "조사해줘", or when Opus detects a task with low reasoning complexity but high token volume. **For ≥2 independent sub-tasks fired together** — triggers on "병렬로 위임", "동시에 위임", "한꺼번에", "여러 개 한 번에" — use `oc-fanout.sh` (see Parallel fan-out section). Other plugins (obsidian-knowledge, cc-deep-tutor, pm, ...) call this skill via the Skill tool to delegate their own large-output subtasks.
+description: Use when Claude Code (Opus orchestrator) is about to do repetitive coding work that fits the cc-opencode delegation policy — multi-file boilerplate implementation, mechanical refactors, code summarization, Korean/Chinese documentation, knowledge research, or document composition. Triggers on user requests like "구현해줘", "리팩터링", "이 파일들 요약", "한국어 문서 만들어줘", "조사해줘", or when Opus detects a task with low reasoning complexity but high token volume. **For ≥2 independent sub-tasks fired together** — triggers on "병렬로 위임", "동시에 위임", "한꺼번에", "여러 개 한 번에" — use `oc-fanout.sh` (see Parallel fan-out section). Other plugins (obsidian-knowledge, cc-deep-tutor, pm, ...) call this skill via the Skill tool to delegate their own large-output subtasks.
 ---
 
 # delegate-oc
@@ -25,6 +25,8 @@ One Bash invocation. Spec via heredoc; `OC_DIR` via `--dir`:
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/bin/oc-delegate.sh" --dir "$PWD" <<'EOF'
 TASK_TYPE: implement | refactor | summarize | doc | research | compose | analyze
+MODEL: <optional — opencode-go/<id> to override the TASK_TYPE default>
+VARIANT: <optional — provider reasoning effort: high | max | minimal>
 TASK: <one-line summary>
 
 FILES TO TOUCH:
@@ -41,6 +43,8 @@ ACCEPTANCE TEST:
 EOF
 ```
 
+Model is chosen by `TASK_TYPE` (override with `MODEL:`): `implement`/`research` → `deepseek-v4-pro`, `refactor`/`doc`/`compose` → `qwen3.6-plus`, `summarize` → `deepseek-v4-flash`, `analyze` → `kimi-k2.6`. Upgrade candidates for `MODEL:`: `opencode-go/glm-5.2` (quality), `opencode-go/kimi-k2.7-code` (coding).
+
 For `research` / `compose` / `analyze` task types, the spec uses extra fields (`OUTPUT_FILE`, `INPUT_RESEARCH`, scratch `--dir`, etc.) — see README's "Spec variants" section.
 
 Flags: `--prompt-file FILE`, `--session-dir DIR`, `--title TITLE`, `--timeout SEC` (default `$CC_OC_WAIT_TIMEOUT` or 900).
@@ -49,7 +53,7 @@ Flags: `--prompt-file FILE`, `--session-dir DIR`, `--title TITLE`, `--timeout SE
 
 | Code | Status | Action |
 |---|---|---|
-| 0 | `done` | Optionally `Skill(cc-opencode-cmux:oc-result-review, args: "<SESSION_DIR>")` for diff review |
+| 0 | `done` | Optionally `Skill(cc-opencode:oc-result-review, args: "<SESSION_DIR>")` for diff review |
 | 10 | `error` | `oc-daemon.sh ensure` failed — check opencode install/auth |
 | 11 | `error` | `oc-session.sh create` failed — daemon may be unhealthy |
 | 12 | `error` | HTTP POST failed — inspect `SESSION_DIR/controller.log` |
@@ -83,48 +87,12 @@ Measured scaling (read-only analyze task on local daemon, v1.15.5):
 
 Use `Bash(run_in_background: true)` for the fan-out call so Opus's turn is not held for the duration. Then `BashOutput` to collect the consolidated report when CC signals completion.
 
-## Workflow 모드 (phase 기반 대규모 위임)
-
-**선택 기준**: phase ≥ 2 또는 총 워커 ≥ 6 → `--workflow`. 그 외 단일/평면은 기존 `oc-delegate`/`oc-fanout`.
-
-**사전 준비**: A가 phase별 spec 파일 + `manifest.json` 작성.
-
-manifest 스키마:
-```json
-{
-  "workdir": "/abs/path/to/workdir",
-  "concurrency": 3,
-  "notify": "on-complete",
-  "phases": [
-    { "id": "p1", "specs": [{ "id": "s1", "task_type": "implement", "prompt_file": "/tmp/s1.md", "dir": "/abs/dir" }] }
-  ]
-}
-```
-
-**호출**:
-```bash
-"${CLAUDE_PLUGIN_ROOT}/bin/oc-delegate.sh" --workflow \
-  --manifest /tmp/manifest.json --dir "$PWD"
-```
-
-**비블로킹 권장**: `Bash(run_in_background: true)`로 호출 → 완료 통지 후 `result.json`/`failures.json` 분석.
-
-**결과**:
-- `<workdir>/result.json` — status, phase별 done/failed 집계
-- `<workdir>/failures.json` — 실패한 워커만 추출
-- 성공물: `<workdir>/phase-<id>/<spec>/` (report.txt, diff.patch 등)
-
-**제약**:
-- cmux 필수 (없으면 exit 3)
-- 실패 워커는 phase를 막지 않고 failures 에 누적
-- phase 는 배리어 — 이전 phase 전부 완료 후 다음 phase 진입
-
 ## Hard constraints
 
 - **Never Read session output files.** `SESSION_DIR/{prompt.md,sse.ndjson,diff.patch,controller.log,watch.*}` are for `oc-result-review` only. Use `grep -c` / `wc -l` / `tail -c <small>` if you absolutely must peek.
 - **Never fall back to direct execution.** OC fails → surface the report, stop. The caller decides next steps.
 - **No re-delegation loops.** Retry = a fresh explicit call with a corrected spec.
-- **No `Agent({subagent_type: "cc-opencode-cmux:oc-implementer"})`.** That entry point was removed in v0.6.0; calling it fails.
+- **No `Agent({subagent_type: "cc-opencode:oc-implementer"})`.** That entry point was removed in v0.6.0; calling it fails.
 - **Never pass `--dangerously-skip-permissions`.** The SSE watcher auto-denies; let `aborted-perm` surface so the main session can re-spec.
 
 Anything beyond this (sizing tables, knowledge-pipeline patterns, spec variants, anti-pattern checklist) lives in the plugin README. Read it once when uncertain — the skill body stays minimal so it doesn't cost tokens on every invocation.
