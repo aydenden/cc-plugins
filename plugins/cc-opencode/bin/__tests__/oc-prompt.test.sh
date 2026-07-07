@@ -42,4 +42,19 @@ b="$(body --model opencode-go/deepseek-v4-flash)"
 echo "$b" | jq -e '.parts[0].type=="text" and .parts[0].text=="hello world"' >/dev/null 2>&1 \
   && pass "prompt text preserved" || fail "parts wrong: $b"
 
+# 7) default tools restriction: headless-unsafe tools disabled (subagent spawn + interactive question)
+b="$(body --model opencode-go/deepseek-v4-flash)"
+echo "$b" | jq -e '.tools.task==false and .tools.task_status==false and .tools.cancel_task==false and .tools.question==false' >/dev/null 2>&1 \
+  && pass "default disables task/task_status/cancel_task/question" || fail "default tools restriction wrong: $b"
+
+# 8) CC_OC_DISABLE_TOOLS overrides the disabled set
+b="$(CC_OC_DISABLE_TOOLS='bash edit' body --model opencode-go/deepseek-v4-flash)"
+echo "$b" | jq -e '.tools.bash==false and .tools.edit==false and (.tools|has("task")|not)' >/dev/null 2>&1 \
+  && pass "CC_OC_DISABLE_TOOLS override" || fail "disable-tools override wrong: $b"
+
+# 9) empty CC_OC_DISABLE_TOOLS → no tools field (escape hatch)
+b="$(CC_OC_DISABLE_TOOLS='' body --model opencode-go/deepseek-v4-flash)"
+echo "$b" | jq -e 'has("tools")|not' >/dev/null 2>&1 \
+  && pass "empty CC_OC_DISABLE_TOOLS → no tools field" || fail "empty disable should omit tools: $b"
+
 [ "$FAIL" = "0" ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }
