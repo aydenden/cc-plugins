@@ -41,7 +41,10 @@ REST(`opencode serve` + curl) 기반 위임은 **hang 감지·인터랙티브 �
 ## 4. 권장 구현 — 확장성 있게
 
 ### 스택
-- **Python 공식 SDK [`agent-client-protocol`](https://pypi.org/project/agent-client-protocol/)** (asyncio + pydantic). python3는 이미 플러그인 의존성 → **새 런타임 불필요, JSON-RPC 프레이밍 직접 안 짬**. (TS 대안: [`@agentclientprotocol/sdk`](https://www.npmjs.com/package/@agentclientprotocol/sdk) — 방금 지운 workflow가 Node였던 걸 감안하면 Python이 나음)
+- **공식 SDK는 5개 언어**: Rust(레퍼런스, Zed 출신) · TypeScript(`@agentclientprotocol/sdk`, 클라이언트 검증도 최다) · Python(`agent-client-protocol`, asyncio+pydantic) · Kotlin · Java. (Go 없음) → JSON-RPC 프레이밍 직접 안 짬.
+- **권장 = Python**: python3가 이미 플러그인 의존성(oc-prompt/session 사용) → **새 런타임 0**. 단 클라이언트측 예제는 TS가 더 많음.
+- **대안 = TypeScript**: 클라이언트 구현 가장 검증됨(Zed·Gemini CLI). 단 **Node 재도입**(방금 지운 workflow가 Node라 역행).
+- **PoC 1단계에서 결정**: Python SDK의 클라이언트측 핸들러(request_permission/session_update) 성숙도가 충분하면 Python, 부족하면 TS.
 - opencode를 `opencode acp` **서브프로세스**로 띄우고 stdio JSON-RPC.
 
 ### 아키텍처 (확장 포인트 중심)
