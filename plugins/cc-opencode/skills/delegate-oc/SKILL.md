@@ -60,10 +60,12 @@ Transport is ACP (`opencode acp` over stdio, run by the bundled `dist/acp-client
 | 12 | `error` | prompt request rejected (transport/protocol) — inspect `SESSION_DIR/controller.log` |
 | 13 | `error` | agent stopped with an error reason (refusal) — `oc-result-review` for diagnostic |
 | 20 | `aborted-perm` | a permission was auto-denied — re-spec or adjust opencode permission config |
-| 30 | `timeout` | exceeded `--timeout`; turn aborted, partial diff may be salvageable |
-| 31 | `stalled` | no progress for `--stall`s — hang detected, turn cancelled, partial diff retained |
+| 30 | `timeout` | exceeded `--timeout`; turn aborted, partial diff may be salvageable — re-spec with a tighter task or larger `--timeout` |
+| 31 | `stalled` | no progress for `--stall`s — hang detected, turn cancelled, partial diff retained — inspect via `oc-result-review`, then re-spec |
 
 Stdout always carries a 7-line report (`status:` / `session:` / `oc_sid:` / `files:` / `diff:` / `done:` / `notes:`). Surface to caller verbatim — downstream parsers depend on the format.
+
+**How you (CC) learn OC status:** you get this report + exit code **once, when the turn finishes** — you do not observe live progress (`session/update` streaming stays inside `acp-client.mjs` to save your tokens). You never wait unboundedly: the stall/timeout watchdogs inside the client cancel a hung turn and return `31`/`30`, so a delegation always terminates with a definite status. For long or parallel work, run in background (`Bash(run_in_background: true)`) and poll with `BashOutput`.
 
 ## Parallel fan-out (≥2 independent sub-tasks)
 
@@ -76,25 +78,16 @@ Write each spec to a separate file, then one Bash call (run in background so Opu
   /tmp/spec-1.md /tmp/spec-2.md /tmp/spec-3.md
 ```
 
-Output: summary line (`fanout: N specs  wall=...ms  ratio=...`) + ASCII timeline + N×7-line reports concatenated with `--- [i] <SESSION_DIR> ---` separators. Exit code = max of individual delegate exit codes.
-
-Measured scaling (read-only analyze task on local daemon, v1.15.5):
-
-| N | wall (ms) | ratio | efficiency |
-|---|---|---|---|
-| 1 | 23 184 | 1.00 | 100 % |
-| 3 | 23 310 | 2.73 |  91 % |
-| 5 | 21 273 | 4.87 |  97 % |
-| 8 | 26 317 | 6.76 |  84 % |
+Output: summary line (`fanout: N specs  wall=...ms  ratio=...`) + ASCII timeline + N×7-line reports concatenated with `--- [i] <SESSION_DIR> ---` separators. Exit code = max of individual delegate exit codes. Each spec spawns its own `opencode acp` subprocess (concurrent); scaling is near-linear (measured ratio ~1.97 for N=2).
 
 Use `Bash(run_in_background: true)` for the fan-out call so Opus's turn is not held for the duration. Then `BashOutput` to collect the consolidated report when CC signals completion.
 
 ## Hard constraints
 
-- **Never Read session output files.** `SESSION_DIR/{prompt.md,sse.ndjson,diff.patch,controller.log,watch.*}` are for `oc-result-review` only. Use `grep -c` / `wc -l` / `tail -c <small>` if you absolutely must peek.
+- **Never Read session output files.** `SESSION_DIR/{prompt.md,sse.ndjson,response.json,diff.patch,controller.log,oc_sid,acp-status.json}` are for `oc-result-review` only. Use `grep -c` / `wc -l` / `tail -c <small>` if you absolutely must peek.
 - **Never fall back to direct execution.** OC fails → surface the report, stop. The caller decides next steps.
 - **No re-delegation loops.** Retry = a fresh explicit call with a corrected spec.
 - **No `Agent({subagent_type: "cc-opencode:oc-implementer"})`.** That entry point was removed in v0.6.0; calling it fails.
-- **Never pass `--dangerously-skip-permissions`.** The SSE watcher auto-denies; let `aborted-perm` surface so the main session can re-spec.
+- **Trust the exit code — don't second-guess it.** The ACP client already classified the turn (permission auto-deny → `20`, hang → `31`). Branch on the code; don't re-run to "check".
 
 Anything beyond this (sizing tables, knowledge-pipeline patterns, spec variants, anti-pattern checklist) lives in the plugin README. Read it once when uncertain — the skill body stays minimal so it doesn't cost tokens on every invocation.
