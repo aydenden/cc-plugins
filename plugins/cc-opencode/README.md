@@ -2,7 +2,7 @@
 
 Claude Code (Opus, orchestrator) → OpenCode (cheap-model implementer) 위임 플러그인.
 
-**v0.6.1 (2026-05-21)**: 단일 컨트롤러 스크립트(`bin/oc-delegate.sh`) 도입. 메인 Opus는 컨트롤러 1회 호출 + 약속된 exit code 분기만 수행하므로, 파이프라인 단계 사이 판단에 드는 토큰이 사라졌습니다. v0.6.0에서 도입한 Skill-only 진입점 + HTTP API v2 + AGENTS.md 자동 인식은 그대로 유지.
+**v0.11.0 (2026-07-08)**: transport를 REST(`opencode serve` + curl)에서 **ACP(Agent Client Protocol, stdio JSON-RPC)** 로 전환. REST가 구조적으로 불가능했던 **진행 스트리밍·hang 감지(stall watchdog)·비동기 권한 왕복**을 프로토콜 기본기능으로 확보했습니다. 컨트롤러의 무거운 일(세션·프롬프트·스트리밍·워치독)은 번들된 Node 클라이언트 `dist/acp-client.mjs`가 담당하고, `bin/oc-delegate.sh`는 셸 성격의 일(세션 디렉토리·모델 매핑·git diff·7줄 리포트)만 유지합니다. **외부 계약(7줄 리포트 + exit code, delegate-oc/oc-fanout 인터페이스)은 불변** — 의존 플러그인 무영향.
 
 ## 진입점 (총 2개, Skill 전용)
 
@@ -10,8 +10,6 @@ Claude Code (Opus, orchestrator) → OpenCode (cheap-model implementer) 위임 �
 |---|---|---|
 | **Skill** | `cc-opencode:delegate-oc` | 메인 Opus 또는 다른 플러그인이 `Skill(cc-opencode:delegate-oc, args: "<spec>")`로 호출. 사용자가 `/cc-opencode:delegate-oc <spec>` 슬래시로도 호출 가능. |
 | **Skill** | `cc-opencode:oc-result-review` | delegation 종료 후 diff 리뷰 워크플로. delegate-oc가 반환한 SESSION_DIR을 args로 전달. |
-
-v0.5.x의 `Agent({subagent_type:"cc-opencode:oc-implementer"})` 진입점은 **제거**되었습니다. 호출 시 실패합니다 — `delegate-oc` Skill을 사용하세요.
 
 ## 무엇을 하는가
 
@@ -21,76 +19,90 @@ v0.5.x의 `Agent({subagent_type:"cc-opencode:oc-implementer"})` 진입점은 **�
 "${CLAUDE_PLUGIN_ROOT}/bin/oc-delegate.sh" --dir "$PWD" <<'EOF'
 <spec body>
 EOF
-echo "$?"   # 약속된 exit code (0/10~13/20/30)
+echo "$?"   # 약속된 exit code (0 / 11~13 / 20 / 30 / 31)
 ```
 
-컨트롤러(`bin/oc-delegate.sh`) 내부에서 다음을 모두 처리:
+컨트롤러(`bin/oc-delegate.sh`) 내부에서 다음을 처리:
 
 1. `$CLAUDE_PROJECT_DIR/.claude/oc-sessions/<uuid>/` SESSION_DIR 생성 (실패 시 `/tmp` 폴백)
-2. `oc-daemon.sh ensure` (idempotent)
-3. `oc-session.sh create` — OC 세션 생성 (v1 `POST /session`)
-4. `oc-sse-watch.sh` 백그라운드 — `permission.asked` 자동 deny + `session.status: idle` 감지 시 `done` 파일 쓰고 exit
-5. `oc-prompt.sh` — **HTTP API v2 `POST /api/session/:id/prompt`** (헤더 `x-opencode-directory`로 디렉토리 지정). 메시지 큐잉 후 즉시 리턴.
-6. `wait $WATCH_PID` — `--timeout`(기본 900s) 가드 포함
-7. `git diff` 캡처 + `grep -c`로 카운트
-8. 상태 분류 후 7줄 리포트 stdout으로 출력 + 약속된 exit code로 종료
+2. spec을 `prompt.md`로 통합
+3. `TASK_TYPE`(+ 스펙의 `MODEL:`/`VARIANT:` override) → opencode 모델 id 매핑
+4. `node dist/acp-client.mjs …` 1회 실행 — **ACP 턴 전체를 담당하고 exit code를 소유**
+5. `git diff` 스냅샷 + `grep -c` 카운트 (SESSION_DIR 출력 파일은 절대 Read 안 함)
+6. 7줄 리포트 stdout 출력 + 클라이언트 exit code 전파
 
-메인 Opus 컨텍스트로 들어오는 것은 **7줄 리포트 + exit code 1개**뿐. 단계별 raw 출력, NDJSON, OC 텍스트 델타는 전혀 들어오지 않음. 사후 검토는 `oc-result-review` Skill에서 의도적으로 수행.
+`dist/acp-client.mjs` 내부(ACP 클라이언트):
+
+- `opencode acp --cwd D` **서브프로세스** spawn → stdio를 JSON-RPC Stream으로 래핑
+- `initialize` 핸드셰이크 → `session/new(cwd)` → `session/set_model {modelId, variant}` → `session/prompt`
+- **3개 확장점 핸들러**:
+  - `session/update` 스트림 → 진행 sink(`sse.ndjson` 기록) + **stall watchdog**(update마다 타이머 리셋; N초 무응답 → `session/cancel`)
+  - `session/request_permission` → 권한 정책(현재: auto-deny → `aborted-perm`)
+  - 인터랙티브 질문(elicitation)은 뒤 단계 예정 — 현재 미등록
+- turn 종료 시 stop reason을 exit code 계약으로 분류
+
+메인 Opus 컨텍스트로 들어오는 것은 **7줄 리포트 + exit code 1개**뿐. session/update 델타, OC 텍스트, 툴콜은 전혀 들어오지 않음. 사후 검토는 `oc-result-review` Skill에서 의도적으로 수행.
 
 ### Exit code 계약
 
 | Code | Status | 의미 |
 |---|---|---|
-| 0 | `done` | 정상 완료 |
-| 10 | `error` | daemon ensure 실패 |
-| 11 | `error` | 세션 생성 실패 |
-| 12 | `error` | HTTP POST 실패 |
-| 13 | `error` | OC 세션이 `session.error` 발생 |
-| 20 | `aborted-perm` | watcher가 권한 요청 auto-deny |
-| 30 | `timeout` | wait 타임아웃 (세션 abort 후 보고) |
+| 0 | `done` | 정상 완료 (`end_turn` / `max_tokens`) |
+| 11 | `error` | spawn / initialize / `session/new` 실패 |
+| 12 | `error` | prompt 요청 거부 (transport/protocol) |
+| 13 | `error` | agent가 error stop reason(`refusal`)으로 종료 |
+| 20 | `aborted-perm` | 권한 요청 auto-deny → turn 취소 |
+| 30 | `timeout` | `--timeout` 초과 (turn abort) |
+| 31 | `stalled` | stall watchdog 발동: `--stall`초간 진행 없음 (hang 감지, turn 취소) |
 
-## v0.6.1 주요 변경
+> `31 stalled`가 이번 전환의 핵심. REST에서는 "hang"과 "그냥 오래 걸림"이 시간 외엔 구분 불가였으나, ACP는 `session/update` 스트림이 끊기면 hang이 자명해집니다.
 
-- **신규**: `bin/oc-delegate.sh` 단일 컨트롤러 — 메인이 호출하는 진입점이 1개로 통합. 파이프라인 단계 사이 판단 토큰 제거.
-- **Skill 본문 축소**: 8개 step bash 절차 → 호출 한 줄 + exit code 표. 약 40% 짧아짐.
-- 호환성: 외부 호출자(`obsidian-knowledge:research-agent` 등)는 `Skill(cc-opencode:delegate-oc, args)` 인터페이스 그대로 사용 — 변경 없음.
+## 왜 ACP인가 (REST의 구조적 한계)
 
-## v0.6.0 주요 변경
-
-| 항목 | v0.5.x | v0.6.0 |
+| 문제 | REST (구) | ACP (v0.11.0) |
 |---|---|---|
-| 진입점 | Agent + Skill 둘 다 | Skill만 |
-| 서브에이전트 | `oc-implementer` (haiku) | 없음 (메인이 직접) |
-| 메시지 채널 | `opencode run --attach` CLI | HTTP API v2 (`POST /api/session/:id/prompt`) |
-| 작업 디렉토리 전달 | CLI `--dir` | HTTP 헤더 `x-opencode-directory` |
-| AGENTS.md | `templates/AGENTS.md.snippet`을 prompt에 cat prepend (hack) | OpenCode가 OC_DIR에서 자동 `findUp` 로딩 (hack 제거) |
-| 완료 신호 | `opencode run` 동기 종료 + status polling | SSE `session.status: idle` 단일 신호 |
-| 세션 디렉토리 | `/tmp/cc-oc-<uuid>` | `<project>/.claude/oc-sessions/<uuid>` (자동 gitignore) |
-| `running-after-detach` 상태 | 있음 (v1.15.x `--attach` 회피) | 없음 (HTTP API는 그런 경계 없음) |
-| `timeout` 상태 | 없음 | 추가 (기본 900s, `CC_OC_WAIT_TIMEOUT` 조정 가능) |
-| SubagentStop hook | 있음 | 없음 (서브에이전트 자체가 사라짐) |
+| 진행 가시성 / hang 감지 | `/event` SSE가 세션 생성 중 조용 → 불가 | `session/update` 스트리밍 → 무응답 N초 = hang 자명 |
+| 권한 / 질문 | 동기 POST가 호출자 블록 | notification 기반 비동기 왕복 |
+| 취소 | SIGTERM 해킹 | `session/cancel` 정식 |
+| [#6573](https://github.com/sst/opencode/issues/6573) busy 고착 | REST 전용 발생 | 다른 코드 경로 (회피) |
+| 우리 코드 | daemon·SSE watcher·sync-POST·SIGTERM (해킹 다수) | 프로토콜 기본기능 |
 
 ## 설치
 
 ```bash
-# 1) opencode CLI 설치 + 핀
+# 1) opencode CLI 설치 + 핀 (opencode acp 서브커맨드 포함)
 brew install opencode-ai/opencode/opencode
 opencode upgrade 1.15.5            # 권장 핀
 
 # 2) 인증 (OC Go / OC Zen / BYOK 중 하나)
 opencode auth login                # TUI 메뉴
 
-# 3) jq (재라우팅 hook에 필요)
+# 3) jq (서브에이전트 재라우팅 hook에 필요)
 brew install jq
 ```
 
+**런타임 의존성은 `node` 하나** — ACP 클라이언트는 단일 번들 `dist/acp-client.mjs`로 커밋되어 있어 사용자측 `npm install`이 없습니다. (개발자만 `bun`으로 재빌드 — 아래 "빌드/개발" 참조.)
+
 세션 시작 시 `hooks/session-start.sh`가:
-- opencode 설치·인증·`curl` 사전 점검 (없으면 경고, 세션은 안 막음)
-- 프로젝트의 `.claude/.gitignore`에 `oc-sessions/`가 없으면 자동 추가 (없으면 .gitignore 생성)
+- opencode 설치·인증, `node` 존재, `dist/acp-client.mjs` 존재 사전 점검 (없으면 경고, 세션은 안 막음)
+- 프로젝트의 `.claude/.gitignore`에 `oc-sessions/`가 없으면 자동 추가
 
-> 모델은 위임 시 메시지 바디에 `model:{providerID,modelID}`로 직접 지정됩니다(agent 등록 없음). `delegate-oc`가 `TASK_TYPE`→모델을 매핑하고, 스펙의 `MODEL:`로 override합니다.
+> 모델은 `session/set_model {modelId, variant}`로 직접 지정됩니다(agent 인디렉션 없음). `delegate-oc`가 `TASK_TYPE`→모델을 매핑하고 스펙 `MODEL:`로 override, `VARIANT:`로 추론 강도(low|medium|high|max)를 선택합니다.
 
-`CC_OC_AUTOSTART=1`을 설정하면 세션 시작 시 daemon도 미리 기동. 미설정 시 첫 dispatch에서 자동 ensure.
+## 빌드 / 개발
+
+ACP 클라이언트는 TypeScript(`src/acp-client.ts`)로 작성하고, 단일 JS로 번들해 커밋합니다.
+
+```bash
+cd plugins/cc-opencode
+bun install          # dev 의존성(@agentclientprotocol/sdk, 타입) 설치
+bun run build        # src/acp-client.ts → dist/acp-client.mjs (SDK 인라인, ~0.6MB)
+bun run typecheck    # tsc --noEmit
+```
+
+- `dist/acp-client.mjs`는 **런타임 아티팩트라 반드시 커밋** (전역 `~/.gitignore`가 `dist`를 무시하므로 플러그인 `.gitignore`가 강제 포함).
+- `node_modules/`는 dev 전용 — 배포 안 함.
+- 소스를 고치면 `bun run build`로 dist를 재생성 후 커밋.
 
 ## 서브에이전트 자동 재라우팅 (v0.9.0, opt-in)
 
@@ -111,20 +123,17 @@ export CC_OC_REDIRECT_SUBAGENTS=1
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
 | `CC_OC_REDIRECT_SUBAGENTS` | (없음) | `1`이면 재라우팅 활성화. 그 외/미설정 = 비활성 |
-| `CC_OC_REDIRECT_TYPES` | `general-purpose,Plan` | 재라우팅할 `subagent_type` 목록(쉼표/공백 구분). **기본값은 CC 내장 에이전트만**(모든 사용자에게 존재) — 읽기전용 `Explore`는 의도적으로 제외. 프로젝트/플러그인 고유 에이전트(`code-reviewer`, `review-agent`, `test-quality-agent` 등)는 이 변수로 환경별 추가 |
+| `CC_OC_REDIRECT_TYPES` | `general-purpose,Plan` | 재라우팅할 `subagent_type` 목록(쉼표/공백 구분). **기본값은 CC 내장 에이전트만**(모든 사용자에게 존재) — 읽기전용 `Explore`는 의도적으로 제외. 프로젝트/플러그인 고유 에이전트는 이 변수로 환경별 추가 |
 | `CC_OC_REDIRECT_MAX_DENY` | `2` | 동일 (세션·타입·description) 요청을 몇 번 deny한 뒤 포기하고 네이티브 실행을 허용할지. 무한 deny↔재시도 루프 방지 |
 
 > **한계**: `deny` 사유를 Claude가 따르지 않을 수 있습니다(순응 의존). `CC_OC_REDIRECT_MAX_DENY`회
-> 넛지 후에는 막지 않고 네이티브 실행을 허용합니다. 위임 부적합(아키텍처 판단 등)인 작업은
-> delegate-oc의 decide 게이트가 걸러 Claude가 직접 수행하도록 되돌립니다.
+> 넛지 후에는 막지 않고 네이티브 실행을 허용합니다.
 
 ## opencode 버전 핀 (필수: v1.15.5)
 
-- **v1.14.48 이하**: `/event` SSE가 `server.connected` 이후 닫힘 — `permission.asked` 같은 부수 이벤트 미수신
-- **v1.15.0**: Effect 기반 이벤트 시스템 전환 — 일부 이벤트 누락 가능
-- **v1.15.1**: `InstanceRef not provided` 회귀
-- **v1.15.2 ~ v1.15.4**: project-scoped bus 라우팅 패치 진행 중
-- **v1.15.5** (권장): SSE 구독 레이스 픽스 + `ask` tool 완료 픽스 + InstanceRef 해소 + v2 API의 `/api/session/:id/prompt`, `/wait` 안정화
+`opencode acp` 서브커맨드가 안정 동작하는 버전으로 핀합니다.
+
+- **v1.15.5** (권장): ACP protocolVersion 1, `session/set_model` 확장 지원, SSE/ask 회귀 픽스 완료.
 
 자동 업데이트 비활성:
 ```jsonc
@@ -132,12 +141,7 @@ export CC_OC_REDIRECT_SUBAGENTS=1
 { "autoupdate": false, ... }
 ```
 
-## v0.6.0이 해결한 v0.5.x 한계
-
-- ~~HTTP API의 `directory` 파라미터 무시~~ → `x-opencode-directory` 헤더로 우회 (v1.15.5 공식 지원)
-- ~~`opencode run --attach` 조기 detach (running-after-detach)~~ → CLI 자체를 안 씀
-- ~~`opencode run --attach`가 SSE로 진행상황 broadcast 안 함~~ → 더 이상 attach 안 함; SSE는 권한·완료 신호 단일 목적
-- ~~서브에이전트 mid-flight 토큰 누수 (events.ndjson Read)~~ → 서브에이전트 자체 제거
+> **권한 주의**: opencode `build` 모드는 기본적으로 파일 쓰기에 permission을 묻지 않습니다(위임엔 바람직 — OC가 실제로 파일을 생성). 즉 `aborted-perm`(20)은 흔하지 않으며, 권한 통제가 필요하면 opencode permission config로 설정하세요.
 
 ## 위임 정책 (요약)
 
@@ -179,7 +183,7 @@ OUTPUT SCHEMA:
 OUTPUT_FILE: <absolute path>
 ```
 
-`--dir`는 writable scratch (예: `/tmp/cc-oc-scratch-<id>`). OC `research` agent profile은 webfetch/websearch 권한 있음.
+`--dir`는 writable scratch (예: `/tmp/cc-oc-scratch-<id>`). OC `research` 프로필은 webfetch/websearch 권한 있음.
 
 `compose` — 주어진 research로 문서 렌더:
 
@@ -235,7 +239,18 @@ caller plugin이 도메인 지식 보유, delegate-oc는 안전하게 위임만 
 - ❌ `done` 상태에서 `oc-result-review` 건너뜀 — 작은 오류 누적
 - ❌ 동일 파일 영역에 병렬 delegation — 순차 또는 격리된 `--dir`
 - ❌ 검증 목적으로 SESSION_DIR 파일 Read — 위임 의의 무력화. `oc-result-review`에서만 의도적으로 읽기
-- ❌ 컨트롤러를 여러 Bash 호출로 쪼개기 — v0.6.1에서 단일 호출로 통합한 이유가 토큰 절감
+- ❌ 컨트롤러를 여러 Bash 호출로 쪼개기 — 단일 호출로 통합한 이유가 토큰 절감
+
+## 병렬 fan-out
+
+≥2개의 독립 spec을 동시에 발사하려면 `bin/oc-fanout.sh`가 각 spec을 `oc-delegate.sh`로 병렬 실행(각기 독립 `opencode acp` 서브프로세스):
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/bin/oc-fanout.sh" --dir "$PWD" --timeout 900 \
+  /tmp/spec-1.md /tmp/spec-2.md /tmp/spec-3.md
+```
+
+출력: 요약 라인 + ASCII 타임라인 + N×7줄 리포트(`--- [i] <SESSION_DIR> ---` 구분). exit code = 개별 delegate exit의 최댓값. `Bash(run_in_background: true)`로 호출해 Opus 턴을 붙잡지 않도록 하세요.
 
 ## 세션 디렉토리
 
@@ -244,13 +259,12 @@ caller plugin이 도메인 지식 보유, delegate-oc는 안전하게 위임만 
 | 파일 | 내용 |
 |---|---|
 | `prompt.md` | OC에 전송한 spec 본문 (verbatim) |
-| `sse.ndjson` | SSE 사이드채널의 자기 세션 이벤트만 필터링 |
-| `done` | 2줄: exit code + reason (예: `0\nsession idle`) |
+| `oc_sid` | ACP 세션 ID (`ses_…`) |
+| `sse.ndjson` | `session/update` 스트림(진행) + 합성 `permission.asked`/`session.error` 이벤트 (한 줄당 1 JSON) |
+| `response.json` | 최종 `PromptResponse` (`stopReason`, usage) |
+| `controller.log` | acp-client + delegate 진단 로그 |
+| `acp-status.json` | acp-client의 1줄 머신 요약 (`{status, exit, updates}`) |
 | `diff.patch` | 종료 시점 `git diff` 스냅샷 |
-| `oc_sid` | OpenCode 세션 ID (fork/abort용) |
-| `watch.stdout`, `watch.stderr` | SSE watcher 로그 |
-
-v0.5.x의 `events.ndjson`은 사라졌습니다 (`opencode run --attach` 의존이 제거되어 더 이상 생성되지 않음).
 
 `.claude/.gitignore`에 `oc-sessions/`가 자동 추가되므로 커밋에 안 들어갑니다. 누적되면 직접 `rm -rf .claude/oc-sessions/<old-uuid>` 정리.
 
@@ -258,31 +272,17 @@ v0.5.x의 `events.ndjson`은 사라졌습니다 (`opencode run --attach` 의존�
 
 | 변수 | 기본 | 효과 |
 |---|---|---|
-| `CC_OC_PORT` | 4096 | daemon 포트 |
-| `CC_OC_HOST` | 127.0.0.1 | daemon 호스트 |
-| `CC_OC_AUTOSTART` | 0 | 1이면 session-start에서 daemon 자동 기동 |
-| `CC_OC_PROMPT_TIMEOUT` | 30 | `oc-prompt.sh` POST timeout (초) |
-| `CC_OC_WAIT_TIMEOUT` | 900 | SSE watcher `wait` timeout (초) |
+| `CC_OC_WAIT_TIMEOUT` | 300 | 턴 전체 wall-clock 상한(초). 초과 시 `session/cancel` → `timeout`(30) |
+| `CC_OC_STALL_SECONDS` | 60 | hang 감지: `session/update` 무응답이 이 시간 초과 시 취소 → `stalled`(31) |
+| `CC_OC_ACP_LOG_LEVEL` | ERROR | `opencode acp` 로그 레벨(DEBUG/INFO/WARN/ERROR; stderr → controller.log) |
+| `CC_OC_ACP_PURE` | (미설정=on) | 기본적으로 `opencode acp --pure`로 실행 — 외부 플러그인(beads/obsidian/memory-guard 등) 로드를 건너뛰어 부팅을 ~3.9s→~1.3s로 단축. `0`으로 설정 시 플러그인 포함(느림) |
 | `CC_OC_REDIRECT_SUBAGENTS` | (없음) | 1이면 네이티브 서브에이전트 → delegate-oc 재라우팅 hook 활성화 |
 | `CC_OC_REDIRECT_TYPES` | general-purpose,Plan | 재라우팅할 subagent_type 목록(기본 CC 내장만) |
 | `CC_OC_REDIRECT_MAX_DENY` | 2 | 동일 요청 deny 한도(초과 시 네이티브 허용, 루프 방지) |
-| `OPENCODE_SERVER_PASSWORD` | (자동) | daemon ensure가 발급/저장 |
 
 ## 의존성
 
-- `opencode` CLI v1.15.5
-- `python3` (3.10+) — JSON 페이로드 합성 + URL encoding
+- `opencode` CLI **v1.15.5** (`opencode acp` 서브커맨드 필요)
+- `node` — 번들된 `dist/acp-client.mjs` 실행 (런타임 유일 의존)
 - `jq` — 서브에이전트 재라우팅 hook
-- `curl` — HTTP API 호출
-- `timeout` (선택; coreutils. macOS는 `brew install coreutils` 또는 폴백 폴링)
-
-## 마이그레이션 (v0.5.x → v0.6.0)
-
-```diff
-- Agent({ subagent_type: "cc-opencode:oc-implementer", prompt: "<spec>" })
-+ Skill(cc-opencode:delegate-oc, args: "<spec>")
-```
-
-반환 보고 형식은 거의 동일하지만 `server:` 필드가 `done:` 필드로 바뀌었고 `running-after-detach`가 사라지고 `timeout` 상태가 추가됨. 외부 플러그인(obsidian-knowledge:research-agent 등)이 이 보고를 파싱한다면 status 분기 갱신 필요.
-
-`templates/AGENTS.md.snippet` 의존이 있다면 — 더 이상 자동 prepend되지 않습니다. OpenCode가 OC_DIR에서 `AGENTS.md`를 자동 `findUp` 로딩하므로, 프로젝트 루트에 `AGENTS.md`를 두면 됩니다.
+- `bun` — **dev 전용**, `dist/acp-client.mjs` 재빌드 시에만

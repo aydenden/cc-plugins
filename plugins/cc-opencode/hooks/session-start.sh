@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# session-start.sh — verify prerequisites and optionally pre-warm opencode serve.
+# session-start.sh — verify ACP delegation prerequisites (v0.11.0+).
 # Emits user-visible warnings via stderr; never blocks session start.
+# Transport is ACP (opencode acp over stdio) run by the bundled Node client —
+# there is no REST daemon to pre-warm; `opencode acp` is spawned per delegation.
 set -uo pipefail
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
@@ -33,18 +35,13 @@ if [ "$AUTH_OK" = "0" ]; then
   emit_warn "  or set a BYOK env key: OPENROUTER_API_KEY, DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, ..."
 fi
 
-if ! command -v curl >/dev/null 2>&1; then
-  emit_warn "curl not found. SSE hang detection requires curl."
+# ACP client runtime: node runs the bundled dist/acp-client.mjs (self-contained,
+# no node_modules at runtime). Model selection is direct via session/set_model.
+if ! command -v node >/dev/null 2>&1; then
+  emit_warn "node not found. ACP delegation runs dist/acp-client.mjs with node."
 fi
-
-# Model selection is now direct (message body carries model:{providerID,modelID}),
-# so there is no OC agent registration step — delegate-oc maps TASK_TYPE → model.
-
-# Auto-start serve daemon if CC_OC_AUTOSTART=1 (otherwise delegate-oc skill ensures on demand)
-if [ "${CC_OC_AUTOSTART:-0}" = "1" ]; then
-  if [ -x "$PLUGIN_ROOT/bin/oc-daemon.sh" ]; then
-    "$PLUGIN_ROOT/bin/oc-daemon.sh" ensure >&2 || emit_warn "auto-start of opencode daemon failed"
-  fi
+if [ ! -f "$PLUGIN_ROOT/dist/acp-client.mjs" ]; then
+  emit_warn "missing dist/acp-client.mjs — run 'bun run build' in $PLUGIN_ROOT."
 fi
 
 # v0.6.0+: ensure project's .claude/.gitignore excludes oc-sessions/ so per-session

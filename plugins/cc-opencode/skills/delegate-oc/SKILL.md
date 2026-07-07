@@ -47,25 +47,27 @@ Model is chosen by `TASK_TYPE` (override with `MODEL:`): `implement`/`research` 
 
 For `research` / `compose` / `analyze` task types, the spec uses extra fields (`OUTPUT_FILE`, `INPUT_RESEARCH`, scratch `--dir`, etc.) — see README's "Spec variants" section.
 
-Flags: `--prompt-file FILE`, `--session-dir DIR`, `--title TITLE`, `--timeout SEC` (default `$CC_OC_WAIT_TIMEOUT` or 900).
+Flags: `--prompt-file FILE`, `--session-dir DIR`, `--title TITLE`, `--timeout SEC` (default `$CC_OC_WAIT_TIMEOUT` or 300), `--stall SEC` (hang detection — no progress update for SEC → cancel; default `$CC_OC_STALL_SECONDS` or 60).
 
 ## Branch on exit code
+
+Transport is ACP (`opencode acp` over stdio, run by the bundled `dist/acp-client.mjs`).
 
 | Code | Status | Action |
 |---|---|---|
 | 0 | `done` | Optionally `Skill(cc-opencode:oc-result-review, args: "<SESSION_DIR>")` for diff review |
-| 10 | `error` | `oc-daemon.sh ensure` failed — check opencode install/auth |
-| 11 | `error` | `oc-session.sh create` failed — daemon may be unhealthy |
-| 12 | `error` | HTTP POST failed — inspect `SESSION_DIR/controller.log` |
-| 13 | `error` | OC emitted `session.error` — `oc-result-review` for diagnostic |
-| 20 | `aborted-perm` | Spec implicitly asked something outside policy — re-spec or abandon |
-| 30 | `timeout` | Session already aborted; partial diff may be salvageable |
+| 11 | `error` | spawn / initialize / `session/new` failed — check opencode install/auth + `node` |
+| 12 | `error` | prompt request rejected (transport/protocol) — inspect `SESSION_DIR/controller.log` |
+| 13 | `error` | agent stopped with an error reason (refusal) — `oc-result-review` for diagnostic |
+| 20 | `aborted-perm` | a permission was auto-denied — re-spec or adjust opencode permission config |
+| 30 | `timeout` | exceeded `--timeout`; turn aborted, partial diff may be salvageable |
+| 31 | `stalled` | no progress for `--stall`s — hang detected, turn cancelled, partial diff retained |
 
 Stdout always carries a 7-line report (`status:` / `session:` / `oc_sid:` / `files:` / `diff:` / `done:` / `notes:`). Surface to caller verbatim — downstream parsers depend on the format.
 
 ## Parallel fan-out (≥2 independent sub-tasks)
 
-When the user explicitly asks for parallel delegation ("병렬로 위임", "동시에 위임", "한꺼번에") **or** there are ≥2 independent specs ready, fire them in one Bash call so the daemon receives them simultaneously. Sequential `oc-delegate.sh` calls serialize on Opus's turn boundaries (each turn waits for the previous report).
+When the user explicitly asks for parallel delegation ("병렬로 위임", "동시에 위임", "한꺼번에") **or** there are ≥2 independent specs ready, fire them in one Bash call so the `opencode acp` subprocesses run concurrently. Sequential `oc-delegate.sh` calls serialize on Opus's turn boundaries (each turn waits for the previous report).
 
 Write each spec to a separate file, then one Bash call (run in background so Opus can yield the turn):
 
