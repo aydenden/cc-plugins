@@ -286,3 +286,21 @@ caller plugin이 도메인 지식 보유, delegate-oc는 안전하게 위임만 
 - `node` — 번들된 `dist/acp-client.mjs` 실행 (런타임 유일 의존)
 - `jq` — 서브에이전트 재라우팅 hook
 - `bun` — **dev 전용**, `dist/acp-client.mjs` 재빌드 시에만
+
+## TODO (향후 조사)
+
+### 감독형 세션 모드 (supervised session) — CC의 mid-turn steering을 ACP로
+
+현재 위임은 **fire-and-forget**(위임마다 세션 spawn+exit, CC는 최종 7줄 리포트만 봄).
+CC가 네이티브 서브에이전트에 하듯 **진행 중 후속 지시**(SendMessage 류)를 OC에도 하려면
+별도 opt-in 진입점이 필요. ACP 매핑(멀티턴 맥락 유지는 실측 확인됨 2026-07-08):
+
+- **턴 경계 steering** = 같은 세션에 `session/prompt` 재호출 (맥락 유지) — SendMessage에 가장 가까움.
+- **barge-in(진행 중 전환)** = `session/cancel` → 같은 세션 재-`session/prompt`. 진행 중 턴 완료는 잃고
+  맥락만 유지. *주의: "끊지 않고 생성 도중 텍스트 주입"은 ACP 표준 프리미티브 아님.*
+- **역방향 질문(agent→CC, mid-turn)** = `session/request_permission` / `unstable_createElicitation`
+  (experimental) → CC 응답 → OC 계속.
+
+필요 조건: ① persistent 세션 lifecycle(현재 per-delegation spawn), ② 대화형 진입점
+(예: background 세션 open → `oc-send`/`oc-cancel`/`session/update` 폴링), ③ elicitation 핸들러 등록.
+트레이드오프: fire-and-forget의 토큰 절약과 상충 → `delegate-oc`는 그대로 두고 별도 모드로 추가.
