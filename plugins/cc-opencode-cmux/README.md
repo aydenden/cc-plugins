@@ -90,6 +90,32 @@ brew install jq
 
 `CC_OC_AUTOSTART=1`을 설정하면 세션 시작 시 daemon도 미리 기동. 미설정 시 첫 dispatch에서 자동 ensure.
 
+## 서브에이전트 자동 재라우팅 (v0.9.0, opt-in)
+
+`PreToolUse` hook(`hooks/redirect-subagent.sh`)이 네이티브 서브에이전트 스폰(`Agent`/`Task` 툴)을
+가로채, 무거운 서브에이전트를 OpenCode 위임으로 되돌립니다. 서브에이전트의 자체 추론 루프가
+Max 쿼터를 소모하는 것을 막고, 그 작업을 저비용 OpenCode로 옮기는 것이 목적입니다.
+
+**메커니즘**: hook은 툴 출력을 교체할 수 없으므로 스폰을 `deny`(exit 0 + JSON, 공식 권장 형식)하고,
+`permissionDecisionReason`에 "`cc-opencode-cmux:delegate-oc` 스킬로 위임하라"는 지시 + 원본 프롬프트를
+담아 되먹입니다. Claude가 이 사유를 읽고 스스로 재라우팅합니다.
+
+**opt-in** — 미설정 시 아무 동작 안 함(다른 사용자 안전):
+
+```bash
+export CC_OC_REDIRECT_SUBAGENTS=1
+```
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `CC_OC_REDIRECT_SUBAGENTS` | (없음) | `1`이면 재라우팅 활성화. 그 외/미설정 = 비활성 |
+| `CC_OC_REDIRECT_TYPES` | `general-purpose,Plan` | 재라우팅할 `subagent_type` 목록(쉼표/공백 구분). **기본값은 CC 내장 에이전트만**(모든 사용자에게 존재) — 읽기전용 `Explore`는 의도적으로 제외. 프로젝트/플러그인 고유 에이전트(`code-reviewer`, `review-agent`, `test-quality-agent` 등)는 이 변수로 환경별 추가 |
+| `CC_OC_REDIRECT_MAX_DENY` | `2` | 동일 (세션·타입·description) 요청을 몇 번 deny한 뒤 포기하고 네이티브 실행을 허용할지. 무한 deny↔재시도 루프 방지 |
+
+> **한계**: `deny` 사유를 Claude가 따르지 않을 수 있습니다(순응 의존). `CC_OC_REDIRECT_MAX_DENY`회
+> 넛지 후에는 막지 않고 네이티브 실행을 허용합니다. 위임 부적합(아키텍처 판단 등)인 작업은
+> delegate-oc의 decide 게이트가 걸러 Claude가 직접 수행하도록 되돌립니다.
+
 ## opencode 버전 핀 (필수: v1.15.5)
 
 - **v1.14.48 이하**: `/event` SSE가 `server.connected` 이후 닫힘 — `permission.asked` 같은 부수 이벤트 미수신
@@ -235,6 +261,9 @@ v0.5.x의 `events.ndjson`은 사라졌습니다 (`opencode run --attach` 의존�
 | `CC_OC_AUTOSTART` | 0 | 1이면 session-start에서 daemon 자동 기동 |
 | `CC_OC_PROMPT_TIMEOUT` | 30 | `oc-prompt.sh` POST timeout (초) |
 | `CC_OC_WAIT_TIMEOUT` | 900 | SSE watcher `wait` timeout (초) |
+| `CC_OC_REDIRECT_SUBAGENTS` | (없음) | 1이면 네이티브 서브에이전트 → delegate-oc 재라우팅 hook 활성화 |
+| `CC_OC_REDIRECT_TYPES` | general-purpose,Plan | 재라우팅할 subagent_type 목록(기본 CC 내장만) |
+| `CC_OC_REDIRECT_MAX_DENY` | 2 | 동일 요청 deny 한도(초과 시 네이티브 허용, 루프 방지) |
 | `OPENCODE_SERVER_PASSWORD` | (자동) | daemon ensure가 발급/저장 |
 
 ## 의존성
