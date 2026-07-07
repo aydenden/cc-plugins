@@ -12,23 +12,24 @@ After a delegation, decide: **accept / manual-fix / re-delegate / reject**.
 ```
 prompt.md           spec sent to OC
 diff.patch          git diff snapshot at completion
-sse.ndjson          filtered SSE events for this session (status, permission.asked, …)
-done                2 lines: exit code + reason (e.g. "0\nsession idle")
-oc_sid              OpenCode session id (for fork/abort)
-controller.log      oc-delegate.sh step log
-watch.{stdout,stderr}  SSE watcher diagnostics
+sse.ndjson          session/update stream + synthetic permission.asked / session.error events
+response.json       final PromptResponse (stopReason, token usage)
+acp-status.json     one-line client summary: {status, exit, updates}
+oc_sid              ACP session id (ses_…)
+controller.log      acp-client + oc-delegate diagnostics
 ```
 
-If the report's `status:` is `done`, expect `done` line-1 to be `0`. Anything else → diff is partial; read `done` first.
+Transport is ACP (`opencode acp` over stdio). If the report's `status:` is `done`, its `done:` field reads `0 end_turn`. Anything else → diff is partial; read `controller.log` / `response.json` first.
 
 ## Status branch (start here)
 
 | status | First move |
 |---|---|
 | `done` | Run the checklist below. |
-| `error` | `tail -c 1000 sse.ndjson` + `tail watch.stderr` — find the `session.error`. Diff is partial; keep or `git restore`. |
-| `aborted-perm` | Spec asked something outside policy (write outside OC_DIR / git push / denied tool). Re-spec with tighter scope or abandon. |
-| `timeout` | Session already aborted server-side. Inspect partial diff — if mostly done, finish manually; otherwise restore. |
+| `error` | `tail -c 1000 sse.ndjson` (find the `session.error`) + `tail controller.log`. Diff is partial; keep or `git restore`. |
+| `aborted-perm` | A permission was auto-denied (write/tool outside opencode policy). Re-spec with tighter scope, or adjust opencode permission config, or abandon. |
+| `timeout` | Watchdog cancelled the turn (`--timeout` exceeded). Inspect partial diff — if mostly done, finish manually; otherwise restore. |
+| `stalled` | Watchdog cancelled a hung turn (no progress for `--stall`s). Read `controller.log` for the last activity; inspect partial diff; re-spec (often a smaller/clearer task). |
 
 ## Checklist (after `done`)
 
@@ -65,7 +66,7 @@ DO NOT TOUCH:
 ACCEPTANCE: <test command> must pass.
 ```
 
-Pass as `args` to a fresh `Skill(cc-opencode:delegate-oc, ...)` call. Don't reuse `oc_sid` unless you want fork semantics (`oc-session.sh fork`).
+Pass as `args` to a fresh `Skill(cc-opencode:delegate-oc, ...)` call. Each delegation is a fresh ACP session — there is no session reuse; `oc_sid` is for diagnostics only.
 
 ## When invoked by another plugin
 
