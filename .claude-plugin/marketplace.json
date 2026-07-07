@@ -7,7 +7,7 @@
     {
       "name": "obsidian-knowledge",
       "source": "./plugins/obsidian-knowledge",
-      "description": "Obsidian 볼트 기반 LLM Wiki — 볼트 SCHEMA.md(SSoT)를 따르는 ingest/query/lint 연산으로 지식을 복리 축적한다. hermes llm-wiki와 같은 볼트·같은 컨벤션 공유. cc-opencode-cmux:delegate-oc skill이 가용하면 외부 조사·문서 작성을 OpenCode에 자동 위임해 CC 토큰 절감.",
+      "description": "Obsidian 볼트 기반 LLM Wiki — 볼트 SCHEMA.md(SSoT)를 따르는 ingest/query/lint 연산으로 지식을 복리 축적한다. hermes llm-wiki와 같은 볼트·같은 컨벤션 공유. cc-opencode:delegate-oc skill이 가용하면 외부 조사·문서 작성을 OpenCode에 자동 위임해 CC 토큰 절감.",
       "version": "0.4.0"
     },
     {
@@ -41,15 +41,15 @@
       "version": "0.1.1"
     },
     {
-      "name": "cc-opencode-cmux",
-      "source": "./plugins/cc-opencode-cmux",
-      "description": "CC Opus가 OpenCode(저비용)에 작업을 위임하는 Skill 전용 플러그인. Skill(cc-opencode-cmux:delegate-oc)이 단일 컨트롤러 bin/oc-delegate.sh를 1회 호출 → 컨트롤러가 daemon ensure / 세션 생성 / SSE watcher / HTTP API v2 prompt / wait / diff / 분류를 내부 처리 → 7줄 리포트 + 약속된 exit code (0=done / 10~13=error / 20=aborted-perm / 30=timeout). 메인 세션은 1회 Bash + exit code 분기만 수행. v0.7.0부터 bin/oc-fanout.sh로 N개 spec 병렬 위임 지원 (N=5까지 ~97% 효율, N=8까지 ~84%). v0.8.0부터 --workflow 모드(bin/oc-workflow-tui.js)로 phase 배리어·동시성 큐·cmux 패널 ANSI TUI 기반 워크플로 위임 지원; 위임 시 TASK_TYPE→oc-* agent 자동 매핑(무효 top-level model hang 수정). v0.9.0부터 PreToolUse hook(hooks/redirect-subagent.sh)으로 네이티브 서브에이전트(Agent/Task) 스폰을 deny+되먹임 방식으로 delegate-oc 위임으로 재라우팅(opt-in: CC_OC_REDIRECT_SUBAGENTS=1). opencode v1.15.5 핀.",
-      "version": "0.9.0"
+      "name": "cc-opencode",
+      "source": "./plugins/cc-opencode",
+      "description": "CC(Opus)가 OpenCode(저비용 모델)에 반복 작업을 위임하는 Skill 전용 플러그인. Skill(cc-opencode:delegate-oc)이 단일 컨트롤러 bin/oc-delegate.sh를 1회 호출 → daemon ensure / 세션 생성 / SSE watcher / HTTP prompt / diff / 분류를 내부 처리 → 7줄 리포트 + 약속된 exit code (0=done / 10~13=error / 20=aborted-perm / 30=timeout). 메인 세션은 1회 Bash + exit code 분기만 수행. 모델은 메시지 바디에 직접 지정(TASK_TYPE→model 매핑, spec의 MODEL:로 override, VARIANT:로 추론강도) — agent 등록 불필요. bin/oc-fanout.sh로 N개 spec 병렬 위임. PreToolUse hook(hooks/redirect-subagent.sh, opt-in: CC_OC_REDIRECT_SUBAGENTS=1)으로 네이티브 서브에이전트(Agent/Task) 스폰을 deny+되먹임으로 delegate-oc 위임에 재라우팅. opencode v1.15.5 핀.",
+      "version": "0.10.0"
     },
     {
       "name": "cc-deep-tutor",
       "source": "./plugins/cc-deep-tutor",
-      "description": "DeepTutor 메커니즘의 Claude Code 네이티브 재구현 — 마크다운 위키 KB(frontmatter scan 검색) + 분해·조사·풀이·출제·소크라테스 학습 루프. cc-opencode-cmux 설치 시 검색·조사·집필을 Skill(cc-opencode-cmux:delegate-oc)로 위임해 CC 토큰 절감.",
+      "description": "DeepTutor 메커니즘의 Claude Code 네이티브 재구현 — 마크다운 위키 KB(frontmatter scan 검색) + 분해·조사·풀이·출제·소크라테스 학습 루프. cc-opencode 설치 시 검색·조사·집필을 Skill(cc-opencode:delegate-oc)로 위임해 CC 토큰 절감.",
       "version": "0.3.0"
     },
     {

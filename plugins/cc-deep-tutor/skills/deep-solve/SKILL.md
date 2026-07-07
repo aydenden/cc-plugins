@@ -1,6 +1,6 @@
 ---
 name: deep-solve
-description: 수학·과학 문제를 계획→풀이→집필 3단계로 풀이. "문제 풀어줘", "solve", "증명해줘"에 활성화. cc-opencode-cmux 설치 시 집필을 OpenCode에 위임.
+description: 수학·과학 문제를 계획→풀이→집필 3단계로 풀이. "문제 풀어줘", "solve", "증명해줘"에 활성화. cc-opencode 설치 시 집필을 OpenCode에 위임.
 ---
 
 # Deep Solve
@@ -14,7 +14,7 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?}"
 eval "$("$PLUGIN_ROOT/scripts/resolve-config.sh")"
 ```
 
-집필(`solution-writer`) sub-agent는 내부에서 `Skill(cc-opencode-cmux:delegate-oc, ...)`로 위임한다. delegate-oc가 가용성 판단·daemon ensure를 담당하므로 본 skill은 모드 감지 없이 진행한다.
+집필(`solution-writer`) sub-agent는 내부에서 `Skill(cc-opencode:delegate-oc, ...)`로 위임한다. delegate-oc가 가용성 판단·daemon ensure를 담당하므로 본 skill은 모드 감지 없이 진행한다.
 
 ## 워크플로우
 

@@ -27,11 +27,11 @@ materials/
 1. `materials/`에 frontmatter 포함 노트 2~3개를 둔다(검색 대상).
 2. `/cc-deep-tutor:deep-research <주제>` 실행.
 3. 기대:
-   - topic-researcher가 `Skill(cc-opencode-cmux:delegate-oc, TASK_TYPE: research)`로 위임.
+   - topic-researcher가 `Skill(cc-opencode:delegate-oc, TASK_TYPE: research)`로 위임.
    - OC가 `materials/**/*.md` 글롭을 grep/glob 검색해 관련 노트를 찾고, 웹 보충 후 조사
      노트를 OUTPUT_FILE에 작성. **매칭 노트의 절대경로가 Citations에 명시**된다.
    - CC 컨텍스트에 raw 본문이 올라오지 않는다(경로만).
-   - cc-opencode-cmux 미설치 시: topic-researcher가 cc-only fallback(Grep/Glob/Read + 웹)로
+   - cc-opencode 미설치 시: topic-researcher가 cc-only fallback(Grep/Glob/Read + 웹)로
      직접 작성.
    - 참고 검증: `oc-grep-probe`(설계 실측)와 동일하게 OC가 정확한 경로 없이 글롭만으로
      검색 가능함을 이미 확인함.

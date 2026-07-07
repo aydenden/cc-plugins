@@ -43,11 +43,11 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 
 | 에이전트 | 설명 |
 |----------|------|
-| research-agent | 볼트 검색 → 외부 조사 → SCHEMA.md 준수 페이지 작성 → 역링크/index/log 갱신까지 자율 수행. cc-opencode-cmux:delegate-oc skill 가용 시 외부 조사 + 본문 작성을 OpenCode에 위임 (CC 토큰 70%+ 절감, 자동 fallback) |
+| research-agent | 볼트 검색 → 외부 조사 → SCHEMA.md 준수 페이지 작성 → 역링크/index/log 갱신까지 자율 수행. cc-opencode:delegate-oc skill 가용 시 외부 조사 + 본문 작성을 OpenCode에 위임 (CC 토큰 70%+ 절감, 자동 fallback) |
 
 ## OC 위임 모드
 
-`cc-opencode-cmux` 플러그인이 함께 설치 + 인증되어 있으면, `research`가 `Skill(cc-opencode-cmux:delegate-oc, ...)`를 통해 OpenCode에 외부 조사·문서 작성을 위임한다. daemon 기동·attach·SSE 모니터링은 모두 `cc-opencode-cmux` 쪽이 책임지므로 이 플러그인에서는 별도 사전 감지가 없다.
+`cc-opencode` 플러그인이 함께 설치 + 인증되어 있으면, `research`가 `Skill(cc-opencode:delegate-oc, ...)`를 통해 OpenCode에 외부 조사·문서 작성을 위임한다. daemon 기동·attach·SSE 모니터링은 모두 `cc-opencode` 쪽이 책임지므로 이 플러그인에서는 별도 사전 감지가 없다.
 
 | 모드 | 동작 |
 |---|---|
@@ -137,5 +137,5 @@ OpenCode에서는 CC의 `model: sonnet` 대신 OpenCode Go 모델을 사용한�
 ### 제약사항
 
 - **hooks**: CC의 `hooks/session-start.sh`는 OC에서 작동하지 않음. WIKI_PATH 검증은 OC 세션 시작 시 수동 확인 필요
-- **OC 위임 모드**: CC의 `cc-opencode-cmux:delegate-oc` Skill 위임은 OC에서 직접 조사/작성으로 대체 (OC가 저비용 모델을 직접 사용)
+- **OC 위임 모드**: CC의 `cc-opencode:delegate-oc` Skill 위임은 OC에서 직접 조사/작성으로 대체 (OC가 저비용 모델을 직접 사용)
 - **명령어 이름**: CC는 `/obsidian-knowledge:capture`, OC는 `/capture` (플러그인 prefix 없음)

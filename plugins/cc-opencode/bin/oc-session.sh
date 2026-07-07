@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # oc-session.sh — opencode session lifecycle wrapper.
-#   create [--title T] [--agent A] [--dir D] [--raw]   → prints sid (or raw json with --raw)
+#   create [--title T] [--dir D] [--raw]   → prints sid (or raw json with --raw)
 #   list [--limit N]                                    → raw json
 #   get <sid>                                           → raw json
 #   abort <sid>                                         → raw json (or empty)
@@ -51,26 +51,25 @@ print(i)
 }
 
 cmd_create() {
-  local title="cc-delegate" agent="" dir="" raw=0
+  local title="cc-delegate" dir="" raw=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --title) title="$2"; shift 2 ;;
-      --agent) agent="$2"; shift 2 ;;
       --dir)   dir="$2"; shift 2 ;;
       --raw)   raw=1; shift ;;
       *) echo "ERROR: unknown flag $1" >&2; exit 1 ;;
     esac
   done
 
-  # build json body without jq
+  # build json body without jq. No agent binding — model is selected per-message
+  # (oc-prompt.sh --model), so sessions are created model-agnostic.
   local body
   body=$(python3 -c '
 import json, sys
 d = {"title": sys.argv[1]}
-if sys.argv[2]: d["agent"] = sys.argv[2]
-if sys.argv[3]: d["directory"] = sys.argv[3]
+if sys.argv[2]: d["directory"] = sys.argv[2]
 print(json.dumps(d))
-' "$title" "$agent" "$dir")
+' "$title" "$dir")
 
   local resp
   resp=$(req POST "/session" "$body")
@@ -146,7 +145,7 @@ case "${1:-}" in
 oc-session.sh — opencode session lifecycle
 
 usage:
-  oc-session.sh create [--title T] [--agent A] [--dir D] [--raw]
+  oc-session.sh create [--title T] [--dir D] [--raw]
   oc-session.sh list [--limit N]
   oc-session.sh get <sid>
   oc-session.sh status <sid>   # prints lowercase status token ("idle", "running", ...) or "" if unparseable

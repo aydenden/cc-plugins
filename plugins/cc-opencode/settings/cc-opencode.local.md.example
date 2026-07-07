@@ -1,5 +1,5 @@
 ---
-# Copy this file to .claude/cc-opencode-cmux.local.md (project root) and adjust.
+# Copy this file to .claude/cc-opencode.local.md (project root) and adjust.
 # Values here are read as environment variables by the plugin's bin/ scripts.
 
 # Port for `opencode serve`. Default 4096.
@@ -13,7 +13,7 @@ host: 127.0.0.1
 auto_start: false
 ---
 
-# cc-opencode-cmux local settings
+# cc-opencode local settings
 
 This file is git-ignored. Use it for per-machine overrides. The plugin's `bin/`
 scripts read these as env vars: `CC_OC_PORT`, `CC_OC_HOST`, `CC_OC_AUTOSTART`.
@@ -34,8 +34,8 @@ does not unlock the other. Both end up authenticated under `OPENCODE_API_KEY` �
 opencode auth login   # menu: choose "OpenCode Go"
 ```
 
-Models reachable via `opencode-go/<id>` (see `config/opencode.json.template` for
-plugin-defined agent → model mappings):
+Models reachable via `opencode-go/<id>` (delegate-oc maps `TASK_TYPE`→model; the
+spec's `MODEL:` line overrides):
 
 - DeepSeek V4 Flash (31,650 req/5h, ctx 1M — biggest Go quota)
 - Qwen 3.5 Plus (10,200 req/5h, ctx 256K)
@@ -64,10 +64,9 @@ Bypass the OC gateway. Set whichever you have:
 - `OPENROUTER_API_KEY` — any `openrouter/...` model
 - `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`
 
-> OpenCode does not support a `fallback_models` config field. Each agent in
-> `config/opencode.json.template` lists alternative model IDs in its
-> `description` for **manual** fallback — call the delegate-oc skill with a
-> `--model <id>` hint in the spec, or override via Skill args.
+> OpenCode does not support a `fallback_models` config field. For a different
+> model, put a `MODEL: opencode-go/<id>` line in the delegate-oc spec (overrides
+> the TASK_TYPE default).
 
 ## Verifying auth
 

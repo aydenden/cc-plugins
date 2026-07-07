@@ -1,6 +1,6 @@
 ---
 name: deep-question
-description: KB 자료에서 소크라테스식 문제 출제와 후속 질문. "퀴즈", "문제 내줘", "테스트", "복습"에 활성화. cc-opencode-cmux 설치 시 출제를 OpenCode에 위임.
+description: KB 자료에서 소크라테스식 문제 출제와 후속 질문. "퀴즈", "문제 내줘", "테스트", "복습"에 활성화. cc-opencode 설치 시 출제를 OpenCode에 위임.
 ---
 
 # Deep Question
@@ -14,7 +14,7 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:?}"
 eval "$("$PLUGIN_ROOT/scripts/resolve-config.sh")"
 ```
 
-출제(`question-generator`) sub-agent는 내부에서 `Skill(cc-opencode-cmux:delegate-oc, ...)`로 위임한다. delegate-oc가 가용성 판단·daemon ensure를 담당하므로 본 skill은 모드 감지 없이 진행한다.
+출제(`question-generator`) sub-agent는 내부에서 `Skill(cc-opencode:delegate-oc, ...)`로 위임한다. delegate-oc가 가용성 판단·daemon ensure를 담당하므로 본 skill은 모드 감지 없이 진행한다.
 
 ## 워크플로우
 

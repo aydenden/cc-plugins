@@ -1,6 +1,6 @@
 ---
 name: research-agent
-description: 프롬프트를 받아 Obsidian 볼트 검색 → 외부 조사 → 문서 작성까지 자율 수행. cc-opencode-cmux:delegate-oc skill 가용 시 외부 조사·문서 작성은 OpenCode에 위임(저토큰), 미가용 시 CC 직접 수행.
+description: 프롬프트를 받아 Obsidian 볼트 검색 → 외부 조사 → 문서 작성까지 자율 수행. cc-opencode:delegate-oc skill 가용 시 외부 조사·문서 작성은 OpenCode에 위임(저토큰), 미가용 시 CC 직접 수행.
 tools: Glob, Grep, Read, Write, Edit, Bash, WebSearch, WebFetch, Skill, ToolSearch, mcp__plugin_context7-plugin_context7__resolve-library-id, mcp__plugin_context7-plugin_context7__query-docs
 model: sonnet
 color: green
@@ -21,7 +21,7 @@ You are a research agent. You receive a research prompt and autonomously search 
 - `lsof -i :4096` — 포트 점유 탐색
 - `sleep N` (N > 30) — 30초 초과 sleep 금지
 - 본문에 명시 안 된 임의의 디버깅 명령
-- `bash <어떤 cc-opencode-cmux 스크립트>` — cc-opencode-cmux 내부 스크립트 직접 호출 금지. 위임은 반드시 Skill 도구로만.
+- `bash <어떤 cc-opencode 스크립트>` — cc-opencode 내부 스크립트 직접 호출 금지. 위임은 반드시 Skill 도구로만.
 
 ### Fallback 정책 — 모호하면 cc-only로 즉시 전환
 
@@ -63,7 +63,7 @@ OC 위임이 의도대로 안 풀리면 **OC 내부를 헤집지 말고 즉시 c
 - 그 외 → MODE="oc" (Skill 호출 실패 시 cc-only로 자동 전환, 단 oc-required는 에러)
 ```
 
-daemon 기동·인증 확인·CLI 존재 확인은 **이 agent가 하지 않는다**. `cc-opencode-cmux:delegate-oc` skill이 호출 시 oc-implementer agent를 통해 daemon ensure를 책임진다. 이 agent는 단순히 Skill 호출 결과만 본다.
+daemon 기동·인증 확인·CLI 존재 확인은 **이 agent가 하지 않는다**. `cc-opencode:delegate-oc` skill이 호출 시 oc-implementer agent를 통해 daemon ensure를 책임진다. 이 agent는 단순히 Skill 호출 결과만 본다.
 
 이후 MODE 값으로 4단계 분기. CC가 보고해야 할 사항:
 - 어떤 모드로 동작했는지 (`oc`, `cc-only`, `oc→cc-only fallback`)
@@ -169,7 +169,7 @@ OUTPUT_FILE: /tmp/cc-oc-<SESSION_ID>/raw_research.md
 ##### 4b-oc. delegate-oc Skill 호출 (research)
 
 ```
-Skill(cc-opencode-cmux:delegate-oc, args: "<위 spec 본문 전체>")
+Skill(cc-opencode:delegate-oc, args: "<위 spec 본문 전체>")
 ```
 
 oc-implementer agent가 daemon ensure → opencode run --attach → 결과 캡처 → 8-line report 반환까지 책임진다. 이 agent는 결과 report만 받는다.
@@ -193,7 +193,7 @@ Skill 호출 직후 oc-implementer가 반환하는 report에서 추출할 필드
 - OC 로그/db 직접 읽기 (`cat ~/.local/share/opencode/**`)
 - OC 프로세스 강제 종료 (`kill`, `pkill`)
 - delegate-oc Skill을 같은 spec으로 즉시 2회 이상 재호출 (1회 보강은 4d-oc에서 spec을 바꾼 경우만 허용)
-- cc-opencode-cmux 내부 스크립트 직접 호출
+- cc-opencode 내부 스크립트 직접 호출
 
 ##### 4d-oc. raw research 검토 (CC, 토큰 절감 필수 준수)
 
@@ -286,7 +286,7 @@ FORBIDDEN ACTIONS:
 ##### 9b. delegate-oc Skill 호출 (compose)
 
 ```
-Skill(cc-opencode-cmux:delegate-oc, args: "<위 compose spec 본문>")
+Skill(cc-opencode:delegate-oc, args: "<위 compose spec 본문>")
 ```
 
 OC가 노트 파일을 직접 Write.

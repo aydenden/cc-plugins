@@ -4,7 +4,7 @@
 # Rationale: a native subagent (Agent/Task tool) runs its own reasoning loop on the
 # Max plan and burns quota. For mechanical/high-volume work that OpenCode can do just
 # as well, we deny the native spawn and feed Claude an instruction to use the
-# cc-opencode-cmux:delegate-oc skill instead — moving that token cost off the Max plan.
+# cc-opencode:delegate-oc skill instead — moving that token cost off the Max plan.
 #
 # Mechanism: a PreToolUse hook cannot transparently substitute a tool's output, so we
 # deny the call (exit 0 + JSON, the documented/preferred form over exit 2) and put a
@@ -74,9 +74,9 @@ echo $((cnt + 1)) > "$cnt_file" 2>/dev/null || true
 # --- deny + redirect instruction ---
 prompt="$(jq -r '.tool_input.prompt // .tool_input.description // empty' <<<"$input" 2>/dev/null)"
 reason="$(cat <<EOF
-[cc-opencode-cmux] 네이티브 서브에이전트 '${stype}'는 위임 정책상 OpenCode(저비용)로 라우팅됩니다.
+[cc-opencode] 네이티브 서브에이전트 '${stype}'는 위임 정책상 OpenCode(저비용)로 라우팅됩니다.
 
-Agent/Task 툴로 '${stype}'를 재시도하지 마세요. 대신 Skill 툴로 cc-opencode-cmux:delegate-oc 를 호출해 아래 작업을 위임하세요. delegate-oc가 TASK_TYPE→모델 매핑과 위임 적합성(decide) 게이트를 처리합니다. 위임 부적합(아키텍처 판단·모호한 요구)으로 판단되면 그때 직접 수행하세요.
+Agent/Task 툴로 '${stype}'를 재시도하지 마세요. 대신 Skill 툴로 cc-opencode:delegate-oc 를 호출해 아래 작업을 위임하세요. delegate-oc가 TASK_TYPE→모델 매핑과 위임 적합성(decide) 게이트를 처리합니다. 위임 부적합(아키텍처 판단·모호한 요구)으로 판단되면 그때 직접 수행하세요.
 
 --- 위임할 작업 명세 ---
 ${prompt}

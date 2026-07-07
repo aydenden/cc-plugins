@@ -1,0 +1,10 @@
+{
+  "name": "cc-opencode",
+  "version": "0.10.0",
+  "description": "CC(Opus)가 OpenCode(저비용 모델)에 반복 작업을 위임하는 Skill 전용 플러그인. Skill(cc-opencode:delegate-oc)이 단일 컨트롤러 bin/oc-delegate.sh를 1회 호출 → daemon ensure / 세션 생성 / SSE watcher / HTTP prompt / diff / 분류를 내부 처리 → 7줄 리포트 + 약속된 exit code (0=done / 10~13=error / 20=aborted-perm / 30=timeout). 메인 세션은 1회 Bash + exit code 분기만 수행. 모델은 메시지 바디에 직접 지정(TASK_TYPE→model 매핑, spec의 MODEL:로 override, VARIANT:로 추론강도) — agent 등록 불필요. bin/oc-fanout.sh로 N개 spec 병렬 위임. PreToolUse hook(hooks/redirect-subagent.sh, opt-in: CC_OC_REDIRECT_SUBAGENTS=1)으로 네이티브 서브에이전트(Agent/Task) 스폰을 deny+되먹임으로 delegate-oc 위임에 재라우팅. opencode v1.15.5 핀.",
+  "author": {
+    "name": "aydenden",
+    "email": "lucky72nyh@gmail.com"
+  },
+  "homepage": "https://github.com/aydenden/cc-plugins"
+}

@@ -1,6 +1,6 @@
 ---
 name: oc-result-review
-description: Use when reviewing the diff produced by a `cc-opencode-cmux:delegate-oc` Skill call, or whenever a delegate-oc report carries a SESSION_DIR path. Walks Opus through critique, hallucination detection, and decides accept / reject / re-delegate / manual-fix. This is the **only** place where the session output files may be Read for content inspection.
+description: Use when reviewing the diff produced by a `cc-opencode:delegate-oc` Skill call, or whenever a delegate-oc report carries a SESSION_DIR path. Walks Opus through critique, hallucination detection, and decides accept / reject / re-delegate / manual-fix. This is the **only** place where the session output files may be Read for content inspection.
 ---
 
 # oc-result-review
@@ -65,7 +65,7 @@ DO NOT TOUCH:
 ACCEPTANCE: <test command> must pass.
 ```
 
-Pass as `args` to a fresh `Skill(cc-opencode-cmux:delegate-oc, ...)` call. Don't reuse `oc_sid` unless you want fork semantics (`oc-session.sh fork`).
+Pass as `args` to a fresh `Skill(cc-opencode:delegate-oc, ...)` call. Don't reuse `oc_sid` unless you want fork semantics (`oc-session.sh fork`).
 
 ## When invoked by another plugin
 

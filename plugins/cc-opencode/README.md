@@ -1,4 +1,4 @@
-# cc-opencode-cmux
+# cc-opencode
 
 Claude Code (Opus, orchestrator) → OpenCode (cheap-model implementer) 위임 플러그인.
 
@@ -8,14 +8,14 @@ Claude Code (Opus, orchestrator) → OpenCode (cheap-model implementer) 위임 �
 
 | 종류 | 이름 | 호출 |
 |---|---|---|
-| **Skill** | `cc-opencode-cmux:delegate-oc` | 메인 Opus 또는 다른 플러그인이 `Skill(cc-opencode-cmux:delegate-oc, args: "<spec>")`로 호출. 사용자가 `/cc-opencode-cmux:delegate-oc <spec>` 슬래시로도 호출 가능. |
-| **Skill** | `cc-opencode-cmux:oc-result-review` | delegation 종료 후 diff 리뷰 워크플로. delegate-oc가 반환한 SESSION_DIR을 args로 전달. |
+| **Skill** | `cc-opencode:delegate-oc` | 메인 Opus 또는 다른 플러그인이 `Skill(cc-opencode:delegate-oc, args: "<spec>")`로 호출. 사용자가 `/cc-opencode:delegate-oc <spec>` 슬래시로도 호출 가능. |
+| **Skill** | `cc-opencode:oc-result-review` | delegation 종료 후 diff 리뷰 워크플로. delegate-oc가 반환한 SESSION_DIR을 args로 전달. |
 
-v0.5.x의 `Agent({subagent_type:"cc-opencode-cmux:oc-implementer"})` 진입점은 **제거**되었습니다. 호출 시 실패합니다 — `delegate-oc` Skill을 사용하세요.
+v0.5.x의 `Agent({subagent_type:"cc-opencode:oc-implementer"})` 진입점은 **제거**되었습니다. 호출 시 실패합니다 — `delegate-oc` Skill을 사용하세요.
 
 ## 무엇을 하는가
 
-`Skill(cc-opencode-cmux:delegate-oc, args)` 한 줄 호출 → 메인 Opus가 컨트롤러 1회 실행:
+`Skill(cc-opencode:delegate-oc, args)` 한 줄 호출 → 메인 Opus가 컨트롤러 1회 실행:
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/bin/oc-delegate.sh" --dir "$PWD" <<'EOF'
@@ -53,7 +53,7 @@ echo "$?"   # 약속된 exit code (0/10~13/20/30)
 
 - **신규**: `bin/oc-delegate.sh` 단일 컨트롤러 — 메인이 호출하는 진입점이 1개로 통합. 파이프라인 단계 사이 판단 토큰 제거.
 - **Skill 본문 축소**: 8개 step bash 절차 → 호출 한 줄 + exit code 표. 약 40% 짧아짐.
-- 호환성: 외부 호출자(`obsidian-knowledge:research-agent` 등)는 `Skill(cc-opencode-cmux:delegate-oc, args)` 인터페이스 그대로 사용 — 변경 없음.
+- 호환성: 외부 호출자(`obsidian-knowledge:research-agent` 등)는 `Skill(cc-opencode:delegate-oc, args)` 인터페이스 그대로 사용 — 변경 없음.
 
 ## v0.6.0 주요 변경
 
@@ -80,13 +80,15 @@ opencode upgrade 1.15.5            # 권장 핀
 # 2) 인증 (OC Go / OC Zen / BYOK 중 하나)
 opencode auth login                # TUI 메뉴
 
-# 3) jq (agent 정의 자동 등록에 필요)
+# 3) jq (재라우팅 hook에 필요)
 brew install jq
 ```
 
 세션 시작 시 `hooks/session-start.sh`가:
-- `bin/install-agents.sh`를 호출해 7개 OC agent 정의(`oc-implement`/`oc-refactor`/`oc-summarize`/`oc-cjk-doc`/`oc-research`/`oc-compose`/`oc-analyze`)를 사용자 `~/.config/opencode/opencode.json`에 jq deep merge
+- opencode 설치·인증·`curl` 사전 점검 (없으면 경고, 세션은 안 막음)
 - 프로젝트의 `.claude/.gitignore`에 `oc-sessions/`가 없으면 자동 추가 (없으면 .gitignore 생성)
+
+> 모델은 위임 시 메시지 바디에 `model:{providerID,modelID}`로 직접 지정됩니다(agent 등록 없음). `delegate-oc`가 `TASK_TYPE`→모델을 매핑하고, 스펙의 `MODEL:`로 override합니다.
 
 `CC_OC_AUTOSTART=1`을 설정하면 세션 시작 시 daemon도 미리 기동. 미설정 시 첫 dispatch에서 자동 ensure.
 
@@ -97,7 +99,7 @@ brew install jq
 Max 쿼터를 소모하는 것을 막고, 그 작업을 저비용 OpenCode로 옮기는 것이 목적입니다.
 
 **메커니즘**: hook은 툴 출력을 교체할 수 없으므로 스폰을 `deny`(exit 0 + JSON, 공식 권장 형식)하고,
-`permissionDecisionReason`에 "`cc-opencode-cmux:delegate-oc` 스킬로 위임하라"는 지시 + 원본 프롬프트를
+`permissionDecisionReason`에 "`cc-opencode:delegate-oc` 스킬로 위임하라"는 지시 + 원본 프롬프트를
 담아 되먹입니다. Claude가 이 사유를 읽고 스스로 재라우팅합니다.
 
 **opt-in** — 미설정 시 아무 동작 안 함(다른 사용자 안전):
@@ -270,15 +272,15 @@ v0.5.x의 `events.ndjson`은 사라졌습니다 (`opencode run --attach` 의존�
 
 - `opencode` CLI v1.15.5
 - `python3` (3.10+) — JSON 페이로드 합성 + URL encoding
-- `jq` — agent 정의 등록
+- `jq` — 서브에이전트 재라우팅 hook
 - `curl` — HTTP API 호출
 - `timeout` (선택; coreutils. macOS는 `brew install coreutils` 또는 폴백 폴링)
 
 ## 마이그레이션 (v0.5.x → v0.6.0)
 
 ```diff
-- Agent({ subagent_type: "cc-opencode-cmux:oc-implementer", prompt: "<spec>" })
-+ Skill(cc-opencode-cmux:delegate-oc, args: "<spec>")
+- Agent({ subagent_type: "cc-opencode:oc-implementer", prompt: "<spec>" })
++ Skill(cc-opencode:delegate-oc, args: "<spec>")
 ```
 
 반환 보고 형식은 거의 동일하지만 `server:` 필드가 `done:` 필드로 바뀌었고 `running-after-detach`가 사라지고 `timeout` 상태가 추가됨. 외부 플러그인(obsidian-knowledge:research-agent 등)이 이 보고를 파싱한다면 status 분기 갱신 필요.

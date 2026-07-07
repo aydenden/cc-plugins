@@ -7,7 +7,7 @@ DeepTutor 메커니즘을 Claude Code 네이티브로 재구현한 다중 에이
 
 KB는 벡터 DB 없이 **마크다운 위키 + frontmatter scan 검색**(Grep/Glob/Read)으로 동작한다. OC `research` 프로파일이 glob/grep을 직접 수행하므로(실측 확인), CC는 토픽 분류만 하고 조사·검색·집필을 OpenCode에 위임할 수 있다.
 
-`cc-opencode-cmux` 설치 시 외부 조사·압축·집필을 `Skill(cc-opencode-cmux:delegate-oc)`을 통해 OpenCode에 위임해 CC 토큰을 절감한다. 위임 가용성·daemon 기동·결과 검증은 delegate-oc Skill이 자체적으로 책임지며, 본 플러그인은 `Skill` 호출 한 줄로만 dispatch한다.
+`cc-opencode` 설치 시 외부 조사·압축·집필을 `Skill(cc-opencode:delegate-oc)`을 통해 OpenCode에 위임해 CC 토큰을 절감한다. 위임 가용성·daemon 기동·결과 검증은 delegate-oc Skill이 자체적으로 책임지며, 본 플러그인은 `Skill` 호출 한 줄로만 dispatch한다.
 
 ## 기능
 
@@ -28,7 +28,7 @@ KB는 벡터 DB 없이 **마크다운 위키 + frontmatter scan 검색**(Grep/Gl
 > KB는 마크다운 파일 위키이므로 별도의 벡터 DB/임베딩 인프라(memsearch/Milvus/ollama)가 **필요 없다**.
 
 ### 선택 (OC 위임 활성화)
-- **cc-opencode-cmux** — 외부 조사/집필 위임
+- **cc-opencode** — 외부 조사/집필 위임
 - **opencode CLI** + auth 설정
 
 미설치 시 자동으로 cc-only 모드로 fallback.
@@ -102,12 +102,12 @@ my-study/
 
 - 메인(orchestrator): Opus (사용자 세션 모델)
 - sub-agent: sonnet 기본, 압축은 haiku
-- OC 위임 시: cc-opencode-cmux 설정의 low-cost 모델
+- OC 위임 시: cc-opencode 설정의 low-cost 모델
 
 ## OC 위임 정책
 
-각 sub-agent가 `Skill(cc-opencode-cmux:delegate-oc, args: <spec>)` 한 번을 호출한다. delegate-oc Skill이 다음을 모두 처리:
-- cc-opencode-cmux 설치 여부 / opencode CLI 인증 / daemon health 검사
+각 sub-agent가 `Skill(cc-opencode:delegate-oc, args: <spec>)` 한 번을 호출한다. delegate-oc Skill이 다음을 모두 처리:
+- cc-opencode 설치 여부 / opencode CLI 인증 / daemon health 검사
 - 위임 가치 판단 (token budget, 작업 복잡도)
 - daemon ensure (필요 시 자동 기동, 종료 시 정리)
 - spec dispatch + 결과 diff 캡처 + 8줄 보고서 반환

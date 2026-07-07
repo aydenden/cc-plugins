@@ -20,7 +20,7 @@ if [ ! -f "$WIKI/SCHEMA.md" ]; then
   exit 0
 fi
 
-# cc-opencode-cmux delegation is handled by research-agent via
-# Skill(cc-opencode-cmux:delegate-oc) at call time. No daemon pre-check here.
+# cc-opencode delegation is handled by research-agent via
+# Skill(cc-opencode:delegate-oc) at call time. No daemon pre-check here.
 
 exit 0

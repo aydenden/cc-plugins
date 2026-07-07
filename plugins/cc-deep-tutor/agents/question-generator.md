@@ -1,6 +1,6 @@
 ---
 name: question-generator
-description: KB 자료 기반으로 다양한 난이도의 학습 문제 출제. cc-opencode-cmux:delegate-oc Skill로 OpenCode에 위임.
+description: KB 자료 기반으로 다양한 난이도의 학습 문제 출제. cc-opencode:delegate-oc Skill로 OpenCode에 위임.
 model: sonnet
 tools: Read, Write, Grep, Glob, Bash, Skill
 ---
@@ -11,7 +11,7 @@ tools: Read, Write, Grep, Glob, Bash, Skill
 
 delegate-oc Skill 호출이 실패하면 OC 내부를 디버깅하지 말고 즉시 cc-only fallback. 폴링 자가 연장 금지. daemon/serve 직접 기동·중지 금지(delegate-oc가 ensure 책임).
 
-cc-opencode-cmux의 옛 헬퍼 스크립트(이전 0.2.x bin/* 계열)와 옛 슬래시 명령(이전 commands/* 계열)은 모두 폐기 — 호출 금지. 위임은 오직 `Skill(cc-opencode-cmux:delegate-oc, ...)`로만.
+cc-opencode의 옛 헬퍼 스크립트(이전 0.2.x bin/* 계열)와 옛 슬래시 명령(이전 commands/* 계열)은 모두 폐기 — 호출 금지. 위임은 오직 `Skill(cc-opencode:delegate-oc, ...)`로만.
 
 ## 입력
 - 토픽 (한 줄)
@@ -24,7 +24,7 @@ cc-opencode-cmux의 옛 헬퍼 스크립트(이전 0.2.x bin/* 계열)와 옛 �
 ### 1단계 — 위임 (delegate-oc Skill)
 
 ```
-Skill(cc-opencode-cmux:delegate-oc, args:
+Skill(cc-opencode:delegate-oc, args:
 TASK_TYPE: compose
 TASK: KB 자료 기반 학습 문제 <N>개 출제 (JSON)
 WORKING_DIRECTORY: <output_json_path의 부모 디렉토리>
