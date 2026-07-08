@@ -15,11 +15,13 @@
 #
 # Env:
 #   CC_OC_REDIRECT_SUBAGENTS  "1" enables; anything else = disabled (default).
-#   CC_OC_REDIRECT_TYPES      comma/space list of subagent_type to redirect. Default:
-#                             general-purpose,Plan  (CC-native heavy agents only — these exist
-#                             for every user). Read-only Explore is intentionally excluded. Add
-#                             project/plugin-specific agents (code-reviewer, review-agent, ...)
-#                             per-environment via this var.
+#   CC_OC_REDIRECT_TYPES      comma/space list of subagent_type to redirect.
+#                             UNSET (default) = redirect ALL subagent types (minus EXCLUDE).
+#                             SET = strict allowlist: redirect only these types.
+#   CC_OC_REDIRECT_EXCLUDE    comma/space list of subagent_type to NEVER redirect (runs native).
+#                             Default: statusline-setup (edits CC's own config — cannot run in
+#                             OpenCode). Set to "" to redirect literally everything. Add other
+#                             CC-only agents here (e.g. beads:task-agent) if delegation breaks them.
 #   CC_OC_REDIRECT_MAX_DENY   consecutive denials for the same (session,type,description)
 #                             before giving up and allowing the native agent. Default 2.
 #                             Prevents an infinite deny↔retry loop if Claude won't re-route.
@@ -47,14 +49,28 @@ esac
 stype="$(jq -r '.tool_input.subagent_type // empty' <<<"$input" 2>/dev/null)"
 [ -n "$stype" ] || exit 0
 
-# --- is this subagent_type a redirect target? ---
-types="${CC_OC_REDIRECT_TYPES:-general-purpose,Plan}"
-match=0
-IFS=', ' read -ra _arr <<<"$types"
-for t in "${_arr[@]}"; do
-  [ "$t" = "$stype" ] && { match=1; break; }
-done
-[ "$match" = "1" ] || exit 0
+# --- exclude list: types that must run natively (delegation impossible/pointless) ---
+# `-` (not `:-`) so EXCLUDE="" means "exclude nothing"; unset means the default.
+exclude="${CC_OC_REDIRECT_EXCLUDE-statusline-setup}"
+if [ -n "$exclude" ]; then
+  IFS=', ' read -ra _ex <<<"$exclude"
+  for t in "${_ex[@]}"; do
+    [ "$t" = "$stype" ] && exit 0
+  done
+fi
+
+# --- target selection ---
+# TYPES unset → redirect ALL subagent types (minus the exclude list above).
+# TYPES set   → strict allowlist: redirect only those types.
+types="${CC_OC_REDIRECT_TYPES:-}"
+if [ -n "$types" ]; then
+  match=0
+  IFS=', ' read -ra _arr <<<"$types"
+  for t in "${_arr[@]}"; do
+    [ "$t" = "$stype" ] && { match=1; break; }
+  done
+  [ "$match" = "1" ] || exit 0
+fi
 
 # --- infinite-loop escape: relent after MAX_DENY nudges for the same request ---
 session="$(jq -r '.session_id // "nosess"' <<<"$input" 2>/dev/null)"
