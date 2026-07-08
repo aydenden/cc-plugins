@@ -123,11 +123,12 @@ export CC_OC_REDIRECT_SUBAGENTS=1
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
 | `CC_OC_REDIRECT_SUBAGENTS` | (없음) | `1`이면 재라우팅 활성화. 그 외/미설정 = 비활성 |
-| `CC_OC_REDIRECT_TYPES` | `general-purpose,Plan` | 재라우팅할 `subagent_type` 목록(쉼표/공백 구분). **기본값은 CC 내장 에이전트만**(모든 사용자에게 존재) — 읽기전용 `Explore`는 의도적으로 제외. 프로젝트/플러그인 고유 에이전트는 이 변수로 환경별 추가 |
+| `CC_OC_REDIRECT_TYPES` | (미설정=전부) | **미설정이면 모든 `subagent_type`을 재라우팅**(EXCLUDE 제외). 설정하면 그 목록만 재라우팅하는 strict allowlist(쉼표/공백 구분) — 좁히고 싶을 때만 |
+| `CC_OC_REDIRECT_EXCLUDE` | `statusline-setup` | **절대 재라우팅 안 할** `subagent_type` 목록. 기본 `statusline-setup`은 CC 설정을 직접 고쳐 OpenCode로 위임 불가. 위임 시 깨지는 CC 전용 에이전트(예: `beads:task-agent`)를 여기 추가. `""`(빈값)으로 두면 진짜 전부 재라우팅 |
 | `CC_OC_REDIRECT_MAX_DENY` | `2` | 동일 (세션·타입·description) 요청을 몇 번 deny한 뒤 포기하고 네이티브 실행을 허용할지. 무한 deny↔재시도 루프 방지 |
 
-> **한계**: `deny` 사유를 Claude가 따르지 않을 수 있습니다(순응 의존). `CC_OC_REDIRECT_MAX_DENY`회
-> 넛지 후에는 막지 않고 네이티브 실행을 허용합니다.
+> **동작**: 활성화(`=1`) 시 **기본적으로 모든 서브에이전트 타입**을 위임으로 되돌립니다(`CC_OC_REDIRECT_EXCLUDE`만 예외). 특정 타입만 막고 싶으면 `CC_OC_REDIRECT_TYPES`로 좁히세요.
+> **한계**: `deny`는 nudge라 Claude가 안 따를 수 있고(순응 의존), `CC_OC_REDIRECT_MAX_DENY`회 넛지 후에는 무한루프 방지를 위해 네이티브 실행을 허용합니다. delegate-oc의 decide 게이트가 위임 부적합으로 판단하면 CC가 직접 수행하도록 되돌립니다.
 
 ## opencode 버전 핀 (필수: v1.15.5)
 

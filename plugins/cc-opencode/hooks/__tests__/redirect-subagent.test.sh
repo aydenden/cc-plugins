@@ -30,9 +30,9 @@ J_NONAGENT='{"tool_name":"Bash","session_id":"s1","tool_input":{"command":"ls"}}
 r="$(run CC_OC_REDIRECT_SUBAGENTS= -- "$J_TARGET")"
 [ "$r" = "exit:0" ] && pass "gate off → silent allow" || fail "gate off should allow with no output, got: $r"
 
-# 2) gate on, non-target subagent → allow
+# 2) gate on, TYPES unset → redirect ALL types (Explore too, since not excluded)
 r="$(run CC_OC_REDIRECT_SUBAGENTS=1 -- "$J_EXPLORE")"
-[ "$r" = "exit:0" ] && pass "non-target (Explore) → allow" || fail "Explore should pass, got: $r"
+echo "$r" | grep -q '"permissionDecision": "deny"' && pass "default: Explore redirected (redirect-all)" || fail "Explore should be redirected by default, got: $r"
 
 # 3) gate on, non-Agent tool → allow
 r="$(run CC_OC_REDIRECT_SUBAGENTS=1 -- "$J_NONAGENT")"
@@ -57,12 +57,22 @@ echo "$r" | grep -q '"permissionDecision": "deny"' && pass "custom TYPES redirec
 r="$(run CC_OC_REDIRECT_SUBAGENTS=1 CC_OC_REDIRECT_TYPES=Explore -- "$J_TARGET")"
 [ "$r" = "exit:0" ] && pass "custom TYPES excludes general-purpose" || fail "general-purpose should pass under custom TYPES, got: $r"
 
-# 6b) default target set is CC-native only: general-purpose/Plan redirected, project-local agents pass
-r="$(run CC_OC_REDIRECT_SUBAGENTS=1 -- "$J_TASKNAME")"   # Plan (native)
-echo "$r" | grep -q 'deny' && pass "default: native Plan redirected" || fail "Plan should be default target, got: $r"
-J_PROJ='{"tool_name":"Agent","session_id":"s1","tool_input":{"subagent_type":"review-agent","description":"x","prompt":"x"}}'
+# 6b) default (TYPES unset) redirects ALL types, including namespaced/project agents
+r="$(run CC_OC_REDIRECT_SUBAGENTS=1 -- "$J_TASKNAME")"   # Plan
+echo "$r" | grep -q 'deny' && pass "default: Plan redirected" || fail "Plan should be redirected, got: $r"
+J_PROJ='{"tool_name":"Agent","session_id":"s1","tool_input":{"subagent_type":"superpowers:code-reviewer","description":"x","prompt":"x"}}'
 r="$(run CC_OC_REDIRECT_SUBAGENTS=1 -- "$J_PROJ")"
-[ "$r" = "exit:0" ] && pass "default: project-local review-agent NOT redirected" || fail "review-agent must not be a default target, got: $r"
+echo "$r" | grep -q 'deny' && pass "default: namespaced agent redirected too" || fail "namespaced agent should be redirected by default, got: $r"
+
+# 6c) EXCLUDE list: statusline-setup (default excluded) runs native even with redirect-all
+J_EXCL='{"tool_name":"Agent","session_id":"s1","tool_input":{"subagent_type":"statusline-setup","description":"x","prompt":"x"}}'
+r="$(run CC_OC_REDIRECT_SUBAGENTS=1 -- "$J_EXCL")"
+[ "$r" = "exit:0" ] && pass "default EXCLUDE: statusline-setup NOT redirected" || fail "statusline-setup must be excluded, got: $r"
+# EXCLUDE override: add a type → it passes native; empty EXCLUDE → even statusline-setup redirects
+r="$(run CC_OC_REDIRECT_SUBAGENTS=1 CC_OC_REDIRECT_EXCLUDE=Explore -- "$J_EXPLORE")"
+[ "$r" = "exit:0" ] && pass "custom EXCLUDE: Explore passes native" || fail "Explore should be excluded when listed, got: $r"
+r="$(run CC_OC_REDIRECT_SUBAGENTS=1 CC_OC_REDIRECT_EXCLUDE= -- "$J_EXCL")"
+echo "$r" | grep -q 'deny' && pass "empty EXCLUDE: statusline-setup redirected too" || fail "empty EXCLUDE should redirect everything, got: $r"
 
 # 7) infinite-loop escape: same (session,type,description) allowed after MAX_DENY nudges
 SID="escape-$$"
