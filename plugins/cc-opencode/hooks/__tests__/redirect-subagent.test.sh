@@ -38,14 +38,15 @@ echo "$r" | grep -q '"permissionDecision": "deny"' && pass "default: Explore red
 r="$(run CC_OC_REDIRECT_SUBAGENTS=1 -- "$J_NONAGENT")"
 [ "$r" = "exit:0" ] && pass "non-Agent tool → allow" || fail "Bash should pass, got: $r"
 
-# 4) gate on, target subagent → deny JSON on stdout, exit 0
+# 4) gate on, target subagent → deny JSON, delegate-oc + marker 안내, prompt 원문 미포함
 r="$(run CC_OC_REDIRECT_SUBAGENTS=1 -- "$J_TARGET")"
 echo "$r" | grep -q '^exit:0' \
   && echo "$r" | grep -q '"permissionDecision": "deny"' \
   && echo "$r" | grep -q 'delegate-oc' \
-  && echo "$r" | grep -q 'do the scan' \
-  && pass "target → deny + delegate-oc reason + prompt embedded" \
-  || fail "target should deny with reason+prompt, got: $r"
+  && echo "$r" | grep -q '\[cc-only\]' \
+  && ! echo "$r" | grep -q 'do the scan' \
+  && pass "target → deny + delegate-oc + marker, prompt 원문 미포함(토큰 절약)" \
+  || fail "target should deny w/ concise reason and NO prompt echo, got: $r"
 
 # 5) tool_name "Task" also redirected (version robustness)
 r="$(run CC_OC_REDIRECT_SUBAGENTS=1 -- "$J_TASKNAME")"
