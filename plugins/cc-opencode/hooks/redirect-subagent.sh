@@ -104,18 +104,12 @@ fi
 echo $((cnt + 1)) > "$cnt_file" 2>/dev/null || true
 
 # --- deny + redirect instruction ---
-prompt="$(jq -r '.tool_input.prompt // .tool_input.description // empty' <<<"$input" 2>/dev/null)"
-reason="$(cat <<EOF
-[cc-opencode] 네이티브 서브에이전트 '${stype}'는 위임 정책상 OpenCode(저비용)로 라우팅됩니다.
-
-Agent/Task 툴로 '${stype}'를 재시도하지 마세요. 대신 Skill 툴로 cc-opencode:delegate-oc 를 호출해 아래 작업을 위임하세요. delegate-oc가 TASK_TYPE→모델 매핑과 위임 적합성(decide) 게이트를 처리합니다.
-
-이 작업이 OpenCode로 낮출 수 없는 Opus급 정밀 추론(미묘한 아키텍처 판단·정밀 분석)을 요구한다면, 위임하지 말고 prompt에 마커 '${skip_marker}' 를 넣어 같은 Agent/Task 호출을 재시도하세요 — 그러면 이 재라우팅을 건너뛰고 네이티브로 실행됩니다.
-
---- 위임할 작업 명세 ---
-${prompt}
-EOF
-)"
+# 작업 원문(prompt/description)은 reason에 싣지 않는다: 방금 CC가 작성해 컨텍스트에
+# 이미 있으므로 되돌려주면 그대로 delegate spec에 옮겨 적어 토큰만 이중 소모된다.
+# CC 가 스스로 재라우팅할 수 있을 만큼의 행동 지침만 간결히 남긴다.
+escape=""
+[ -n "$skip_marker" ] && escape=" OpenCode로 낮출 수 없는 정밀 추론·아키텍처 판단이면 prompt에 '${skip_marker}'를 넣어 재시도하면 위임을 건너뛰고 네이티브로 실행됩니다."
+reason="[cc-opencode] 서브에이전트 '${stype}'는 delegate-oc 위임으로 재라우팅됩니다. Agent/Task로 재시도하지 말고 Skill(cc-opencode:delegate-oc)로 방금 그 작업을 위임하세요(TASK_TYPE→모델 매핑·위임 적합성 게이트 처리).${escape}"
 
 jq -n --arg r "$reason" '{
   hookSpecificOutput: {
