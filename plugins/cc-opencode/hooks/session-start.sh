@@ -47,12 +47,28 @@ if [ ! -f "$PLUGIN_ROOT/dist/acp-client.mjs" ]; then
   emit_warn "missing dist/acp-client.mjs — run 'bun run build' in $PLUGIN_ROOT."
 fi
 
-# Delegation policy status — one line so both the user and CC see the ACTIVE policy
-# each session (env is injected via ~/.claude/settings.json "env" or shell profile).
 POLICY="${CC_OC_PERMISSION:-scoped}"
 MARKER="${CC_OC_REDIRECT_SKIP_MARKER-[cc-only]}"
 REDIR="${CC_OC_REDIRECT_SUBAGENTS:-0}"
-emit_note "delegation policy: permission=${POLICY}${CC_OC_ALLOW_WRITE:+ allow_write=${CC_OC_ALLOW_WRITE}} subagent_redirect=${REDIR}${MARKER:+ skip_marker=${MARKER}}"
+FANOUT="${CC_OC_FANOUT_CONCURRENCY:-4}"
+
+# 1) status line — stderr, for the USER (env is injected via ~/.claude/settings.json
+#    "env" or shell profile; this just echoes the active values for visibility).
+emit_note "delegation policy: permission=${POLICY}${CC_OC_ALLOW_WRITE:+ allow_write=${CC_OC_ALLOW_WRITE}} subagent_redirect=${REDIR}${MARKER:+ skip_marker=${MARKER}} fanout_concurrency=${FANOUT}"
+
+# 2) usage guidance — STDOUT, for CC. A SessionStart hook's stdout is injected into
+#    the model's context (additionalContext). Only emit when the redirect hook is
+#    ACTIVE, so CC proactively knows how to opt a specific spawn out of redirection
+#    (otherwise it only learns the escape reactively, from the deny reason).
+if [ "$REDIR" = "1" ]; then
+  cat <<EOF
+[cc-opencode] 이 세션은 서브에이전트 재라우팅이 켜져 있습니다(delegate-oc 위임 활성).
+- 네이티브 서브에이전트(Agent/Task) 스폰은 PreToolUse hook이 가로채 OpenCode 위임으로 되돌립니다.
+- 특정 호출을 CC 네이티브로 실행해야 하면(정밀 추론·아키텍처 판단 등 OpenCode로 낮출 수 없는 작업), 그 Agent/Task 호출의 prompt에 마커 '${MARKER}' 를 포함시키세요 → 재라우팅을 건너뛰고 네이티브로 실행됩니다. (네이티브 서브에이전트는 env를 못 붙이므로 prompt 마커가 유일한 우회 채널입니다.)
+- OpenCode 위임 시 --dir 밖 경로 쓰기가 필요하면 spec에 'OUTPUT_FILE: <path>'(디렉토리 자동 허용) 또는 'ALLOW_WRITE: <dir>' / 'PERMISSION: allow-all' 을 넣으세요(기본 권한 정책=${POLICY}).
+- 독립 작업 ≥2개 병렬 위임은 oc-fanout(동시 최대 ${FANOUT}개, CC_OC_FANOUT_CONCURRENCY).
+EOF
+fi
 
 # v0.6.0+: ensure project's .claude/.gitignore excludes oc-sessions/ so per-session
 # artifacts (prompt.md / events.ndjson / diff.patch / sse.ndjson) don't pollute commits.
