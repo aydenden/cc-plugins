@@ -14,7 +14,7 @@ Offload a large mechanical task to OpenCode via one controller call. The flow is
 - Reasoning shallow — no architecture decisions, no ambiguous requirements.
 - User did not ask for Opus quality ("think hard" / "carefully" / explicit Opus).
 
-Skip if: < 3K tokens of work, no acceptance criterion, output > 70K tokens (split first — CC produces fixtures, then delegates the consuming code), binary output, codebase needs subtle judgment.
+Skip if: < 3K tokens of work, no acceptance criterion, output > 70K tokens (split first — CC produces fixtures, then delegates the consuming code), binary output, **precise analysis / architecture judgement / subtle reasoning that OpenCode cannot match** — do it in CC directly. (If a native subagent was auto-redirected here by the hook but genuinely needs Opus, retry the Agent/Task call with the `[cc-only]` marker in the prompt to skip redirection.)
 
 For size estimates use `wc -l <path>` — **never Read source files to estimate**.
 
@@ -27,6 +27,8 @@ One Bash invocation. Spec via heredoc; `OC_DIR` via `--dir`:
 TASK_TYPE: implement | refactor | summarize | doc | research | compose | analyze
 MODEL: <optional — opencode-go/<id> to override the TASK_TYPE default>
 VARIANT: <optional — provider reasoning effort: high | max | minimal>
+PERMISSION: <optional — scoped(default) | allow-all | deny-all; overrides ambient env for THIS delegation>
+ALLOW_WRITE: <optional — extra writable roots outside --dir, colon-separated>
 TASK: <one-line summary>
 
 FILES TO TOUCH:
@@ -59,7 +61,7 @@ Transport is ACP (`opencode acp` over stdio, run by the bundled `dist/acp-client
 | 11 | `error` | spawn / initialize / `session/new` failed — check opencode install/auth + `node` |
 | 12 | `error` | prompt request rejected (transport/protocol) — inspect `SESSION_DIR/controller.log` |
 | 13 | `error` | agent stopped with an error reason (refusal) — `oc-result-review` for diagnostic |
-| 20 | `aborted-perm` | a permission was auto-denied — re-spec or adjust opencode permission config |
+| 20 | `aborted-perm` | permission denied by policy (`scoped` default: a path outside `--dir`/`SESSION_DIR`/allowed roots, or a path-less bash/network request). Fix in the spec (no restart): put the target under `OUTPUT_FILE:` (auto-allowed), add `ALLOW_WRITE: <dir>`, or set `PERMISSION: allow-all` |
 | 30 | `timeout` | exceeded `--timeout`; turn aborted, partial diff may be salvageable — re-spec with a tighter task or larger `--timeout` |
 | 31 | `stalled` | no progress for `--stall`s — hang detected, turn cancelled, partial diff retained — inspect via `oc-result-review`, then re-spec |
 

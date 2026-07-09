@@ -19,6 +19,7 @@ var __require = /* @__PURE__ */ createRequire(import.meta.url);
 import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { appendFileSync, writeFileSync } from "node:fs";
+import { resolve as resolve2 } from "node:path";
 
 // node_modules/@agentclientprotocol/sdk/dist/schema/index.js
 var AGENT_METHODS = {
@@ -18224,6 +18225,50 @@ var legacyClientNotificationMethods = new Set([
   CLIENT_METHODS.elicitation_complete
 ]);
 
+// src/permission.ts
+import { resolve, sep } from "node:path";
+function readPolicy(env = process.env) {
+  const p = env.CC_OC_PERMISSION;
+  return p === "allow-all" || p === "deny-all" ? p : "scoped";
+}
+function allowedRoots(dir, sessionDir, env = process.env) {
+  const extra = (env.CC_OC_ALLOW_WRITE ?? "").split(":").map((s) => s.trim()).filter(Boolean);
+  return [dir, sessionDir, ...extra].map((p) => resolve(p));
+}
+function toolCallPaths(toolCall) {
+  const out = [];
+  for (const loc of toolCall?.locations ?? []) {
+    if (typeof loc?.path === "string" && loc.path)
+      out.push(loc.path);
+  }
+  const ri = toolCall?.rawInput;
+  if (ri && typeof ri === "object") {
+    for (const k of ["filePath", "path", "file", "filename", "target"]) {
+      const v = ri[k];
+      if (typeof v === "string" && v)
+        out.push(v);
+    }
+  }
+  return out;
+}
+function isUnder(child, root) {
+  const c = resolve(child);
+  const r = resolve(root);
+  return c === r || c.startsWith(r.endsWith(sep) ? r : r + sep);
+}
+function decidePermission(policy, roots, toolCall) {
+  if (policy === "deny-all")
+    return { grant: false, why: "deny-all policy" };
+  if (policy === "allow-all")
+    return { grant: true, why: "allow-all policy" };
+  const paths = toolCallPaths(toolCall);
+  if (paths.length === 0) {
+    return { grant: false, why: "scoped: no path (bash/network) — use allow-all" };
+  }
+  const outside = paths.filter((p) => !roots.some((r) => isUnder(p, r)));
+  return outside.length === 0 ? { grant: true, why: "scoped: all paths under allowed roots" } : { grant: false, why: `scoped: path outside allowed roots: ${outside.join(", ")}` };
+}
+
 // src/acp-client.ts
 var EC_DONE = 0;
 var EC_ERR_SESSION = 11;
@@ -18297,15 +18342,30 @@ async function main() {
   let permissionDenied = false;
   let abortReason = null;
   const ac = new AbortController;
+  const policy = readPolicy();
+  const roots = allowedRoots(resolve2(args.dir), resolve2(args.sessionDir));
+  log("permission policy", { policy, roots });
   const app = client({ name: "cc-opencode" }).onNotification("session/update", (ctx) => {
     updates++;
     lastUpdateAt = Date.now();
     record2(ctx.params);
   }).onRequest("session/request_permission", (ctx) => {
-    permissionDenied = true;
+    const { toolCall, options = [] } = ctx.params ?? {};
     record2({ type: "permission.asked", params: ctx.params });
-    log("permission auto-denied");
-    return { outcome: { outcome: "cancelled" } };
+    const pick2 = (kinds) => options.find((o) => kinds.includes(o?.kind))?.optionId;
+    const allowId = pick2(["allow_once", "allow_always"]);
+    const rejectId = pick2(["reject_once", "reject_always"]);
+    const { grant, why } = decidePermission(policy, roots, toolCall);
+    if (grant && allowId) {
+      log("permission allowed", { why, title: toolCall?.title });
+      return { outcome: { outcome: "selected", optionId: allowId } };
+    }
+    permissionDenied = true;
+    log("permission denied", {
+      why: grant ? `${why} but no allow option offered` : why,
+      title: toolCall?.title
+    });
+    return rejectId ? { outcome: { outcome: "selected", optionId: rejectId } } : { outcome: { outcome: "cancelled" } };
   });
   const startAt = Date.now();
   const watchdog = setInterval(() => {

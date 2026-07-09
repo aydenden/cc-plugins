@@ -44,7 +44,7 @@
 #   11  err-session      — spawn / initialize / session/new failed
 #   12  err-prompt       — prompt request rejected (transport / protocol error)
 #   13  err-session-evt  — agent stopped with an error reason (refusal)
-#   20  aborted-perm     — a permission was auto-denied → turn cancelled
+#   20  aborted-perm     — a permission was denied by policy (acp-client scoped/deny) → turn cancelled
 #   30  timeout          — exceeded --timeout (turn aborted)
 #   31  stalled          — stall watchdog fired: no update for --stall seconds (turn aborted)
 set -uo pipefail
@@ -159,7 +159,34 @@ SPEC_MODEL="$(grep -m1 '^MODEL:' "$PROMPT" | sed 's/^MODEL:[[:space:]]*//' | tr 
 [ -n "$SPEC_MODEL" ] && OC_MODEL="$SPEC_MODEL"
 SPEC_VARIANT="$(grep -m1 '^VARIANT:' "$PROMPT" | sed 's/^VARIANT:[[:space:]]*//' | tr -d '[:space:]')"
 
-log "SESSION_DIR=$SESSION_DIR OC_DIR=$OC_DIR model=$OC_MODEL variant=${SPEC_VARIANT:-} timeout=${TIMEOUT}s stall=${STALL}s"
+# ── per-delegation permission controls (spec fields override ambient env) ─────
+# The calling session can set a standing default via ~/.claude/settings.json env
+# (CC_OC_PERMISSION / CC_OC_ALLOW_WRITE), but that needs a CC restart. These spec
+# fields let CC tune permission PER delegation, no restart — same pattern as MODEL:.
+#   PERMISSION:  scoped(default) | allow-all | deny-all   (wins over ambient env)
+#   ALLOW_WRITE: extra writable roots, colon-separated    (appended to allowlist)
+# Plus OUTPUT_FILE's dir is auto-allowed: scoped policy denies writes outside
+# --dir/SESSION_DIR, and research/compose specs write OUTPUT_FILE (e.g. /tmp/x.md)
+# outside --dir → without this it would hit exit 20.
+add_allow_write() {  # append $1 to CC_OC_ALLOW_WRITE (colon-separated)
+  [ -n "$1" ] || return 0
+  if [ -n "${CC_OC_ALLOW_WRITE:-}" ]; then
+    export CC_OC_ALLOW_WRITE="${CC_OC_ALLOW_WRITE}:$1"
+  else
+    export CC_OC_ALLOW_WRITE="$1"
+  fi
+}
+
+SPEC_PERM="$(grep -m1 '^PERMISSION:' "$PROMPT" | sed 's/^PERMISSION:[[:space:]]*//' | tr -d '[:space:]')"
+[ -n "$SPEC_PERM" ] && export CC_OC_PERMISSION="$SPEC_PERM"
+
+SPEC_ALLOW="$(grep -m1 '^ALLOW_WRITE:' "$PROMPT" | sed 's/^ALLOW_WRITE:[[:space:]]*//;s/[[:space:]]*$//')"
+add_allow_write "$SPEC_ALLOW"
+
+SPEC_OUTPUT="$(grep -m1 '^OUTPUT_FILE:' "$PROMPT" | sed 's/^OUTPUT_FILE:[[:space:]]*//' | tr -d '[:space:]')"
+[ -n "$SPEC_OUTPUT" ] && add_allow_write "$(dirname "$SPEC_OUTPUT")"
+
+log "SESSION_DIR=$SESSION_DIR OC_DIR=$OC_DIR model=$OC_MODEL variant=${SPEC_VARIANT:-} timeout=${TIMEOUT}s stall=${STALL}s perm=${CC_OC_PERMISSION:-scoped} allow_write=${CC_OC_ALLOW_WRITE:-}"
 
 # ── run the ACP client (owns the whole turn + the exit code) ────────────────
 VARIANT_ARGS=()

@@ -1,12 +1,13 @@
 {
   "name": "cc-opencode-acp-client",
-  "version": "0.11.0",
+  "version": "0.13.0",
   "private": true,
   "type": "module",
   "description": "ACP client for OpenCode delegation. Dev in TS (src/), ship a single bundled dist/acp-client.mjs run by node — no node_modules at runtime.",
   "scripts": {
     "build": "bun build src/acp-client.ts --target=node --format=esm --outfile=dist/acp-client.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src/ && bash hooks/__tests__/redirect-subagent.test.sh"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "1.2.1"

@@ -84,4 +84,25 @@ echo "$d1" | grep -q 'deny' && echo "$d2" | grep -q 'deny' && [ "$d3" = "exit:0"
   && pass "loop escape: deny x2 then allow" \
   || fail "expected deny,deny,allow — got d1=$(echo "$d1"|head -1) d2=$(echo "$d2"|head -1) d3=$(echo "$d3"|head -1)"
 
+# 8) skip marker: default "[cc-only]" in prompt → run native (no redirect)
+J_MARK='{"tool_name":"Agent","session_id":"s8","tool_input":{"subagent_type":"general-purpose","description":"analyze","prompt":"precise work [cc-only] here"}}'
+r="$(run CC_OC_REDIRECT_SUBAGENTS=1 -- "$J_MARK")"
+[ "$r" = "exit:0" ] && pass "skip marker in prompt → native allow" || fail "marker should skip redirect, got: $r"
+
+# 8b) marker in description also skips
+J_MARKD='{"tool_name":"Agent","session_id":"s8","tool_input":{"subagent_type":"general-purpose","description":"[cc-only] judgement call","prompt":"work"}}'
+r="$(run CC_OC_REDIRECT_SUBAGENTS=1 -- "$J_MARKD")"
+[ "$r" = "exit:0" ] && pass "skip marker in description → native allow" || fail "marker in desc should skip, got: $r"
+
+# 8c) custom marker via env; default "[cc-only]" no longer skips
+J_CUST='{"tool_name":"Agent","session_id":"s8","tool_input":{"subagent_type":"general-purpose","description":"x","prompt":"needs @keep native"}}'
+r="$(run CC_OC_REDIRECT_SUBAGENTS=1 CC_OC_REDIRECT_SKIP_MARKER=@keep -- "$J_CUST")"
+[ "$r" = "exit:0" ] && pass "custom skip marker honored" || fail "custom marker should skip, got: $r"
+r="$(run CC_OC_REDIRECT_SUBAGENTS=1 CC_OC_REDIRECT_SKIP_MARKER=@keep -- "$J_MARK")"
+echo "$r" | grep -q 'deny' && pass "non-matching default marker under custom → redirected" || fail "[cc-only] should not skip when marker=@keep, got: $r"
+
+# 8d) empty marker disables the escape (marker text redirected normally)
+r="$(run CC_OC_REDIRECT_SUBAGENTS=1 CC_OC_REDIRECT_SKIP_MARKER= -- "$J_MARK")"
+echo "$r" | grep -q 'deny' && pass "empty marker disables escape" || fail "empty marker should redirect, got: $r"
+
 [ "$FAIL" = "0" ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

@@ -10,6 +10,9 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && p
 emit_warn() {
   echo "[cc-opencode] $1" >&2
 }
+emit_note() {
+  echo "[cc-opencode] $1" >&2
+}
 
 if ! command -v opencode >/dev/null 2>&1; then
   emit_warn "opencode CLI not found. Install: brew install opencode-ai/opencode/opencode"
@@ -43,6 +46,13 @@ fi
 if [ ! -f "$PLUGIN_ROOT/dist/acp-client.mjs" ]; then
   emit_warn "missing dist/acp-client.mjs — run 'bun run build' in $PLUGIN_ROOT."
 fi
+
+# Delegation policy status — one line so both the user and CC see the ACTIVE policy
+# each session (env is injected via ~/.claude/settings.json "env" or shell profile).
+POLICY="${CC_OC_PERMISSION:-scoped}"
+MARKER="${CC_OC_REDIRECT_SKIP_MARKER-[cc-only]}"
+REDIR="${CC_OC_REDIRECT_SUBAGENTS:-0}"
+emit_note "delegation policy: permission=${POLICY}${CC_OC_ALLOW_WRITE:+ allow_write=${CC_OC_ALLOW_WRITE}} subagent_redirect=${REDIR}${MARKER:+ skip_marker=${MARKER}}"
 
 # v0.6.0+: ensure project's .claude/.gitignore excludes oc-sessions/ so per-session
 # artifacts (prompt.md / events.ndjson / diff.patch / sse.ndjson) don't pollute commits.
