@@ -9,8 +9,15 @@
 #   실제 도달 시각이 벌어진다. 한 Bash 호출 안에서 N개를 동시 발사하면 turn 추론
 #   대기가 끼어들 여지가 없어 데몬이 진짜 병렬 처리한다.
 #
+# 동시성 제한:
+#   기본은 최대 4개 delegate 만 동시에 실행하고 (CC_OC_FANOUT_CONCURRENCY, 기본 4),
+#   나머지는 슬롯이 나면 순차 투입한다. 과도한 동시 실행은 provider rate 및 CPU/IO
+#   경합으로 개별 세션을 느리게 만들어 stall watchdog(60s 무응답)을 유발할 수 있다.
+#   CC_OC_FANOUT_CONCURRENCY=0 이면 무제한(전부 동시 발사 — 구버전 동작).
+#
 # usage:
 #   oc-fanout.sh --dir D [--timeout SEC] spec1.md spec2.md spec3.md ...
+#   CC_OC_FANOUT_CONCURRENCY=2 oc-fanout.sh --dir D spec1.md ... spec9.md
 #
 # stdout (예 N=3):
 #   fanout: 3 specs  wall=19597ms  sum=51908ms  ratio=2.65  max_dur=19554ms
@@ -73,6 +80,18 @@ fi
 
 T0=$(python3 -c 'import time;print(int(time.time()*1000))')
 
+# 동시 실행 상한. 0 = 무제한. 기본 4.
+CONCURRENCY="${CC_OC_FANOUT_CONCURRENCY:-4}"
+
+# 실행 중 background job 수가 상한 이상이면 하나 끝날 때까지 대기.
+# `wait -n`(bash 4.3+)이 있으면 그걸로, 없으면(macOS bash 3.2) 폴링으로 fallback.
+throttle() {
+  [ "$CONCURRENCY" -gt 0 ] 2>/dev/null || return 0
+  while [ "$(jobs -rp | wc -l | tr -d ' ')" -ge "$CONCURRENCY" ]; do
+    wait -n 2>/dev/null || sleep 0.2
+  done
+}
+
 PIDS=()
 SESS=()
 for i in "${!SPECS[@]}"; do
@@ -81,6 +100,7 @@ for i in "${!SPECS[@]}"; do
   sd="$FANOUT_DIR/s$((i+1))"
   mkdir -p "$sd"
   SESS+=("$sd")
+  throttle
   (
     args=(--dir "$OC_DIR" --prompt-file "$spec" --session-dir "$sd" --title "fanout-$FANOUT_ID-$((i+1))")
     [ -n "$TIMEOUT" ] && args+=(--timeout "$TIMEOUT")

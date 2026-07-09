@@ -56,6 +56,7 @@
 | `CC_OC_STALL_SECONDS` | `60` | 무응답 hang 감지(초). `--stall`이 우선 |
 | `CC_OC_ACP_PURE` | `1` | `opencode acp --pure`(플러그인 미로딩, 빠른 부팅). `0`이면 플러그인 로딩 |
 | `CC_OC_ACP_LOG_LEVEL` | `ERROR` | `opencode acp --log-level` |
+| `CC_OC_FANOUT_CONCURRENCY` | `4` | `oc-fanout.sh`의 동시 실행 상한. 초과 spec은 슬롯이 날 때까지 대기. `0`=무제한. rate/부하 경합에 의한 stall 방지 |
 
 ### 서브에이전트 재라우팅 hook (hooks/redirect-subagent.sh)
 

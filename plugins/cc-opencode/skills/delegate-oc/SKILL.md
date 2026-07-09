@@ -82,6 +82,8 @@ Write each spec to a separate file, then one Bash call (run in background so Opu
 
 Output: summary line (`fanout: N specs  wall=...ms  ratio=...`) + ASCII timeline + N×7-line reports concatenated with `--- [i] <SESSION_DIR> ---` separators. Exit code = max of individual delegate exit codes. Each spec spawns its own `opencode acp` subprocess (concurrent); scaling is near-linear (measured ratio ~1.97 for N=2).
 
+Concurrency is capped at `CC_OC_FANOUT_CONCURRENCY` (default 4): with more specs than the cap, the rest queue and start as slots free. Prevents provider-rate / CPU-IO contention that can slow individual sessions into a stall (60s no-update → `31`). Set `0` for unlimited (legacy all-at-once).
+
 Use `Bash(run_in_background: true)` for the fan-out call so Opus's turn is not held for the duration. Then `BashOutput` to collect the consolidated report when CC signals completion.
 
 ## Hard constraints
