@@ -270,6 +270,13 @@ caller plugin이 도메인 지식 보유, delegate-oc는 안전하게 위임만 
 
 출력: 요약 라인 + ASCII 타임라인 + N×7줄 리포트(`--- [i] <SESSION_DIR> ---` 구분). exit code = 개별 delegate exit의 최댓값. `Bash(run_in_background: true)`로 호출해 Opus 턴을 붙잡지 않도록 하세요.
 
+**동시성 제한**: `CC_OC_FANOUT_CONCURRENCY`(기본 4)로 동시에 실행할 delegate 수를 제한합니다. spec이 상한보다 많으면 나머지는 슬롯이 날 때까지 대기 후 투입. 과도한 동시 실행이 provider rate·CPU/IO 경합으로 개별 세션을 느리게 만들어 stall watchdog(60초 무응답 → exit `31`)을 유발하는 것을 방지합니다. `0`이면 무제한(구버전처럼 전부 동시 발사).
+
+```bash
+CC_OC_FANOUT_CONCURRENCY=2 "${CLAUDE_PLUGIN_ROOT}/bin/oc-fanout.sh" --dir "$PWD" \
+  /tmp/spec-1.md ... /tmp/spec-9.md   # 9개라도 항상 2개까지만 동시
+```
+
 ## 세션 디렉토리
 
 세션마다 `<project>/.claude/oc-sessions/<uuid>/` 아래 다음 파일 생성:
