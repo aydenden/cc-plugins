@@ -25,6 +25,11 @@
 #   CC_OC_REDIRECT_MAX_DENY   consecutive denials for the same (session,type,description)
 #                             before giving up and allowing the native agent. Default 2.
 #                             Prevents an infinite deny↔retry loop if Claude won't re-route.
+#   CC_OC_REDIRECT_SKIP_MARKER  literal marker that, if present in the call's prompt or
+#                             description, skips redirection (runs native). Default "[cc-only]".
+#                             CC adds it when a subagent genuinely needs Opus-grade
+#                             reasoning (precise analysis, architecture judgement) that
+#                             OpenCode should not handle. Set to "" to disable the escape.
 #
 # stdin:  PreToolUse event JSON.
 # stdout: deny JSON (exit 0) when redirecting; nothing (exit 0) when allowing.
@@ -48,6 +53,17 @@ esac
 
 stype="$(jq -r '.tool_input.subagent_type // empty' <<<"$input" 2>/dev/null)"
 [ -n "$stype" ] || exit 0
+
+# --- opt-out marker: CC flags a call as "keep on Opus" (precise analysis/judgement) ---
+# If the prompt or description carries the skip marker, run the native agent — this is
+# the deliberate escape for the "some work needs CC, not OC" case.
+skip_marker="${CC_OC_REDIRECT_SKIP_MARKER-[cc-only]}"
+if [ -n "$skip_marker" ]; then
+  haystack="$(jq -r '((.tool_input.prompt // "") + " " + (.tool_input.description // ""))' <<<"$input" 2>/dev/null)"
+  case "$haystack" in
+    *"$skip_marker"*) exit 0 ;;
+  esac
+fi
 
 # --- exclude list: types that must run natively (delegation impossible/pointless) ---
 # `-` (not `:-`) so EXCLUDE="" means "exclude nothing"; unset means the default.
@@ -92,7 +108,9 @@ prompt="$(jq -r '.tool_input.prompt // .tool_input.description // empty' <<<"$in
 reason="$(cat <<EOF
 [cc-opencode] 네이티브 서브에이전트 '${stype}'는 위임 정책상 OpenCode(저비용)로 라우팅됩니다.
 
-Agent/Task 툴로 '${stype}'를 재시도하지 마세요. 대신 Skill 툴로 cc-opencode:delegate-oc 를 호출해 아래 작업을 위임하세요. delegate-oc가 TASK_TYPE→모델 매핑과 위임 적합성(decide) 게이트를 처리합니다. 위임 부적합(아키텍처 판단·모호한 요구)으로 판단되면 그때 직접 수행하세요.
+Agent/Task 툴로 '${stype}'를 재시도하지 마세요. 대신 Skill 툴로 cc-opencode:delegate-oc 를 호출해 아래 작업을 위임하세요. delegate-oc가 TASK_TYPE→모델 매핑과 위임 적합성(decide) 게이트를 처리합니다.
+
+이 작업이 OpenCode로 낮출 수 없는 Opus급 정밀 추론(미묘한 아키텍처 판단·정밀 분석)을 요구한다면, 위임하지 말고 prompt에 마커 '${skip_marker}' 를 넣어 같은 Agent/Task 호출을 재시도하세요 — 그러면 이 재라우팅을 건너뛰고 네이티브로 실행됩니다.
 
 --- 위임할 작업 명세 ---
 ${prompt}

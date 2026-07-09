@@ -37,7 +37,7 @@ echo "$?"   # 약속된 exit code (0 / 11~13 / 20 / 30 / 31)
 - `initialize` 핸드셰이크 → `session/new(cwd)` → `session/set_model {modelId, variant}` → `session/prompt`
 - **3개 확장점 핸들러**:
   - `session/update` 스트림 → 진행 sink(`sse.ndjson` 기록) + **stall watchdog**(update마다 타이머 리셋; N초 무응답 → `session/cancel`)
-  - `session/request_permission` → 권한 정책(현재: auto-deny → `aborted-perm`)
+  - `session/request_permission` → **선별 권한 정책**(`scoped` 기본): 툴이 건드리는 경로가 모두 허용 루트(`--dir`·`SESSION_DIR`·`CC_OC_ALLOW_WRITE`) 하위면 allow, 아니면 deny → `aborted-perm`. `CC_OC_PERMISSION=allow-all|deny-all`로 전환. 로직은 `src/permission.ts`(단위 테스트됨)
   - 인터랙티브 질문(elicitation)은 뒤 단계 예정 — 현재 미등록
 - turn 종료 시 stop reason을 exit code 계약으로 분류
 
@@ -125,9 +125,11 @@ export CC_OC_REDIRECT_SUBAGENTS=1
 | `CC_OC_REDIRECT_SUBAGENTS` | (없음) | `1`이면 재라우팅 활성화. 그 외/미설정 = 비활성 |
 | `CC_OC_REDIRECT_TYPES` | (미설정=전부) | **미설정이면 모든 `subagent_type`을 재라우팅**(EXCLUDE 제외). 설정하면 그 목록만 재라우팅하는 strict allowlist(쉼표/공백 구분) — 좁히고 싶을 때만 |
 | `CC_OC_REDIRECT_EXCLUDE` | `statusline-setup` | **절대 재라우팅 안 할** `subagent_type` 목록. 기본 `statusline-setup`은 CC 설정을 직접 고쳐 OpenCode로 위임 불가. 위임 시 깨지는 CC 전용 에이전트(예: `beads:task-agent`)를 여기 추가. `""`(빈값)으로 두면 진짜 전부 재라우팅 |
+| `CC_OC_REDIRECT_SKIP_MARKER` | `[cc-only]` | Agent/Task 호출의 **prompt나 description에 이 문자열이 있으면 재라우팅을 건너뛰고 네이티브 실행**. 네이티브 서브에이전트는 env를 못 붙이므로, 정밀 추론이 필요한 특정 호출만 CC에 남기는 **유일한 동적 우회 채널**. `""`(빈값)이면 우회 비활성 |
 | `CC_OC_REDIRECT_MAX_DENY` | `2` | 동일 (세션·타입·description) 요청을 몇 번 deny한 뒤 포기하고 네이티브 실행을 허용할지. 무한 deny↔재시도 루프 방지 |
 
 > **동작**: 활성화(`=1`) 시 **기본적으로 모든 서브에이전트 타입**을 위임으로 되돌립니다(`CC_OC_REDIRECT_EXCLUDE`만 예외). 특정 타입만 막고 싶으면 `CC_OC_REDIRECT_TYPES`로 좁히세요.
+> **개별 우회**: 특정 호출만 네이티브로 실행하려면 prompt/description에 `[cc-only]` 마커를 넣으세요(재시작·설정 불필요). deny 사유문에도 이 방법이 안내되어, CC가 정밀 분석이 필요하다고 판단하면 스스로 마커를 붙여 재시도합니다.
 > **한계**: `deny`는 nudge라 Claude가 안 따를 수 있고(순응 의존), `CC_OC_REDIRECT_MAX_DENY`회 넛지 후에는 무한루프 방지를 위해 네이티브 실행을 허용합니다. delegate-oc의 decide 게이트가 위임 부적합으로 판단하면 CC가 직접 수행하도록 되돌립니다.
 
 ## opencode 버전 핀 (필수: v1.15.5)
@@ -142,7 +144,22 @@ export CC_OC_REDIRECT_SUBAGENTS=1
 { "autoupdate": false, ... }
 ```
 
-> **권한 주의**: opencode `build` 모드는 기본적으로 파일 쓰기에 permission을 묻지 않습니다(위임엔 바람직 — OC가 실제로 파일을 생성). 즉 `aborted-perm`(20)은 흔하지 않으며, 권한 통제가 필요하면 opencode permission config로 설정하세요.
+> **권한 정책 (v0.13.0+)**: ACP 클라이언트는 `session/request_permission`을 정책에 따라 처리합니다.
+> - `CC_OC_PERMISSION=scoped` (기본): 툴이 쓰려는 경로가 **모두** 허용 루트 하위일 때만 allow. 허용 루트 = `--dir` + `SESSION_DIR` + `CC_OC_ALLOW_WRITE`(콜론 구분). 경로가 없는 요청(bash/네트워크)이나 루트 밖 쓰기는 deny → `aborted-perm`(20).
+> - `CC_OC_ALLOW_WRITE=/tmp/out:/var/x` — scoped에서 추가 허용 경로를 세션이 주입. **`OUTPUT_FILE:`을 spec에 쓰면 `oc-delegate.sh`가 그 디렉토리를 자동 주입**하므로 `/tmp` 결과 경로가 별도 설정 없이 허용됩니다.
+> - `CC_OC_PERMISSION=allow-all` — 모든 요청 허용(신뢰된 scratch `--dir` 전용, opt-in). `deny-all` — 구버전처럼 전부 거부.
+>
+> **주입 방식 (2가지)**:
+> - **상시 기본값** — `~/.claude/settings.json`의 `"env"`에 `CC_OC_PERMISSION`/`CC_OC_ALLOW_WRITE` 설정. CC 재시작 필요(시작 시 1회 로드).
+> - **위임마다 (재시작 불필요)** — spec에 필드로 지정. `oc-delegate.sh`가 파싱해 그 위임에만 적용:
+>   ```
+>   TASK_TYPE: research
+>   PERMISSION: allow-all          # 이 위임만 정책 변경 (ambient env보다 우선)
+>   ALLOW_WRITE: /tmp/scratch      # 추가 허용 루트 (콜론 구분)
+>   OUTPUT_FILE: /tmp/out/r.md     # 디렉토리 자동 허용
+>   ```
+>
+> opencode `build` 모드는 `--dir` 내부 쓰기에 애초에 permission을 잘 묻지 않으므로, 실제 `request_permission`은 주로 `--dir` 밖 쓰기(예: `/tmp` OUTPUT_FILE)에서 발생 → 위 자동 주입이 이를 커버합니다.
 
 ## 위임 정책 (요약)
 

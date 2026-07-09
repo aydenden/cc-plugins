@@ -26,14 +26,16 @@
  *   11  err-session    spawn / initialize / session/new failed
  *   12  err-prompt     prompt request rejected (transport / protocol error)
  *   13  err-session-evt agent stopped with an error reason (refusal)
- *   20  aborted-perm   we auto-denied a permission → turn cancelled
+ *   20  aborted-perm   a permission was denied by policy (see permission.ts) → turn cancelled
  *   30  timeout        exceeded --timeout (turn aborted)
  *   31  stalled        stall watchdog fired — no update for --stall seconds (turn aborted)
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { appendFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { client, ndJsonStream } from "@agentclientprotocol/sdk";
+import { readPolicy, allowedRoots, decidePermission } from "./permission.js";
 
 // ── exit-code constants (mirror the contract above) ──────────────────────────
 const EC_DONE = 0;
@@ -143,6 +145,10 @@ async function main(): Promise<number> {
   let abortReason: "stalled" | "timeout" | null = null;
   const ac = new AbortController();
 
+  const policy = readPolicy();
+  const roots = allowedRoots(resolve(args.dir), resolve(args.sessionDir));
+  log("permission policy", { policy, roots });
+
   // 3) client with the three pluggable extension points.
   const app = client({ name: "cc-opencode" })
     // ① progress sink + stall watchdog fuel
@@ -151,12 +157,31 @@ async function main(): Promise<number> {
       lastUpdateAt = Date.now();
       record(ctx.params); // SessionNotification: { sessionId, update: { sessionUpdate, ... } }
     })
-    // ② permission policy — auto-deny (current policy); surface as aborted-perm.
+    // ② permission policy — scoped (default) / allow-all / deny-all (see permission.ts).
+    //    Any denial sets permissionDenied → the turn is cancelled → exit 20.
     .onRequest("session/request_permission", (ctx: any) => {
-      permissionDenied = true;
+      const { toolCall, options = [] } = ctx.params ?? {};
       record({ type: "permission.asked", params: ctx.params });
-      log("permission auto-denied");
-      return { outcome: { outcome: "cancelled" } };
+
+      const pick = (kinds: string[]) =>
+        options.find((o: any) => kinds.includes(o?.kind))?.optionId;
+      const allowId = pick(["allow_once", "allow_always"]);
+      const rejectId = pick(["reject_once", "reject_always"]);
+
+      const { grant, why } = decidePermission(policy, roots, toolCall);
+      if (grant && allowId) {
+        log("permission allowed", { why, title: toolCall?.title });
+        return { outcome: { outcome: "selected" as const, optionId: allowId } };
+      }
+      // Denied — or granted but no allow option was offered (cannot honour it).
+      permissionDenied = true;
+      log("permission denied", {
+        why: grant ? `${why} but no allow option offered` : why,
+        title: toolCall?.title,
+      });
+      return rejectId
+        ? { outcome: { outcome: "selected" as const, optionId: rejectId } }
+        : { outcome: { outcome: "cancelled" as const } };
     });
   // ③ interactive question (unstable_createElicitation) is deferred (plan §4.7):
   //    a later version registers it to surface questions to CC → ask user →
