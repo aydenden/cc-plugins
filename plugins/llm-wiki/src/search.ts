@@ -24,6 +24,8 @@ export interface SearchOptions {
   filterTags?: string[]
   rerank: boolean
   exact: boolean
+  /** 제목 완전/부분 일치 가중. 기본 ON(undefined는 ON, false만 해제). */
+  titleBoost?: boolean
   boostLinks: boolean
   decay: boolean
   halfLifeDays: number
@@ -179,6 +181,39 @@ function applyLinkBoost(hits: ChunkHit[]): void {
   }
 }
 
+/** 제목 비교용 정규화: 소문자 + 한글/영숫자만 남김(공백·구두점 무시). */
+function normalizeForTitle(s: string): string {
+  return s.toLowerCase().replace(/[^가-힣a-z0-9]/g, "")
+}
+
+/**
+ * title-boost: 쿼리가 페이지 제목과 (거의) 같을 때 그 페이지를 끌어올린다.
+ *
+ * cross-encoder rerank는 청크 본문을 보고 점수를 매기므로, 쿼리가 제목과 사실상 동일한
+ * 경우에도 본문이 더 장황한 다른 페이지에 밀린다. 측정: log.md 제목을 쿼리로 쓴 130건에서
+ * 구 index.md Grep이 MRR 0.915 vs 하이브리드 0.857로 앞섰고, 그 격차가 이 패턴에서 나왔다.
+ *
+ * 완전일치는 강하게(×1.5), 부분일치는 제목 토큰이 쿼리에 얼마나 덮이는지에 비례해 걸며,
+ * 1토큰 제목("HTTP")이 우연한 등장으로 올라오지 않도록 부분일치는 2토큰 이상만 본다.
+ */
+export function applyTitleBoost(hits: ChunkHit[], query: string): void {
+  const qToks = new Set(tokenizeText(query))
+  if (!qToks.size) return
+  const qNorm = normalizeForTitle(query)
+  for (const h of hits) {
+    const title = h.doc.title ?? ""
+    if (!title) continue
+    if (normalizeForTitle(title) === qNorm) {
+      h.score *= 1.5
+      continue
+    }
+    const tToks = tokenizeText(title)
+    if (tToks.length < 2) continue
+    const covered = tToks.filter((t) => qToks.has(t)).length / tToks.length
+    if (covered >= 0.6) h.score *= 1 + 0.4 * covered
+  }
+}
+
 /** time-decay: updated/date 기반 최신 가중(반감기 지수감쇠). 날짜 없으면 중립. */
 function applyDecay(hits: ChunkHit[], halfLifeDays: number, nowMs: number): void {
   const DAY = 86_400_000
@@ -296,6 +331,12 @@ export async function searchVault(
   }
 
   // --- 재랭킹 신호(3차): rerank/hybrid 점수 위에 곱 ---
+  // title-boost는 기본 ON(--no-title-boost로 해제) — 제목이 곧 쿼리인 흔한 경우를 rerank가
+  // 놓치는 문제가 실측으로 확인됐고, 그 경로가 recall 스킬의 기본 호출이다.
+  if (opts.titleBoost !== false && !choseongQuery) {
+    applyTitleBoost(pageHits, query)
+    modeTags.push("title-boost")
+  }
   if (opts.boostLinks) {
     applyLinkBoost(pageHits)
     modeTags.push("link-boost")
@@ -304,7 +345,7 @@ export async function searchVault(
     applyDecay(pageHits, opts.halfLifeDays, Date.now())
     modeTags.push("decay")
   }
-  if (opts.boostLinks || opts.decay) pageHits.sort((a, b) => b.score - a.score)
+  if (opts.titleBoost !== false || opts.boostLinks || opts.decay) pageHits.sort((a, b) => b.score - a.score)
 
   const top = pageHits.slice(0, opts.limit)
   const results: Partial<SearchHit>[] = top.map((h) => {
