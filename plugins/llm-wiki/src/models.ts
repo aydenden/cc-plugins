@@ -12,6 +12,7 @@
 import { env, pipeline, AutoTokenizer, AutoModelForSequenceClassification } from "@huggingface/transformers"
 import path from "path"
 import fs from "fs"
+import { resolveModelCacheDir } from "./paths"
 
 export const EMBED_MODEL = "onnx-community/bge-m3-ONNX"
 export const RERANK_MODEL = "onnx-community/bge-reranker-v2-m3-ONNX"
@@ -20,25 +21,7 @@ const DEVICE = "cpu" as const
 // reranker 입력 상한(속도) — 청크는 512~1024 토큰 권장이라 512로 자른다.
 const RERANK_MAX_LEN = 512
 
-// --- 모델 캐시 경로 (ADR-3: 기기별 공유 자산) ---
-
-export function resolveModelCacheDir(): string {
-  const explicit = process.env.TRANSFORMERS_CACHE || process.env.HF_HOME
-  if (explicit) return explicit
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.join(import.meta.dir, "..")
-  const preferred = path.join(pluginRoot, ".cache", "models")
-  try {
-    fs.mkdirSync(preferred, { recursive: true })
-    fs.accessSync(preferred, fs.constants.W_OK)
-    return preferred
-  } catch {
-    const xdg =
-      process.env.XDG_CACHE_HOME ||
-      process.env.LOCALAPPDATA ||
-      path.join(process.env.HOME || process.env.USERPROFILE || ".", ".cache")
-    return path.join(xdg, "llm-wiki", "models")
-  }
-}
+// --- 모델 캐시 경로 (ADR-3: 기기별 공유 자산) — 해석 규칙은 paths.ts가 SSoT ---
 
 env.cacheDir = resolveModelCacheDir()
 env.allowRemoteModels = true

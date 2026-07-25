@@ -17,6 +17,7 @@ import { buildIndex, indexFile, loadIndex, indexDir, getAllDocs, pageFromContent
 import { searchVault, type SearchMode, type SearchOptions } from "./search"
 import { lintOrphans, lintDoctor, lintTitleDuplicates } from "./lint"
 import { embeddingModelCached } from "./models"
+import { resolveModelCacheDir } from "./paths"
 
 // --- Section: 인자 파싱 ---
 
@@ -299,6 +300,7 @@ Usage:
   llm-wiki orphans [--vault <p>] [--json]    인바운드 링크 0 페이지
   llm-wiki doctor  [--vault <p>] [--json]    깨진 링크·stale·제목중복
   llm-wiki watch   [--vault <p>]             볼트 변경 감지 자동 증분
+  llm-wiki cache-dir                         모델 캐시 디렉토리 경로 출력
 
 볼트 경로: --vault 또는 WIKI_PATH / OBSIDIAN_VAULT_PATH 환경변수.`
 
@@ -325,6 +327,11 @@ async function main(): Promise<void> {
       return cmdDoctor(flags)
     case "watch":
       return cmdWatch(flags)
+    case "cache-dir":
+      // session-start.sh가 레거시 모델 캐시를 이관할 목적지를 물어보는 경로.
+      // paths.ts만 임포트하므로 무거운 모델 의존성 없이 즉시 답한다.
+      process.stdout.write(resolveModelCacheDir() + "\n")
+      return
     default:
       fail(`알 수 없는 커맨드: ${cmd}\n\n${HELP}`)
   }

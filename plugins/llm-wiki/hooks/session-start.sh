@@ -8,32 +8,41 @@ set -uo pipefail
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 
-# --- Model cache migration from a previously installed version ---
-# Plugins install into .../<plugin>/<version>/, a fresh directory per version, so the ONNX model
-# cache (~1.1GB) inside .cache/models is orphaned on every bump and re-downloaded from scratch.
-# Adopt it from the newest sibling version instead. Only models/ moves — .cache also holds the
+# --- Legacy model cache migration (per-version plugin dir → shared cache dir) ---
+# The ONNX model cache (~1.1GB) used to live in <plugin>/<version>/.cache/models. Plugins install
+# into a fresh directory per version, so that location was orphaned on every bump. Models now live
+# in a version-independent directory; src/paths.ts is the SSoT for where, and 'llm-wiki cache-dir'
+# reports it (never duplicate that rule here). Any leftover per-version cache is adopted once —
+# the glob below makes this a no-op afterwards. Only models/ moves: .cache also holds the
 # per-version deps-installed marker, which must NOT be carried over or 'bun install' gets skipped
 # while node_modules is still missing.
-MODELS="$PLUGIN_ROOT/.cache/models"
-if [ ! -d "$MODELS" ]; then
-  VERSIONS_DIR="$(dirname "$PLUGIN_ROOT")"
-  DONOR=""
-  for candidate in "$VERSIONS_DIR"/*/.cache/models; do
-    [ -d "$candidate" ] || continue
-    sibling="${candidate%/.cache/models}"
-    [ "$sibling" = "$PLUGIN_ROOT" ] && continue
-    # Guard against non-version siblings (e.g. a dev checkout where the parent holds other plugins).
-    case "$(basename "$sibling")" in
-      [0-9]*.[0-9]*.[0-9]*) ;;
-      *) continue ;;
-    esac
-    if [ -z "$DONOR" ] || [ "$candidate" -nt "$DONOR" ]; then DONOR="$candidate"; fi
-  done
-  if [ -n "$DONOR" ]; then
-    mkdir -p "$PLUGIN_ROOT/.cache"
-    # Same parent directory means same filesystem, so this is a rename, not a 1.1GB copy.
-    if mv "$DONOR" "$MODELS" 2>/dev/null; then
-      echo "[llm-wiki] Adopted the model cache from $(basename "$(dirname "$(dirname "$DONOR")")") — no ~1GB re-download needed." >&2
+LEGACY=""
+for candidate in "$(dirname "$PLUGIN_ROOT")"/*/.cache/models; do
+  [ -d "$candidate" ] || continue
+  # Guard against non-version siblings (e.g. a dev checkout whose parent holds other plugins).
+  case "$(basename "${candidate%/.cache/models}")" in
+    [0-9]*.[0-9]*.[0-9]*) ;;
+    *) continue ;;
+  esac
+  if [ -z "$LEGACY" ] || [ "$candidate" -nt "$LEGACY" ]; then LEGACY="$candidate"; fi
+done
+if [ -n "$LEGACY" ] && command -v bun >/dev/null 2>&1; then
+  TARGET="$(cd "$PLUGIN_ROOT" && bun run src/cli.ts cache-dir 2>/dev/null | tail -1)"
+  case "$TARGET" in /*) ;; *) TARGET="" ;; esac # 해석 실패 시 아무것도 건드리지 않는다
+  if [ -n "$TARGET" ] && [ "$TARGET" != "$LEGACY" ]; then
+    if [ -n "$(ls -A "$TARGET" 2>/dev/null)" ]; then
+      echo "[llm-wiki] Shared model cache already populated; leftover copy at $LEGACY can be deleted." >&2
+    else
+      mkdir -p "$(dirname "$TARGET")"
+      rmdir "$TARGET" 2>/dev/null # cache-dir가 빈 디렉토리를 만들어 두므로 mv 전에 비운다
+      if mv "$LEGACY" "$TARGET" 2>/dev/null; then
+        echo "[llm-wiki] Moved the model cache to $TARGET — shared across versions from now on." >&2
+      else
+        # 다른 파일시스템이면 rename이 안 된다 → 1.1GB 복사는 세션을 막지 않게 백그라운드로.
+        mkdir -p "$TARGET"
+        echo "[llm-wiki] Copying the model cache to $TARGET in background (different filesystem)." >&2
+        (cp -R "$LEGACY/." "$TARGET/" >/dev/null 2>&1 && rm -rf "$LEGACY") &
+      fi
     fi
   fi
 fi
