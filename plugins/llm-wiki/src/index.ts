@@ -1,10 +1,10 @@
 /**
- * cc-plugins-obsidian-knowledge — OpenCode Plugin
+ * cc-plugins-llm-wiki — OpenCode Plugin
  *
  * Claude Code 플러그인의 마크다운 파일(commands/agents/skills)을 읽어
  * OpenCode config 훅으로 주입한다. CC 파일은 전혀 수정하지 않는다.
  *
- * 설치: opencode.json에 "plugin": ["cc-plugins-obsidian-knowledge"] 추가
+ * 설치: opencode.json에 "plugin": ["cc-plugins-llm-wiki"] 추가
  */
 
 import type { Plugin } from "@opencode-ai/plugin"
