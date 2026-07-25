@@ -1,6 +1,6 @@
 ---
 name: delegate-oc
-description: Use when Claude Code (Opus orchestrator) is about to do repetitive coding work that fits the cc-opencode delegation policy — multi-file boilerplate implementation, mechanical refactors, code summarization, Korean/Chinese documentation, knowledge research, or document composition. Triggers on user requests like "구현해줘", "리팩터링", "이 파일들 요약", "한국어 문서 만들어줘", "조사해줘", or when Opus detects a task with low reasoning complexity but high token volume. **For ≥2 independent sub-tasks fired together** — triggers on "병렬로 위임", "동시에 위임", "한꺼번에", "여러 개 한 번에" — use `oc-fanout.sh` (see Parallel fan-out section). Other plugins (obsidian-knowledge, cc-deep-tutor, pm, ...) call this skill via the Skill tool to delegate their own large-output subtasks.
+description: Use when Claude Code (Opus orchestrator) is about to do repetitive coding work that fits the cc-opencode delegation policy — multi-file boilerplate implementation, mechanical refactors, code summarization, Korean/Chinese documentation, knowledge research, or document composition. Triggers on user requests like "구현해줘", "리팩터링", "이 파일들 요약", "한국어 문서 만들어줘", "조사해줘", or when Opus detects a task with low reasoning complexity but high token volume. **For ≥2 independent sub-tasks fired together** — triggers on "병렬로 위임", "동시에 위임", "한꺼번에", "여러 개 한 번에" — use `oc-fanout.sh` (see Parallel fan-out section). Other plugins (llm-wiki, cc-deep-tutor, pm, ...) call this skill via the Skill tool to delegate their own large-output subtasks.
 ---
 
 # delegate-oc

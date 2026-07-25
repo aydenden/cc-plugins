@@ -1,0 +1,4 @@
+# llm-wiki 런타임 자산 (git 아님)
+# ONNX 모델 캐시 (Transformers.js/HF, ~1GB)
+.cache/
+node_modules/

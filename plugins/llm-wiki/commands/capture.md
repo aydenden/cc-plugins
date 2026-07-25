@@ -9,9 +9,10 @@ argument-hint: <URL 또는 노트 제목>
 
 ```bash
 WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
+CLI="${CLAUDE_PLUGIN_ROOT}/src/cli.ts"   # llm-wiki 검색 CLI (Bun)
 ```
 
-둘 다 미설정이면 사용자에게 안내하고 중단.
+`WIKI`가 미설정이면 사용자에게 안내하고 중단.
 
 ## 0. 오리엔테이션 (wiki-schema 스킬, 필수)
 
@@ -69,8 +70,23 @@ index.md와 Grep으로 언급된 엔티티/개념의 기존 페이지를 찾는�
    - 역링크: [[노트1]], [[노트2]]
    ```
 
-## 5. 보고
+## 5. 검색 인덱스 증분 갱신
 
-생성/갱신한 모든 파일 목록과 역링크 삽입 위치를 사용자에게 보고한다.
+작성/갱신한 **각 위키 페이지**(entities/concepts/comparisons/queries)에 대해 증분 인덱싱을 실행한다.
+`raw/`·`index.md`·`log.md`는 검색 대상이 아니므로 제외.
+
+```bash
+# 생성/갱신한 위키 페이지마다 (절대경로로)
+bun run "$CLI" index --vault "$WIKI" --file "$WIKI/concepts/새페이지.md"
+```
+
+- `--file`은 해당 파일의 청크만 재임베딩/교체하는 near-instant 증분이다(전체 재인덱싱 아님).
+- 인덱스가 아직 없으면(첫 사용) 이 명령이 전체 인덱싱으로 폴백한다 — 모델 다운로드 ~1GB로
+  시간이 걸리니, 그럴 땐 백그라운드 실행을 안내한다.
+- `index.md` 수동 갱신(4단계)은 사람용 네비게이션 유지 목적이며, 검색 진입점은 이 인덱스다.
+
+## 6. 보고
+
+생성/갱신한 모든 파일 목록과 역링크 삽입 위치, 인덱스 증분 갱신 결과를 사용자에게 보고한다.
 
 인자: $ARGUMENTS
