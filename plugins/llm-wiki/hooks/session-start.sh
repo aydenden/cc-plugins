@@ -8,6 +8,36 @@ set -uo pipefail
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 
+# --- Model cache migration from a previously installed version ---
+# Plugins install into .../<plugin>/<version>/, a fresh directory per version, so the ONNX model
+# cache (~1.1GB) inside .cache/models is orphaned on every bump and re-downloaded from scratch.
+# Adopt it from the newest sibling version instead. Only models/ moves — .cache also holds the
+# per-version deps-installed marker, which must NOT be carried over or 'bun install' gets skipped
+# while node_modules is still missing.
+MODELS="$PLUGIN_ROOT/.cache/models"
+if [ ! -d "$MODELS" ]; then
+  VERSIONS_DIR="$(dirname "$PLUGIN_ROOT")"
+  DONOR=""
+  for candidate in "$VERSIONS_DIR"/*/.cache/models; do
+    [ -d "$candidate" ] || continue
+    sibling="${candidate%/.cache/models}"
+    [ "$sibling" = "$PLUGIN_ROOT" ] && continue
+    # Guard against non-version siblings (e.g. a dev checkout where the parent holds other plugins).
+    case "$(basename "$sibling")" in
+      [0-9]*.[0-9]*.[0-9]*) ;;
+      *) continue ;;
+    esac
+    if [ -z "$DONOR" ] || [ "$candidate" -nt "$DONOR" ]; then DONOR="$candidate"; fi
+  done
+  if [ -n "$DONOR" ]; then
+    mkdir -p "$PLUGIN_ROOT/.cache"
+    # Same parent directory means same filesystem, so this is a rename, not a 1.1GB copy.
+    if mv "$DONOR" "$MODELS" 2>/dev/null; then
+      echo "[llm-wiki] Adopted the model cache from $(basename "$(dirname "$(dirname "$DONOR")")") — no ~1GB re-download needed." >&2
+    fi
+  fi
+fi
+
 # --- Dependency auto-provision (marker-guarded, once, background) ---
 MARKER="$PLUGIN_ROOT/.cache/deps-installed"
 if [ ! -d "$PLUGIN_ROOT/node_modules/@orama" ] && [ ! -f "$MARKER" ]; then

@@ -8,7 +8,7 @@
       "name": "llm-wiki",
       "source": "./plugins/llm-wiki",
       "description": "Obsidian 볼트 기반 LLM Wiki — 볼트 SCHEMA.md(SSoT)를 따르는 ingest/query/lint 연산으로 지식을 복리 축적한다. 전용 검색 CLI(llm-wiki: Orama BM25+lindera 형태소 + bge-m3 벡터 하이브리드 + bge-reranker rerank)로 index.md 미등록 페이지까지 전수 검색. hermes llm-wiki와 같은 볼트·같은 컨벤션 공유. cc-opencode:delegate-oc skill이 가용하면 외부 조사·문서 작성을 OpenCode에 자동 위임해 CC 토큰 절감.",
-      "version": "0.5.1"
+      "version": "0.5.2"
     },
     {
       "name": "korean-trading",
