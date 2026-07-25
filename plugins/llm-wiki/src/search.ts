@@ -80,6 +80,50 @@ function makeSnippet(content: string, query: string): string {
 
 // --- 정확검색 레인 (2차): 리터럴 substring + es-hangul 초성 ---
 
+/**
+ * Word-boundary-aligned choseong match.
+ *
+ * The stored `choseong` field is built as `toChoseong(title + heading + content)`, which strips
+ * whitespace. A plain substring test therefore also matches initials that straddle word
+ * boundaries — measured: the 4-jamo query "ㅅㅇㅇㅅ" hits 205 of 542 pages. Candidates coming out
+ * of that cheap prefilter are re-verified here so only word-aligned matches survive.
+ *
+ * @returns matched — query aligns with the start of some word (or run of words);
+ *          wholeWords — the matched run ends on a word boundary too (stronger signal);
+ *          hits — number of aligned occurrences (weak tf signal for ranking).
+ */
+function choseongBoundaryMatch(text: string, qCho: string): { matched: boolean; wholeWords: boolean; hits: number } {
+  if (!text) return { matched: false, wholeWords: false, hits: 0 }
+  // 공백뿐 아니라 구두점도 단어 경계다. 볼트 본문은 "실거래가·건축물대장·토지" 처럼 가운뎃점으로
+  // 나열하거나 **강조** 마크업을 쓰므로, 공백만으로 쪼개면 안쪽 단어가 시작 위치를 잃는다.
+  const words: string[] = []
+  for (const w of text.split(/[^가-힣ㄱ-ㅎA-Za-z0-9]+/)) if (w) words.push(toChoseong(w))
+  let hits = 0
+  let wholeWords = false
+  for (let i = 0; i < words.length; i++) {
+    if (!words[i].startsWith(qCho[0])) continue // 첫 자모 불일치는 즉시 스킵
+    let acc = ""
+    for (let j = i; j < words.length && acc.length < qCho.length; j++) acc += words[j]
+    if (acc.startsWith(qCho)) {
+      hits++
+      if (acc.length === qCho.length) wholeWords = true
+    }
+  }
+  return { matched: hits > 0, wholeWords, hits }
+}
+
+/**
+ * Score a choseong match. The old implementation returned a constant (0.65), so every candidate
+ * tied and ordering fell back to scan order — measured r@10 0.56 on queries whose target term is
+ * unique in the vault. Longer queries, title matches, and word-aligned ends now rank higher.
+ */
+function choseongScore(inTitle: boolean, qLen: number, wholeWords: boolean, hits: number, isChoQuery: boolean): number {
+  const lenFactor = Math.min(qLen, 12) / 12
+  const base = (inTitle ? 0.75 : 0.6) * (isChoQuery ? 1 : 0.8)
+  const s = base + (wholeWords ? 0.1 : 0) + 0.1 * lenFactor + (0.03 * Math.min(hits, 3)) / 3
+  return Math.min(0.95, s) // 리터럴 제목 완전일치(1.0)를 넘지 않도록 상한
+}
+
 /** 전 문서를 스캔해 리터럴/초성 정확 매칭을 페이지 단위로 반환. */
 function exactLane(docs: ChunkDoc[], query: string, opts: SearchOptions): Map<string, ChunkHit> {
   const choseongQuery = isChoseongQuery(query)
@@ -97,9 +141,15 @@ function exactLane(docs: ChunkDoc[], query: string, opts: SearchOptions): Map<st
       if (title.includes(q)) score = Math.max(score, 1.0)
       else if (body.includes(q)) score = Math.max(score, 0.7)
     }
-    // 초성 매칭(초성 쿼리이거나, 짧은 쿼리의 보조 신호)
+    // 초성 매칭(초성 쿼리이거나, 짧은 쿼리의 보조 신호).
+    // 저장 필드 substring은 값싼 프리필터로만 쓰고, 통과분만 단어 경계로 재검증한다.
     if ((choseongQuery || q.length <= SHORT_QUERY_LEN) && qCho.length >= 2 && d.choseong?.includes(qCho)) {
-      score = Math.max(score, choseongQuery ? 0.65 : 0.5)
+      const inTitle = choseongBoundaryMatch(`${d.title ?? ""} ${d.heading ?? ""}`, qCho)
+      const inBody = inTitle.matched ? null : choseongBoundaryMatch(d.content ?? "", qCho)
+      const m = inTitle.matched ? inTitle : inBody
+      if (m?.matched) {
+        score = Math.max(score, choseongScore(inTitle.matched, qCho.length, m.wholeWords, m.hits, choseongQuery))
+      }
     }
     if (score > 0) {
       const cur = byPath.get(d.path)
