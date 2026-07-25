@@ -26,7 +26,7 @@ interface Flags {
   [k: string]: string | boolean | string[]
 }
 
-const BOOL_FLAGS = new Set(["force", "rerank", "json", "exact", "boost-links", "decay", "help"])
+const BOOL_FLAGS = new Set(["force", "rerank", "json", "exact", "boost-links", "decay", "no-title-boost", "help"])
 
 function parseArgs(argv: string[]): Flags {
   const flags: Flags = { _: [] }
@@ -136,6 +136,7 @@ async function cmdSearch(flags: Flags): Promise<void> {
     filterTags: filter.tags,
     rerank: flags.rerank === true,
     exact: flags.exact === true,
+    titleBoost: flags["no-title-boost"] !== true,
     boostLinks: flags["boost-links"] === true,
     decay: flags.decay === true,
     halfLifeDays: halfLife,
@@ -301,6 +302,8 @@ Usage:
   llm-wiki doctor  [--vault <p>] [--json]    깨진 링크·stale·제목중복
   llm-wiki watch   [--vault <p>]             볼트 변경 감지 자동 증분
   llm-wiki cache-dir                         모델 캐시 디렉토리 경로 출력
+
+  search 옵션: --no-title-boost 로 제목 일치 가중(기본 ON) 해제
 
 볼트 경로: --vault 또는 WIKI_PATH / OBSIDIAN_VAULT_PATH 환경변수.`
 
