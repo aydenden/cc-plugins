@@ -1,9 +1,0 @@
-{
-  "name": "pm",
-  "version": "0.1.1",
-  "description": "PMS(Product-Manager-Skills) 워크플로우와 Beads 이슈 트래커를 통합하는 PM 플러그인. PMS 스킬 산출물을 beads epic/task/feature로 자동 변환한다.",
-  "author": {
-    "name": "aydenden"
-  },
-  "keywords": ["product-management", "beads", "pms", "roadmap", "epic", "user-story"]
-}

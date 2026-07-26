@@ -17,12 +17,6 @@
       "version": "0.4.0"
     },
     {
-      "name": "pm",
-      "source": "./plugins/pm",
-      "description": "PMS 워크플로우와 Beads 이슈 트래커 통합 — 로드맵/PRD/디스커버리 산출물을 beads epic/task/feature로 자동 변환",
-      "version": "0.1.1"
-    },
-    {
       "name": "cc-opencode",
       "source": "./plugins/cc-opencode",
       "description": "CC(Opus)가 OpenCode(저비용 모델)에 반복 작업을 위임하는 Skill 전용 플러그인. Skill(cc-opencode:delegate-oc)이 단일 컨트롤러 bin/oc-delegate.sh를 1회 호출 → 세션 디렉토리/모델 매핑/git diff/분류는 셸에서, ACP 턴(opencode acp, stdio JSON-RPC)은 번들된 Node 클라이언트 dist/acp-client.mjs가 처리(initialize→session/new→session/set_model→session/prompt; session/update 스트리밍 + stall watchdog로 hang 감지) → 7줄 리포트 + 약속된 exit code (0=done / 11~13=error / 20=aborted-perm / 30=timeout / 31=stalled). 메인 세션은 1회 Bash + exit code 분기만 수행. 모델은 session/set_model로 직접 지정(TASK_TYPE→model 매핑, spec의 MODEL:로 override, VARIANT:로 추론강도). bin/oc-fanout.sh로 N개 spec 병렬 위임. PreToolUse hook(hooks/redirect-subagent.sh, opt-in: CC_OC_REDIRECT_SUBAGENTS=1)으로 네이티브 서브에이전트(Agent/Task) 스폰을 delegate-oc 위임에 재라우팅. 런타임 의존성은 node(번들 dist), opencode v1.15.5 핀.",
