@@ -1,4 +1,4 @@
-# llm-wiki 런타임 자산 (git 아님)
-# ONNX 모델 캐시 (Transformers.js/HF, ~1GB)
+# 런타임 의존성이 없는 플러그인이므로 무시할 산출물도 없다.
+# 과거 Bun+ONNX 스택의 잔여물이 되살아나는 것만 막아 둔다.
 .cache/
 node_modules/
