@@ -61,24 +61,7 @@ bun run src/cli.ts status | links <file> | orphans | doctor | watch
 
 | 에이전트 | 설명 |
 |----------|------|
-| research-agent | 볼트 검색 → 외부 조사 → SCHEMA.md 준수 페이지 작성 → 역링크/index/log 갱신까지 자율 수행. cc-opencode:delegate-oc skill 가용 시 외부 조사 + 본문 작성을 OpenCode에 위임 (CC 토큰 70%+ 절감, 자동 fallback) |
-
-## OC 위임 모드
-
-`cc-opencode` 플러그인이 함께 설치 + 인증되어 있으면, `research`가 `Skill(cc-opencode:delegate-oc, ...)`를 통해 OpenCode에 외부 조사·문서 작성을 위임한다. daemon 기동·attach·SSE 모니터링은 모두 `cc-opencode` 쪽이 책임지므로 이 플러그인에서는 별도 사전 감지가 없다.
-
-| 모드 | 동작 |
-|---|---|
-| `oc` (default) | Skill 위임 시도. 실패 시 자동 cc-only fallback |
-| `cc-only` | CC가 직접 외부 조사·문서 작성 (품질 모드) |
-| `oc-required` | OC 위임 강제. 실패 시 에러 (fallback 없음) |
-
-```bash
-/llm-wiki:research "주제" --cc-only   # CC 직접 (품질 모드)
-/llm-wiki:research "주제" --oc-only   # OC 위임 강제 (미가용 시 에러)
-```
-
-위임해도 다음은 CC가 직접 수행 (볼트 동시 수정 위험 방지): 역링크 Edit, `index.md` 갱신, `log.md` append, frontmatter 검증.
+| research-agent | 볼트 검색 → 외부 조사 → SCHEMA.md 준수 페이지 작성 → 역링크/index/log 갱신까지 자율 수행 |
 
 ## 스키마 (볼트 SCHEMA.md가 정의 — 아래는 현재 값 요약)
 
@@ -101,16 +84,10 @@ hermes agent(`~/.hermes/skills/research/llm-wiki`)가 같은 볼트를 같은 SC
 
 ### 설치
 
+npm 배포는 하지 않는다. GitHub repo 또는 로컬 경로로 직접 지정한다:
+
 ```json
 // opencode.json
-{
-  "plugin": ["@aydenden/plugin-llm-wiki"]
-}
-```
-
-또는 GitHub repo에서 직접:
-
-```json
 {
   "plugin": ["github:aydenden/cc-plugins"]
 }
@@ -139,7 +116,7 @@ plugins/llm-wiki/
 ├── hooks/                        # CC 전용 (OC는 훅 시스템이 다름)
 ├── src/
 │   └── index.ts                  # OC 플러그인 진입점 (config 훅)
-└── package.json                  # OC npm 패키지 메타데이터
+└── package.json                  # 검색 CLI 의존성 + OC 플러그인 메타데이터 (비배포)
 ```
 
 ### Agent 모델 정책
@@ -155,5 +132,4 @@ OpenCode에서는 CC의 `model: sonnet` 대신 OpenCode Go 모델을 사용한�
 ### 제약사항
 
 - **hooks**: CC의 `hooks/session-start.sh`는 OC에서 작동하지 않음. WIKI_PATH 검증은 OC 세션 시작 시 수동 확인 필요
-- **OC 위임 모드**: CC의 `cc-opencode:delegate-oc` Skill 위임은 OC에서 직접 조사/작성으로 대체 (OC가 저비용 모델을 직접 사용)
 - **명령어 이름**: CC는 `/llm-wiki:capture`, OC는 `/capture` (플러그인 prefix 없음)

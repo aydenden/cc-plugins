@@ -1,9 +1,0 @@
-# Build/runtime for the ACP client (src/acp-client.ts → dist/acp-client.mjs).
-# node_modules is dev-only (needed to bundle); never shipped.
-node_modules/
-
-# dist/ is IGNORED by the global ~/.gitignore, but the bundled ACP client MUST
-# be committed — it is the runtime artifact run by `node` with no install step.
-# Re-include the directory and the bundle explicitly.
-!dist/
-!dist/acp-client.mjs

@@ -77,7 +77,7 @@ plugins/memory-guard/
 │   └── scripts/
 │       ├── index-guard.sh         # CC: PreToolUse → MEMORY.md write 차단
 │       └── memory-check.sh        # CC: SessionStart → 하루 1회 stale 점검
-├── package.json                   # OC 플러그인 패키지 (@aydenden/plugin-memory-guard)
+├── package.json                   # OC 플러그인 메타데이터 (비배포)
 ├── src/
 │   └── index.ts                   # OC Plugin 엔트리 (TypeScript)
 └── README.md
@@ -93,15 +93,11 @@ plugins/memory-guard/
 
 ### OpenCode 설치
 
-```bash
-npm install -g @aydenden/plugin-memory-guard
-```
-
-`opencode.json`에 추가:
+npm 배포는 하지 않는다. `opencode.json`에 GitHub repo 또는 로컬 경로로 직접 지정한다:
 
 ```jsonc
 {
-  "plugin": ["opencode-claude-memory", "@aydenden/plugin-memory-guard"]
+  "plugin": ["opencode-claude-memory", "github:aydenden/cc-plugins"]
 }
 ```
 
