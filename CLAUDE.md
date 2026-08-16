@@ -11,24 +11,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 cc-plugins/
 ├── .claude-plugin/marketplace.json   # 마켓플레이스 정의
-├── plugins/                          # 개별 플러그인들
-│   └── {plugin-name}/
-│       ├── .claude-plugin/plugin.json
-│       ├── commands/    # 슬래시 명령어 (.md)
-│       ├── skills/      # Agent Skills (skill-name/SKILL.md)
-│       ├── agents/      # 서브에이전트 (.md)
-│       └── hooks/       # 이벤트 훅 (hooks.json)
-└── templates/plugin-template/        # 새 플러그인 템플릿
+└── plugins/                          # 개별 플러그인들
+    └── {plugin-name}/
+        ├── .claude-plugin/plugin.json
+        ├── commands/    # 슬래시 명령어 (.md)
+        ├── skills/      # Agent Skills (skill-name/SKILL.md)
+        ├── agents/      # 서브에이전트 (.md)
+        └── hooks/       # 이벤트 훅 (hooks.json)
 ```
 
 ## 새 플러그인 추가 방법
 
-1. 템플릿 복사:
+1. 디렉토리 생성:
    ```bash
-   cp -r templates/plugin-template plugins/my-new-plugin
+   mkdir -p plugins/my-new-plugin/.claude-plugin
    ```
 
-2. `plugins/my-new-plugin/.claude-plugin/plugin.json` 수정:
+2. `plugins/my-new-plugin/.claude-plugin/plugin.json` 작성:
    - `name`: 플러그인 이름 (kebab-case)
    - `description`: 플러그인 설명
 
