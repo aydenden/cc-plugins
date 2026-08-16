@@ -54,8 +54,8 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 ## 3. 위키 페이지 작성/갱신 (Layer 2)
 
 - **신규 페이지**: SCHEMA.md의 Page Thresholds 충족 시에만 (2+ 소스 등장 또는 단일 소스의 중심 주제). type별 디렉토리(entities/concepts/comparisons/queries)에 저장.
-- **기존 페이지**: 새 정보 추가, `updated` 날짜 범프. 충돌 시 SCHEMA.md Update Policy (양쪽 병기 + `contested`/`contradictions` frontmatter).
-- **frontmatter**: SCHEMA.md 형식 (`title/created/updated/type/tags/sources` + 선택 quality 필드). `sources:`에는 raw 파일 경로 또는 세션 표기. `summary:`는 디렉토리 index.md 자동 생성의 입력이므로 한 줄로 반드시 채운다.
+- **기존 페이지**: 새 정보 추가, `date` 범프(= 최종 갱신일). 충돌 시 SCHEMA.md Update Policy (양쪽 병기 + `contested`/`contradictions` frontmatter).
+- **frontmatter**: SCHEMA.md 형식 — 필수 `type/tags/summary/date/sources` + 선택 `confidence/contested/contradictions/subjects`. 이 8개가 전부이며 다른 키는 쓰지 않는다. `sources:`는 항상 배열이고 원소는 `raw/…` | URL | `github:org/repo` | `session:YYYY-MM-DD`. `summary:`는 디렉토리 index.md 자동 생성의 입력이므로 한 줄로 반드시 채운다.
 - **교차참조**: 페이지당 outbound `[[wikilink]]` 최소 2개. 관련 기존 페이지 최대 5개에 역링크 Edit 삽입.
 - **태그**: SCHEMA.md 택소노미만. 새 태그는 택소노미에 먼저 추가.
 - **confidence**: 공식 문서/1차 소스 다수=high, 1·2차 혼재=medium, 포럼/미검증=low. 의견성·단일 소스 주장은 medium 이하.
