@@ -643,6 +643,10 @@ function vaultPath(opts) {
  * after the closing `---` line — which is exactly what lint's raw-drift check
  * hashes; any other span would report drift on every file forever.
  *
+ * Book text IS committed to the vault repo: design §1 barred any repository,
+ * but the vault's remote is private and the user chose backup and cross-device
+ * sync over the blanket ban (2026-08-16). Nothing here is gitignored.
+ *
  * log.md is printed, not written: the PostToolUse hook fires on the agent's
  * Write/Edit of log.md, so a script writing it directly would silently skip
  * index regeneration and lint (wiki-schema rule 6/7).
@@ -661,14 +665,6 @@ function ingest(opts) {
   const dest = path.join(booksRoot, slug);
   if (fs.existsSync(dest) && !opts.force) return fail(`ingest: ${dest} already exists (--force to overwrite)`);
   fs.mkdirSync(dest, { recursive: true });
-
-  // Purchased books must not reach any remote (design §1); the vault has one.
-  const ignore = path.join(booksRoot, '.gitignore');
-  let ignoreCreated = false;
-  if (!fs.existsSync(ignore)) {
-    fs.writeFileSync(ignore, '# 구매 저작물 본문은 어떤 원격 저장소에도 올리지 않는다\n*\n!.gitignore\n', 'utf8');
-    ignoreCreated = true;
-  }
 
   const ingested = today();
   let pages = 0;
@@ -690,7 +686,6 @@ function ingest(opts) {
 
   const rel = `raw/books/${slug}`;
   console.log(`ingest: ${pages} markdown + ${assets} assets -> ${rel}/`);
-  if (ignoreCreated) console.log(`ingest: created ${rel.replace(`/${slug}`, '')}/.gitignore (book text stays off the remote)`);
   console.log('\nlog.md 에 append 할 줄 (직접 Write/Edit 로 추가할 것 — 훅이 그때 lint 를 돌린다):\n');
   console.log(`## [${ingested}] ingest | ${opts.book}`);
   console.log(`- Raw: \`${rel}/\` (${pages} 파일, 책 단위 1줄)`);

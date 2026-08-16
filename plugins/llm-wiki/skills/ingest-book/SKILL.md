@@ -78,8 +78,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/ingest-book.mjs" ingest \
 
 - `$WIKI/raw/books/<slug>/`에 복사하며 각 파일에 raw frontmatter(`ingested`/`sha256`)를 붙인다.
   sha256 기준선은 lint의 drift 검사와 같다(닫는 `---` 다음 줄부터)
-- 구매 저작물이므로 `raw/books/.gitignore`를 만들어 **볼트 원격에 올라가지 않게** 막는다.
-  이 파일을 지우지 않는다
+- 책 본문은 **볼트 레포에 그대로 커밋한다.** 설계문서 §1은 "구매 저작물은 어떤 저장소에도
+  커밋 금지"였으나 볼트 원격이 private이므로 백업·기기 간 동기화를 택했다(2026-08-16 사용자
+  결정). 공개 레포에는 여전히 올리지 않는다 — 이 플러그인 레포에 책 본문이 들어가면 안 된다
 - 원본 PDF는 **버리지 않는다.** 마크다운은 검색·탐색용이고 최종 심급은 원본이다
 
 # 규칙 6: log.md와 lint는 wiki-schema가 소유한다
