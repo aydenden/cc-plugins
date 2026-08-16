@@ -41,6 +41,8 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 
 원문을 보존할 가치가 있으면 위키 페이지를 쓰기 전에 `raw/`에 먼저 남긴다 — 웹 문서는 `raw/articles/`, 논문은 `raw/papers/`, 대화·붙여넣은 전문은 `raw/transcripts/`. 파일명은 서술적 kebab-case(예: `raw/articles/karpathy-llm-wiki-2026.md`).
 
+책은 여기서 다루지 않는다 — `raw/books/<책>/`는 `ingest-book` 스킬이 소유하는 번들이며 손으로 만들지 않는다.
+
 frontmatter는 SCHEMA.md의 `raw/ Frontmatter` 절을 그대로 따른다(`source_url` / `ingested` / `sha256`). `sha256`은 **frontmatter 닫는 `---` 다음 줄부터의 본문**에 대해 계산한다 — 이 기준은 lint의 drift 검사와 동일해야 한다.
 
 **재ingest 감지**: 같은 `source_url`이 `raw/`에 이미 있으면 새 sha256과 비교해 — 동일하면 처리 생략을 보고하고, 다르면 drift로 표시한 뒤 갱신한다.
