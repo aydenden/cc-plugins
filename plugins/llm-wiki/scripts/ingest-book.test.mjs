@@ -216,9 +216,8 @@ test('CLI ingest: raw frontmatter hashes the body the way lint does', () => {
   assert.match(text, /ingested: \d{4}-\d{2}-\d{2}/);
   assert.ok(fs.existsSync(path.join(dest, '_page_1_Diagram_0.jpeg')));
 
-  // Purchased book text must never reach the vault's remote.
-  const ignore = fs.readFileSync(path.join(vault, 'raw', 'books', '.gitignore'), 'utf8');
-  assert.match(ignore, /^\*$/m);
+  // The private vault repo keeps book text (2026-08-16 decision): nothing is gitignored.
+  assert.ok(!fs.existsSync(path.join(vault, 'raw', 'books', '.gitignore')));
   // The log line is printed for the agent to write, never written here.
   assert.match(res.stdout, /## \[\d{4}-\d{2}-\d{2}\] ingest \| 테스트 책/);
   assert.ok(!fs.existsSync(path.join(vault, 'log.md')));
