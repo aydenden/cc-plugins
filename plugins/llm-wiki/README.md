@@ -7,13 +7,14 @@ Obsidian 볼트를 [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf5
 ```
 $WIKI/
 ├── SCHEMA.md      # Layer 3: 컨벤션·frontmatter·태그 택소노미·페이지 기준 (SSoT)
-├── index.md       # 섹션별 콘텐츠 카탈로그 (한 줄 요약)
+├── index.md       # 주제군 지도 (lint가 재생성, 손으로 고치지 않는다)
 ├── log.md         # 연산 이력 (append-only, 끝에 추가)
-├── raw/           # Layer 1: 불변 원본 소스 (articles/papers/transcripts)
+├── raw/           # Layer 1: 불변 원본 (articles/papers/transcripts/feeds/books)
 ├── entities/      # Layer 2: 엔티티 페이지 (도구, 조직, 인물)
 ├── concepts/      # Layer 2: 개념/주제 페이지
 ├── comparisons/   # Layer 2: A vs B 분석
-└── queries/       # Layer 2: 보존 가치 있는 질의 결과
+├── queries/       # Layer 2: 보존 가치 있는 질의 결과
+└── summaries/     # Layer 2: 단일 소스 요약
 ```
 
 ## 볼트 경로
@@ -28,20 +29,28 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 
 | 커맨드 | llm-wiki 연산 | 설명 |
 |--------|--------------|------|
-| `/llm-wiki:capture <URL 또는 제목>` | Ingest | raw/ 캡처(sha256 dedup) → 기존 페이지 확인 → 페이지 생성/갱신 → index/log |
+| `/llm-wiki:capture <URL 또는 제목>` | Ingest | raw/ 캡처(sha256 dedup)까지 담당하고, 적재는 wiki-schema 스킬 절차에 위임 |
 | `/llm-wiki:recall <키워드>` | Query | Grep 전수검색 → 후보 합성 → 가치 있으면 queries/에 파일링 |
 | `/llm-wiki:research <주제>` | Ingest(research) | research-agent로 외부 조사 → 위키 페이지 작성 |
-| `/llm-wiki:lint [--fix]` | Lint | orphans/doctor CLI + frontmatter·모순·raw drift·태그 위반·로그 회전 |
+
+Lint 커맨드는 없다 — 정비는 아래 훅이 log 기록 직후 자동으로 돌린다.
+
+## 훅
+
+| 훅 | 설명 |
+|----|------|
+| SessionStart | 볼트 도달·초기화 검증(경로, `SCHEMA.md`)만. 세션을 막지 않는다 |
+| PostToolUse (`Write\|Edit`) | 대상이 볼트 `log.md`일 때만 동작 — `--write-index`로 index 재생성 후 점검을 돌려 요약을 에이전트에 되돌린다. error 그룹이 있으면 exit 2로 즉시 조치를 강제하고, 그 외 파일 쓰기에서는 아무것도 하지 않고 즉시 종료 |
 
 ## 검색: CC 내장 Grep 전수검색
 
-전용 검색 CLI(Bun + Orama + ONNX)는 **제거되었다**(v0.7.0). 볼트 마크다운 총량이 8.5MB로
-`rg` 전수검색이 0.02초에 끝나므로 인덱스가 필요 없고, 인덱스를 두는 순간 3플랫폼 무설치
-원칙이 깨진다.
+볼트 마크다운 총량이 8.5MB라 `rg` 전수검색이 0.02초에 끝난다. 인덱스를 두는 순간 3플랫폼
+무설치 원칙이 깨지므로 검색 인덱스는 두지 않는다.
 
 - **검색** = CC 내장 Grep. `index.md` 등재 여부와 무관하게 파일시스템 전체가 대상이다.
-- **잃은 것**: 시맨틱 유사도·rerank·한국어 형태소 분석. 무설치로는 불가하므로 수용한다.
-- 제거된 스택의 원본은 git 히스토리에 있다(`git show f3def78:plugins/llm-wiki/src/cli.ts`).
+- 한국어 볼트는 형태소 분석기가 없으므로 **쿼리 확장이 필수**다 — 규칙은
+  `skills/wiki-schema/references/search-expansion.md`.
+- **잃은 것**: 시맨틱 유사도·rerank. 무설치로는 불가하므로 수용한다.
 
 ## 런타임 의존성
 
@@ -53,18 +62,18 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 
 | 스킬 | 설명 |
 |------|------|
-| wiki-schema | 볼트 쓰기 전 자동 적용 — SCHEMA.md 오리엔테이션 강제, 레이어 구분(raw 불변), 교차참조(최소 2 outbound + 역링크 5), index/log 갱신, Update Policy(모순 병기) |
+| wiki-schema | **볼트 적재 절차의 소유자.** 볼트 쓰기 시 자동 적용 — SCHEMA.md 오리엔테이션, 레이어 구분(raw 불변), Grep 전수검색+쿼리 확장, frontmatter·태그, 교차참조(최소 2 outbound + 역링크 5), log 기록, lint 실행, Update Policy(모순 병기). `index.md`는 손대지 않는다(lint가 재생성) |
 
 ## 에이전트
 
 | 에이전트 | 설명 |
 |----------|------|
-| research-agent | 볼트 검색 → 외부 조사 → SCHEMA.md 준수 페이지 작성 → 역링크/index/log 갱신까지 자율 수행 |
+| research-agent | 볼트 검색 → 외부 조사까지 자율 수행하고, 적재는 wiki-schema 스킬 절차에 위임 |
 
 ## 스키마 (볼트 SCHEMA.md가 정의 — 아래는 현재 값 요약)
 
 - **type**: `entity | concept | comparison | query | summary` → type별 디렉토리에 저장
-- **frontmatter**: `title / created / updated / type / tags / sources` + 선택 `confidence / contested / contradictions`
+- **frontmatter**: 필수 `type / tags / summary / date / sources` + 선택 `confidence / contested / contradictions / subjects`. **이 8개가 전부**이며 다른 키는 drift로 lint가 잡는다. 표시 이름은 frontmatter가 아니라 H1이 갖는다
 - **태그**: SCHEMA.md 택소노미에 있는 것만. 새 태그는 택소노미에 먼저 추가
 - **Page Thresholds**: 2+ 소스 등장 또는 단일 소스 중심 주제일 때만 신규 페이지, 200줄 초과 시 분리
 - **Update Policy**: 모순은 양쪽 병기 + `contested`/`contradictions` 표기, lint가 검토 목록으로 표면화
@@ -84,7 +93,6 @@ plugins/llm-wiki/
 ├── commands/                     # 슬래시 명령어
 ├── skills/                       # SKILL.md
 ├── agents/                       # 서브에이전트
-└── hooks/                        # SessionStart (볼트 검증만)
+├── hooks/                        # SessionStart(볼트 검증) + PostToolUse(log.md → 자동 정비)
+└── scripts/lint.mjs              # 의존성 0 정비 스크립트
 ```
-
-OpenCode 겸용(`src/index.ts` 어댑터)은 v0.7.0에서 제거했다 — Claude Code 전용이다.
