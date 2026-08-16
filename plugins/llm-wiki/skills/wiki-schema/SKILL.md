@@ -33,13 +33,13 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 | Wiki | `entities/` `concepts/` `comparisons/` `queries/` | 생성·갱신 가능 |
 | Schema | `SCHEMA.md` | 택소노미에 새 태그 추가 시에만 Edit (사용 전에 추가) |
 
-관리 파일 `index.md` / `log.md`는 규칙 5의 절차로만 갱신한다. `.obsidian/` 수정 금지.
+관리 파일 `log.md`는 규칙 5의 절차로만 갱신하고, `index.md`는 직접 갱신하지 않는다(lint가 재생성). `.obsidian/` 수정 금지.
 
 # 규칙 3: 페이지 작성
 
-1. **타입 분류와 저장 위치**: SCHEMA.md의 type 정의를 따르고, type에 해당하는 디렉토리에 저장한다 (entity→`entities/`, concept→`concepts/`, comparison→`comparisons/`, query→`queries/`).
+1. **타입 분류와 저장 위치**: SCHEMA.md의 type 정의를 따르고, type에 해당하는 디렉토리에 저장한다 (entity→`entities/`, concept→`concepts/`, comparison→`comparisons/`, query→`queries/`, summary→`summaries/`). type과 디렉토리는 1:1이며 새 type을 만들지 않는다 — 페이지 성격은 `tags`로 표현한다.
 2. **생성 기준**: SCHEMA.md의 Page Thresholds를 따른다 — 2개 이상 소스에서 등장하거나 단일 소스의 중심 주제일 때만 새 페이지. 스치는 언급은 기존 페이지에 추가하거나 생략.
-3. **frontmatter**: SCHEMA.md의 Frontmatter 섹션 형식을 그대로 사용한다 (`title/created/updated/type/tags/sources` + 선택 `confidence/contested/contradictions`). 갱신 시 `updated` 날짜를 반드시 올린다.
+3. **frontmatter**: SCHEMA.md의 Frontmatter 절을 그대로 따른다 — 필수 `type/tags/summary/date/sources` + 선택 `confidence/contested/contradictions/subjects`. **이 8개가 전부이며 다른 키는 쓰지 않는다**(`title`/`created`/`updated`/`source`/`source_hash` 등은 폐지됨). 갱신 시 `date`(= 최종 갱신일)를 올린다. 표시 이름은 frontmatter가 아니라 H1이 갖는다.
 4. **태그**: SCHEMA.md 택소노미에 있는 태그만 사용. 새 태그가 필요하면 SCHEMA.md 택소노미에 먼저 추가한 뒤 사용하고, 보고에 명시한다.
 5. **파일명**: lowercase-kebab-case, 공백 없음.
 6. **분량**: 200줄 초과 시 하위 주제로 분리하고 상호 링크.
@@ -52,7 +52,7 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 
 # 규칙 5: index.md / log.md 갱신 (쓰기 후 필수)
 
-**index.md** — 기존 포맷을 그대로 따른다 (현재 섹션별 `| [[노트]] | 요약 |` 테이블). 새 페이지를 해당 type 섹션에 한 줄 요약과 함께 추가하고, 헤더의 `Last updated` 날짜와 `Total pages` 수를 갱신한다. 기존 인덱스에 다른 포맷을 강요하지 않는다.
+**index.md** — **손대지 않는다.** 디렉토리별 카탈로그와 루트 지도의 자동 구간은 정비 스크립트(lint)가 frontmatter에서 전량 재생성한다. 수동 편집은 재생성 때 사라진다.
 
 **log.md** — 파일 **끝에 append** (append-only):
 
