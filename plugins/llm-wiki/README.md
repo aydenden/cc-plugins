@@ -32,6 +32,7 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 | `/llm-wiki:capture <URL 또는 제목>` | Ingest | raw/ 캡처(sha256 dedup)까지 담당하고, 적재는 wiki-schema 스킬 절차에 위임 |
 | `/llm-wiki:recall <키워드>` | Query | Grep 전수검색 → 후보 합성 → 가치 있으면 queries/에 파일링 |
 | `/llm-wiki:research <주제>` | Ingest(research) | 서브에이전트 1개가 채널 라우팅·조사·`raw/` 원문 확보 → 메인이 wiki-schema 절차로 적재 |
+| `/llm-wiki:setup-channels` | — | 선택 계층 채널(gh·Reddit·X·YouTube) 진단·설치. **옵트인** — 한 번도 안 돌려도 리서치는 필수 계층으로 완주한다 |
 
 Lint 커맨드는 없다 — 정비는 아래 훅이 log 기록 직후 자동으로 돌린다.
 
@@ -54,15 +55,19 @@ Lint 커맨드는 없다 — 정비는 아래 훅이 log 기록 직후 자동으
 
 ## 런타임 의존성
 
-**없다.** 읽기·검색·페이지 작성은 CC 내장 도구만 쓰고, 정비용 lint는 의존성 0인 Node
-`.mjs` 단일 파일로 동작한다. 무거운 작업(문서 변환·외부 리서치)만 설치형이며 환경 가드로
-분리된다.
+**없다.** 읽기·검색·페이지 작성은 CC 내장 도구만 쓰고, `scripts/`의 네 파일은 전부 **node:
+내장 모듈만 쓰는 의존성 0 Node `.mjs`** 라 macOS·Linux·Windows 11에서 `node` 하나로 돈다.
+
+설치가 필요한 것은 둘뿐이며 **둘 다 선택**이다 — 도서 변환(`ingest-book`, 환경 가드가 막고
+주력 기기 전용)과 선택 계층 리서치 채널(`/llm-wiki:setup-channels`, 옵트인). 어느 쪽도 없이
+읽기·검색·작성·정비·필수 리서치가 전부 동작한다.
 
 ## 스킬
 
 | 스킬 | 설명 |
 |------|------|
 | wiki-schema | **볼트 적재 절차의 소유자.** 볼트 쓰기 시 자동 적용 — SCHEMA.md 오리엔테이션, 레이어 구분(raw 불변), Grep 전수검색+쿼리 확장, frontmatter·태그, 교차참조(최소 2 outbound + 역링크 5), log 기록, lint 실행, Update Policy(모순 병기). `index.md`는 손대지 않는다(lint가 재생성) |
+| ingest-book | **도서 → `raw/books/<책>/` 번들.** 환경 가드(darwin + `marker_single`)를 먼저 확인하고 통과할 때만 변환한다 — 주력 기기 전용이며, 없으면 명시적으로 거부한다. 페이지 마커 기반 챕터 분할·이미지 동반 복사·본문 점검까지 `scripts/ingest-book.mjs`가 담당 |
 
 ## 리서치 채널
 
@@ -73,6 +78,13 @@ Lint 커맨드는 없다 — 정비는 아래 훅이 log 기록 직후 자동으
 ```bash
 node scripts/research-channels.mjs papers "<질의>" [--source id,...] [--limit N] [--json]
 node scripts/research-channels.mjs tweet <id 또는 URL>
+```
+
+선택 계층은 **`command -v`가 아니라 실호출로 판정**한다(`ok | auth | missing | broken`) — 설치됐지만 미인증인 것과 상류가 깨진 것은 사용자가 할 일이 다르기 때문이다:
+
+```bash
+node scripts/setup-channels.mjs check [--channel id,...] [--json]
+node scripts/setup-channels.mjs install --yes    # 계획을 먼저 출력, 인증은 사람 몫
 ```
 
 전용 에이전트 파일은 두지 않는다 — 조사 프롬프트는 `/llm-wiki:research` 커맨드가 들고 있고, 적재 절차는 `wiki-schema` 스킬 한 곳에만 있다.
@@ -96,10 +108,23 @@ hermes agent(`~/.hermes/skills/research/llm-wiki`)가 같은 볼트를 같은 SC
 
 ```
 plugins/llm-wiki/
-├── .claude-plugin/plugin.json   # CC 플러그인 메타데이터
-├── commands/                     # 슬래시 명령어
-├── skills/                       # SKILL.md
-├── agents/                       # 서브에이전트
+├── .claude-plugin/plugin.json    # CC 플러그인 메타데이터
+├── commands/                     # capture · recall · research · setup-channels
+├── skills/                       # wiki-schema(적재 절차) · ingest-book(도서 변환)
+├── docs/research-channels.md     # 채널 레지스트리 SSoT
 ├── hooks/                        # SessionStart(볼트 검증) + PostToolUse(log.md → 자동 정비)
-└── scripts/lint.mjs              # 의존성 0 정비 스크립트
+└── scripts/                      # 의존성 0 Node .mjs — 전부 `node` 하나로 돈다
+    ├── lint.mjs                  #   볼트 점검 + index 생성
+    ├── research-channels.mjs     #   무키 논문 5종 + X 단건
+    ├── setup-channels.mjs        #   선택 채널 진단·설치
+    └── ingest-book.mjs           #   도서 변환 파이프라인 (설치형 도구 필요)
+```
+
+서브에이전트 정의 파일(`agents/`)은 두지 않는다 — 조사 프롬프트는 커맨드가, 적재 절차는 스킬이 소유한다.
+
+테스트는 의존성 0으로 같이 돈다:
+
+```bash
+node --test scripts/lint.test.mjs scripts/ingest-book.test.mjs \
+  scripts/research-channels.test.mjs scripts/setup-channels.test.mjs hooks/post-log.test.mjs
 ```
