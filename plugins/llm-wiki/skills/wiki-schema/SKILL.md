@@ -33,7 +33,7 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 |--------|------|-----------|
 | Raw Sources | `raw/` (articles/papers/transcripts/feeds 등) | 추가만 가능. **기존 파일 수정 절대 금지** |
 | Wiki | `entities/` `concepts/` `comparisons/` `queries/` `summaries/` | 생성·갱신 가능 |
-| Schema | `SCHEMA.md` | 택소노미에 새 태그 추가 시에만 Edit (사용 전에 추가) |
+| Schema | `SCHEMA.md` | 자유 태그를 통제 어휘로 승격할 때만 Edit (규칙 7) |
 
 관리 파일 `log.md`는 규칙 6의 절차로만 갱신하고, `index.md`는 **직접 갱신하지 않는다**(lint가 재생성). `.obsidian/` 수정 금지.
 
@@ -65,7 +65,7 @@ frontmatter는 SCHEMA.md의 `raw/ Frontmatter` 절을 그대로 따른다(`sourc
 4. **summary**: 디렉토리 `index.md` 자동 생성의 입력이므로 한 줄로 반드시 채운다. 비면 생성된 카탈로그에 구멍이 난다.
 5. **sources**: 항상 배열이며 원소는 `raw/…`(볼트 상대경로, lint가 존재를 검증) | URL | `github:org/repo` | `session:YYYY-MM-DD`.
 6. **confidence**: 공식 문서·1차 소스 다수=high, 1·2차 혼재=medium, 포럼·미검증=low. 의견성이거나 단일 소스 주장은 medium 이하.
-7. **태그**: SCHEMA.md 택소노미에 있는 태그만 사용. 새 태그가 필요하면 SCHEMA.md 택소노미에 먼저 추가한 뒤 사용하고, 보고에 명시한다.
+7. **태그**: SCHEMA.md 택소노미는 **통제 어휘지 화이트리스트가 아니다**(ccp-30j). 해당하는 항목이 있으면 반드시 그 표기를 쓰고, 없으면 페이지가 실제로 다루는 키워드를 자유롭게 붙인다. 지켜야 할 것은 표기 규칙뿐이다 — 소문자·하이픈, 목록에 있는 용어는 목록 표기 그대로, 영어 항목이 있는 한국어 중복은 영어로 접기, 날짜 태그 금지. 자유 태그가 10페이지쯤 쌓이면 SCHEMA.md에 승격한다.
 8. **파일명**: lowercase-kebab-case, 공백 없음.
 9. **분량**: 200줄 초과 시 하위 주제로 분리하고 상호 링크.
 
