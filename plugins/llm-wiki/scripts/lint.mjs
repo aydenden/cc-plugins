@@ -51,6 +51,13 @@ const NAME_MAX = 80;
 /** The root index is read whole every session, so its summaries stay short. */
 const ROOT_SUMMARY_MAX = 110;
 
+/**
+ * Shape of a non-`raw/` sources element, per SCHEMA "sources". Whole-string and
+ * whitespace-free on purpose: an element names ONE source, so prose that packs
+ * several into a string ("web: A, B, C") must fail rather than pass on its prefix.
+ */
+const SOURCE_SHAPE = /^(https?:\/\/\S+|github:[\w.-]+\/[\w.-]+|code:\S+|session:(\d{4}-\d{2}-\d{2}|unknown))$/;
+
 const AUTO_START = '<!-- llm-wiki:auto:start -->';
 const AUTO_END = '<!-- llm-wiki:auto:end -->';
 
@@ -444,7 +451,7 @@ function runChecks(vault, schema, model) {
       // vault (scheme-less URLs, `github.com/…` instead of `github:…`), so they
       // are standing state, not something today's session broke.
       for (const source of asList(page.fields.sources)) {
-        if (!source.startsWith('raw/') && !/^(https?:\/\/|github:[\w.-]+\/[\w.-]+|session:\d{4}-\d{2}-\d{2})/.test(source)) {
+        if (!source.startsWith('raw/') && !SOURCE_SHAPE.test(source)) {
           offShape.push(source);
         }
       }

@@ -87,6 +87,13 @@ function makeVault() {
     '# Odd Source\n\n[[concepts/hub]]',
   ));
 
+  // The shapes SCHEMA allows beyond raw//https//github, and the one it does not:
+  // an element that packs several sources into prose.
+  write('concepts/new-shapes.md', page(
+    'type: concept\ntags: [approved]\nsummary: shape coverage\ndate: 2026-08-16\nsources:\n  - code:crates/risk/engine.rs:10-20\n  - session:unknown\n  - session:2026-08-16\n  - "web: alpha.com, beta.com"',
+    '# New Shapes\n\n[[concepts/hub]]',
+  ));
+
   // tags: a tag outside the taxonomy.
   write('concepts/bad-tag.md', page(
     'type: concept\ntags: [approved, not-in-taxonomy]\nsummary: bad tag\ndate: 2026-08-16\nsources:\n  - https://example.com/b',
@@ -190,7 +197,12 @@ test('frontmatter flags missing fields, directory mismatch and removed keys', ()
 
 test('off-shape sources are backlog, not a frontmatter error', () => {
   const { items } = group(vault, 'source-format');
-  assert.deepEqual(items.map((i) => i.path), ['concepts/odd-source.md']);
+  assert.deepEqual(items.map((i) => i.path).sort(), ['concepts/new-shapes.md', 'concepts/odd-source.md']);
+});
+
+test('code:, session:unknown pass; prose packing several sources does not', () => {
+  const item = group(vault, 'source-format').items.find((i) => i.path === 'concepts/new-shapes.md');
+  assert.deepEqual(item.sources, ['web: alpha.com, beta.com'], 'only the prose element is off-shape');
 });
 
 test('raw-drift only checks full digests, so feed dedup ids are ignored', () => {
