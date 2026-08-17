@@ -5,7 +5,7 @@
  * markers, an unbalanced code block, an uppercase URL slug and a glossary
  * misread.
  *
- * Run with: node --test scripts/lint.test.mjs scripts/ingest-book.test.mjs scripts/research-channels.test.mjs hooks/post-log.test.mjs
+ * Run with: node --test scripts/lint.test.mjs scripts/ingest-book.test.mjs scripts/research-channels.test.mjs scripts/setup-channels.test.mjs hooks/post-log.test.mjs
  *
  * Dependency-free: node:test / node:assert only.
  */

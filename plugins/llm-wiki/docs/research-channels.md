@@ -32,12 +32,21 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/research-channels.mjs" tweet <트윗 id 또�
 
 ## 선택 계층 — 주력 기기(설치·인증 완료된 기기)만
 
-| 질의 성격 | 채널 | 탐지 | 축퇴 |
+| 질의 성격 | 채널 | 채널 id | 축퇴 |
 |---|---|---|---|
-| 코드·저장소 사실 | `gh` CLI | `command -v gh` | GitHub 웹 페이지를 WebFetch |
-| 커뮤니티 여론 | Reddit `rdt-cli` | `command -v rdt` | WebSearch에 `site:reddit.com` |
-| 인물 발언·최신 발표 | X `twitter user-posts` / `twitter list` | `command -v twitter` | 신규 수집 포기, 기존 인용만 필수 계층으로 확인 |
-| 영상 내용 | YouTube `yt-dlp` 자막 | `command -v yt-dlp` | 영상 채널 제외를 명시 |
+| 코드·저장소 사실 | `gh` CLI | `gh` | GitHub 웹 페이지를 WebFetch |
+| 커뮤니티 여론 | Reddit `rdt-cli` | `rdt` | WebSearch에 `site:reddit.com` |
+| 인물 발언·최신 발표 | X `twitter user-posts` / `twitter list` | `twitter` | 신규 수집 포기, 기존 인용만 필수 계층으로 확인 |
+| 영상 내용 | YouTube `yt-dlp` 자막 | `yt-dlp` | 영상 채널 제외를 명시 |
+
+탐지는 그 질의에 필요한 채널만 골라 1회:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-channels.mjs" check --channel <id>[,<id>]
+```
+
+상태는 `ok | auth | missing | broken`이다. `auth`·`missing`·`broken` 모두 축퇴이며 셋을 구분해
+보고한다 — 인증만 남은 것과 상류가 깨진 것은 사용자가 할 일이 다르다.
 
 설치·인증은 `/llm-wiki:setup-channels`가 담당한다. **조사 도중에 설치를 제안하지 않는다** —
 조사 흐름이 끊기고 실패 원인(설치 실패 vs 상류 API 오류)이 뒤엉킨다.

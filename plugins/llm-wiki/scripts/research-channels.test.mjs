@@ -1,7 +1,7 @@
 /**
  * Regression tests for research-channels.mjs — offline. Every source response is a
  * recorded fixture, so the suite never hits the network and cannot fail because an
- * upstream API is rate-limiting. Run with: node --test scripts/lint.test.mjs scripts/ingest-book.test.mjs scripts/research-channels.test.mjs hooks/post-log.test.mjs
+ * upstream API is rate-limiting. Run with: node --test scripts/lint.test.mjs scripts/ingest-book.test.mjs scripts/research-channels.test.mjs scripts/setup-channels.test.mjs hooks/post-log.test.mjs
  *
  * Dependency-free: node:test / node:assert only.
  */

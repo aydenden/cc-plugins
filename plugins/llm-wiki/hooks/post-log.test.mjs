@@ -1,6 +1,6 @@
 /**
  * Regression tests for post-log.mjs — the PostToolUse hook that runs maintenance
- * right after log.md is appended. Run with: node --test scripts/lint.test.mjs scripts/ingest-book.test.mjs scripts/research-channels.test.mjs hooks/post-log.test.mjs
+ * right after log.md is appended. Run with: node --test scripts/lint.test.mjs scripts/ingest-book.test.mjs scripts/research-channels.test.mjs scripts/setup-channels.test.mjs hooks/post-log.test.mjs
  *
  * Dependency-free: node:test / node:assert only.
  */
