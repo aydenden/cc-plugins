@@ -72,7 +72,7 @@ const GROUPS = [
   { id: 'log-rotation', nature: 'error', label: 'log.md over rotation limit' },
   { id: 'contested', nature: 'error', label: 'contested / low confidence' },
   { id: 'source-format', nature: 'backlog', label: 'sources element off-shape' },
-  { id: 'tags', nature: 'backlog', label: 'tags outside the taxonomy' },
+  { id: 'tags', nature: 'backlog', label: 'tag spelling splits the vocabulary' },
   { id: 'orphans', nature: 'backlog', label: 'no inbound wikilink' },
   { id: 'raw-unabsorbed', nature: 'backlog', label: 'raw queue not absorbed' },
   { id: 'low-confidence-unmarked', nature: 'backlog', label: 'single source, confidence unset' },
@@ -491,13 +491,18 @@ function runChecks(vault, schema, model) {
     .map((p) => ({ path: p.rel, contested: String(p.fields.contested) === 'true', confidence: p.fields.confidence || null, contradictions: asList(p.fields.contradictions) }))
     .sort((a, b) => a.path.localeCompare(b.path)));
 
-  // tags — tag-centric, not page-centric: the top rows are the work queue of
-  // tags to promote into the taxonomy (ccp-hht).
+  // tags — tag-centric, not page-centric (ccp-hht). Being outside the taxonomy is
+  // no longer a finding: the taxonomy is a controlled vocabulary, free keywords are
+  // allowed alongside it (ccp-30j — 84% of unapproved tags were used once, so
+  // promoting them bought nothing and deleting them lost the author's hint).
+  // What is still a finding is a tag that splits the vocabulary: a spelling that
+  // normalises onto another tag, or a banned pattern.
   const tagUse = new Map();
   for (const page of pages) {
     for (const tag of asList(page.fields.tags)) {
-      if (schema.approvedTags.has(tag)) continue;
-      if (!tagUse.has(tag)) tagUse.set(tag, { tag, count: 0, pages: [] });
+      const violation = tagViolation(tag, schema.approvedTags);
+      if (!violation) continue;
+      if (!tagUse.has(tag)) tagUse.set(tag, { tag, count: 0, pages: [], ...violation });
       const entry = tagUse.get(tag);
       entry.count++;
       if (entry.pages.length < 5) entry.pages.push(page.rel);
@@ -531,6 +536,33 @@ function runChecks(vault, schema, model) {
 
   results.set('title-dups', titleDuplicates(pages));
   return results;
+}
+
+/** A tag reduced to its comparison key: case and separators carry no meaning. */
+function tagKey(tag) {
+  return tag.toLowerCase().replace(/[-_\s]/g, '');
+}
+
+/** Tags that classify nothing — `date:` already holds the date (SCHEMA.md). */
+const BANNED_TAG = /^(19|20)\d{2}(-\d{2}){0,2}$/;
+
+/**
+ * Why a tag is a finding, or null when it is fine. Free keywords outside the
+ * taxonomy are fine; splitting the vocabulary is not.
+ *   - `banned`   a date-shaped tag
+ *   - `spelling` normalises onto an approved tag with different case/separators
+ *   - `case`     not lowercase, so it will collide with its own lowercase form
+ */
+function tagViolation(tag, approvedTags) {
+  if (approvedTags.has(tag)) return null;
+  if (BANNED_TAG.test(tag)) return { reason: 'banned', suggest: null };
+  const key = tagKey(tag);
+  for (const approved of approvedTags) {
+    if (tagKey(approved) === key) return { reason: 'spelling', suggest: approved };
+  }
+  if (tag !== tag.toLowerCase()) return { reason: 'case', suggest: tag.toLowerCase() };
+  if (/[_\s]/.test(tag)) return { reason: 'case', suggest: tag.toLowerCase().replace(/[_\s]+/g, '-') };
+  return null;
 }
 
 /**

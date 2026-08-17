@@ -94,9 +94,9 @@ function makeVault() {
     '# New Shapes\n\n[[concepts/hub]]',
   ));
 
-  // tags: a tag outside the taxonomy.
+  // tags: one of each violation, plus a free keyword that must stay silent.
   write('concepts/bad-tag.md', page(
-    'type: concept\ntags: [approved, not-in-taxonomy]\nsummary: bad tag\ndate: 2026-08-16\nsources:\n  - https://example.com/b',
+    'type: concept\ntags: [approved, free-keyword, Approved, MixedCase, snake_case, 2026-05]\nsummary: bad tag\ndate: 2026-08-16\nsources:\n  - https://example.com/b',
     '# Bad Tag\n\n[[concepts/hub]]',
   ));
 
@@ -210,10 +210,19 @@ test('raw-drift only checks full digests, so feed dedup ids are ignored', () => 
   assert.deepEqual(items.map((i) => i.path), ['raw/articles/drifted.md']);
 });
 
-test('tags reports unapproved tags by frequency', () => {
+test('tags reports vocabulary splits, not every tag outside the taxonomy', () => {
   const { items } = group(vault, 'tags');
-  assert.deepEqual(items.map((i) => i.tag), ['not-in-taxonomy']);
-  assert.equal(items[0].count, 1);
+  const byTag = new Map(items.map((i) => [i.tag, i]));
+  assert.ok(!byTag.has('free-keyword'), 'a free keyword is allowed alongside the controlled vocabulary');
+  assert.deepEqual(
+    [...byTag.keys()].sort(),
+    ['2026-05', 'Approved', 'MixedCase', 'snake_case'],
+  );
+  assert.deepEqual(byTag.get('Approved'), { tag: 'Approved', count: 1, pages: ['concepts/bad-tag.md'], reason: 'spelling', suggest: 'approved' });
+  assert.equal(byTag.get('MixedCase').reason, 'case');
+  assert.equal(byTag.get('MixedCase').suggest, 'mixedcase');
+  assert.equal(byTag.get('snake_case').suggest, 'snake-case');
+  assert.equal(byTag.get('2026-05').reason, 'banned');
 });
 
 test('orphans ignores index.md backlinks', () => {

@@ -93,7 +93,7 @@ node scripts/setup-channels.mjs install --yes    # 계획을 먼저 출력, 인�
 
 - **type**: `entity | concept | comparison | query | summary` → type별 디렉토리에 저장
 - **frontmatter**: 필수 `type / tags / summary / date / sources` + 선택 `confidence / contested / contradictions / subjects`. **이 8개가 전부**이며 다른 키는 drift로 lint가 잡는다. 표시 이름은 frontmatter가 아니라 H1이 갖는다
-- **태그**: SCHEMA.md 택소노미에 있는 것만. 새 태그는 택소노미에 먼저 추가
+- **태그**: SCHEMA.md 택소노미는 **통제 어휘**다. 해당 항목이 있으면 그 표기를 쓰고, 없으면 자유 키워드를 붙인다. lint가 잡는 건 표기 분열(대소문자·구분자)과 날짜 태그뿐이며, 자유 태그가 10페이지쯤 쌓이면 택소노미로 승격
 - **Page Thresholds**: 2+ 소스 등장 또는 단일 소스 중심 주제일 때만 신규 페이지, 200줄 초과 시 분리
 - **Update Policy**: 모순은 양쪽 병기 + `contested`/`contradictions` 표기, lint가 검토 목록으로 표면화
 - **raw/ frontmatter**: `source_url / ingested / sha256` — 재ingest 시 dedup·drift 감지
