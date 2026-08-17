@@ -12,7 +12,8 @@
  *   node ingest-book.mjs doctor [--pdf FILE]
  *   node ingest-book.mjs convert --pdf FILE [--out DIR] [--pages A-B]
  *   node ingest-book.mjs split --md FILE --out DIR [--title T] [--level N]
- *                              [--require-numbering]
+ *                              [--require-numbering] [--page-offset N]
+ *                              [--no-page-offset]
  *   node ingest-book.mjs check --dir DIR [--fix] [--glossary FILE]
  *                              [--json] [--limit N]
  *   node ingest-book.mjs ingest --dir DIR --book SLUG [--vault PATH] [--force]
@@ -36,6 +37,28 @@ const DOCLING_BIN = 'docling';
 /** Fixed marker flags. `--use_llm` is absent on purpose: it ships pages to an external API (design §9-4). */
 const MARKER_FLAGS = ['--force_ocr', '--paginate_output', '--output_format', 'markdown'];
 
+/**
+ * surya settings that marker exposes only through the environment, applied as
+ * defaults so the caller does not have to remember them. Anything already set
+ * in the environment wins.
+ *
+ * The cap exists because full-page OCR sometimes falls into repetition and
+ * then generates until the slot's KV context is exhausted — measured at prompt
+ * 2,441 + generation 9,847 = the full 12,288 — burning eight minutes on one
+ * page. 7.7% of pages did this on the first book and consumed 39% of the GPU
+ * time. Capping sends those pages to block-mode fallback instead: on a
+ * controlled 20-page range it cut the run from 250s to 170s while the only
+ * difference in the output was eight spaces of comment alignment. Legitimate
+ * pages generate far less (median 1,077 tokens, p90 1,687), so 4,096 leaves
+ * 2.4x headroom.
+ *
+ * Slot count is NOT set here. It is hardware-bound — on an M3 Pro (14 GPU
+ * cores) throughput peaked at 12 and regressed at 16 — so the right value on
+ * another machine is a different number, and surya's own default is saner than
+ * a figure measured on one laptop. Set SURYA_INFERENCE_PARALLEL to tune it.
+ */
+const SURYA_TUNING = { SURYA_MAX_TOKENS_FULL_PAGE: '4096' };
+
 const INSTALL_HINT = [
   'uv tool install --python 3.12 marker-pdf',
   'uv tool install --python 3.12 docling --with ocrmac   # web ingest only',
@@ -43,6 +66,57 @@ const INSTALL_HINT = [
 
 /** `{12}------------------------------------------------` — marker's page separator, 0-indexed. */
 const PAGE_MARKER = /^\{(\d+)\}-{10,}\s*$/;
+/**
+ * What `split` leaves behind once the separator above has been consumed —
+ * with the printed page appended when the book's own numbering is known.
+ * Keep this in step with the marker `splitChapters` emits: the code-block
+ * rules rely on it to tell a page break from a real gap between listings.
+ */
+const PAGE_COMMENT = /^<!-- PDF p\.\d+(?: · 책 p\.\d+)? -->\s*$/;
+
+/** The one place the marker is written, so the matcher above has a single shape to track. */
+function pageComment(pdfPage, bookPage) {
+  return bookPage === null || bookPage === undefined
+    ? `<!-- PDF p.${pdfPage} -->`
+    : `<!-- PDF p.${pdfPage} · 책 p.${bookPage} -->`;
+}
+
+// Guard the coupling: a change to pageComment that PAGE_COMMENT no longer
+// matches would silently un-merge page-split code blocks, quietly tripling the
+// brace-balance findings instead of failing.
+for (const sample of [pageComment(7, null), pageComment(7, 4)]) {
+  if (!PAGE_COMMENT.test(sample)) {
+    throw new Error(`PAGE_COMMENT does not match pageComment output: ${sample}`);
+  }
+}
+const HEADING_LINE = /^#{1,6}\s/;
+/** An ellipsis-only comment line — the book eliding part of a listing on purpose. */
+const ELIDED_LINE = /^\s*(\/\/|#|\/\*)\s*\.\.\.\s*(\*\/)?\s*$/;
+/**
+ * A statement fused with the next line by a dropped newline: either a call or
+ * control-flow head starts right after the semicolon, or a block comment opens
+ * on the same line.
+ *
+ * Both halves are narrow on purpose, measured against real source. Bare
+ * keywords (`; break;`, `; return x`) were dropped — single-line switch cases
+ * use the first and prose in comments trips the second. Line comments were
+ * dropped too: `x++;  // note` is ordinary trailing alignment, whereas a block
+ * comment opening behind a statement is not something authors write.
+ */
+const STMT_MERGE = /;\s*[A-Za-z_$][\w$]*\s*[({]|;[ \t]{2,}\/\*/;
+
+/**
+ * Size thresholds for the ingest warning. The per-file numbers are GitHub's
+ * (50 MiB warns, 100 MiB is refused); the per-book one is ours — 10x the first
+ * book ingested, high enough that a normal title stays quiet.
+ */
+const INGEST_SIZE_WARN_MB = 50;
+const GITHUB_FILE_WARN_MB = 50;
+const GITHUB_FILE_BLOCK_MB = 100;
+
+/** Below these, an auto-detected page offset is discarded as too shaky to print. */
+const PAGE_OFFSET_MIN_SAMPLES = 5;
+const PAGE_OFFSET_MIN_AGREEMENT = 0.8;
 
 const DEFAULT_LEVEL = 2;
 const HEADING_MAX_LEN = 60;
@@ -59,8 +133,17 @@ const LOWERCASE_SLUG_HOSTS = new Set(['leetcode.com']);
 
 const OCR_WARNING = `> [!warning] 이 자료는 스캔본 OCR 산출물이다
 > 코드의 인덱스·상수·변수명에 오독 가능성이 있다.
+> **코드 블록은 그대로 실행되지 않는다고 전제할 것.** 실측된 결함은 두 가지다 —
+> 줄바꿈이 소실돼 두 문장이 한 줄로 붙거나(\`fast = fast.next;while (...) {\`),
+> 페이지 경계에서 중괄호가 빠지거나 없던 것이 생긴다. \`check\`의
+> \`stmt-merge\`·\`brace-balance\`가 잡아낸 위치는 특히 의심할 것.
 > 코드를 인용하거나 동작을 단정하기 전에 원본 PDF 해당 페이지를 확인할 것.
 > 이상한 토큰을 발견하면 **조용히 고쳐 읽지 말고 사용자에게 알릴 것.**`;
+
+/** One-line form for individual chapters, which get read without the book index. */
+const CHAPTER_OCR_NOTE =
+  '> [!warning] 스캔본 OCR — 코드 블록은 그대로 실행되지 않는다고 전제하고, ' +
+  '인용 전 원본 PDF 페이지를 확인할 것. 상세는 [[00-toc]].';
 
 const IMAGE_RE = /!\[[^\]]*\]\(([^)\s]+)\)/g;
 
@@ -91,6 +174,7 @@ const USAGE = `ingest-book — scanned book PDF -> chapter markdown -> vault raw
   doctor  [--pdf FILE]                        check this host can run the pipeline
   convert --pdf FILE [--out DIR] [--pages A-B]   marker conversion (1.3~2h for 462p)
   split   --md FILE --out DIR [--title T] [--level N] [--require-numbering]
+          [--page-offset N | --no-page-offset]   인쇄 페이지 병기 (기본: 목차에서 자동 검출)
   check   --dir DIR [--fix] [--glossary FILE] [--json] [--limit N]
   ingest  --dir DIR --book SLUG [--vault PATH] [--force]`;
 
@@ -219,9 +303,13 @@ function convert(opts) {
   const args = [opts.pdf, ...MARKER_FLAGS, '--output_dir', outDir];
   if (typeof opts.pages === 'string') args.push('--page_range', opts.pages);
 
+  const env = { ...SURYA_TUNING, ...process.env };
   console.log(`convert: ${MARKER_BIN} ${args.join(' ')}`);
+  for (const [key, value] of Object.entries(SURYA_TUNING)) {
+    if (process.env[key] === undefined) console.log(`convert: ${key}=${value} (default)`);
+  }
   console.log('convert: a full book takes 1.3~2h; the first run also loads models.');
-  const res = spawnSync(MARKER_BIN, args, { stdio: 'inherit' });
+  const res = spawnSync(MARKER_BIN, args, { stdio: 'inherit', env });
   if (res.status !== 0) return fail(`convert: ${MARKER_BIN} exited ${res.status}`);
 
   const produced = findMarkdown(outDir);
@@ -288,13 +376,18 @@ function classifyHeading(text, requireNumbering) {
  * Cut marker markdown into chapters.
  *
  * Page provenance comes from marker's `--paginate_output` markers, which are
- * 0-indexed (design §9-1); every page number this function emits is already
- * converted to the 1-indexed number printed on the page. Markers are replaced
- * with `<!-- PDF p.N -->` rather than dropped, so provenance survives inside a
- * chapter and not just in its header.
+ * 0-indexed (design §9-1); every page number this function emits is that
+ * position made 1-indexed — the page's ordinal in the PDF, NOT the number
+ * printed on the page. The two differ by however much front matter the book
+ * has (23 pages in the first book ingested), so they cannot be derived from
+ * each other without a per-book offset. `<!-- PDF p.N -->` is labelled
+ * accordingly; a reader who needs the printed number must convert. Markers are
+ * replaced rather than dropped, so provenance survives inside a chapter and
+ * not just in its header.
  */
-function splitChapters(markdown, { level = DEFAULT_LEVEL, requireNumbering = false } = {}) {
+function splitChapters(markdown, { level = DEFAULT_LEVEL, requireNumbering = false, pageOffset = null } = {}) {
   const lines = markdown.split('\n');
+  const printed = (pdfPage) => printedPage(pdfPage, pageOffset);
   const headingRe = new RegExp(`^(#{1,${level}})\\s+(.*)$`);
   const chapters = [];
   const rejected = [];
@@ -323,7 +416,7 @@ function splitChapters(markdown, { level = DEFAULT_LEVEL, requireNumbering = fal
       if (current) {
         current.lastPage = page;
         if (current.firstPage === null) current.firstPage = page;
-        current.body.push(`<!-- PDF p.${page} -->`);
+        current.body.push(pageComment(page, printed(page)));
       }
       continue;
     }
@@ -379,15 +472,92 @@ function slugify(text) {
     .replace(/-+$/, '');
 }
 
-function pageRange(ch) {
-  if (ch.firstPage === null || ch.firstPage === undefined) return '(페이지 불명)';
-  return ch.firstPage === ch.lastPage ? `p.${ch.firstPage}` : `p.${ch.firstPage}-${ch.lastPage}`;
+/**
+ * The number printed on the page, or null when it cannot be stated.
+ *
+ * Front matter sits before page 1 of the numbered body, so anything at or
+ * below the offset has no printed number to give (or carries roman numerals
+ * this does not attempt to reconstruct).
+ */
+function printedPage(pdfPage, offset) {
+  if (offset === null || offset === undefined) return null;
+  const book = pdfPage - offset;
+  return book >= 1 ? book : null;
 }
 
-function buildToc({ title, source, chapters, files, pageStart, pageEnd }) {
+/**
+ * Recover how far the PDF's page count runs ahead of the book's own.
+ *
+ * Marker drops running headers and footers, so the printed number is not in
+ * the text — but the book's table of contents lists it for every section, and
+ * the body repeats those section numbers as headings whose PDF page IS known.
+ * Pairing the two gives one offset estimate per section; the mode wins, so a
+ * TOC row mangled by OCR (truncated page column, misread digit) is outvoted
+ * rather than believed.
+ *
+ * Returns null unless the vote is decisive — a shaky offset is worse than
+ * none, because a wrong printed number sends the reader to the wrong page
+ * while looking authoritative.
+ */
+function detectPageOffset(lines) {
+  const toc = new Map();
+  const tocRow = /<b>(\d+\.\d+)<\/b>.*?\|\s*(\d+)\s*\|?\s*$/;
+  const bodyHeading = /^#{1,6}\s+(\d+\.\d+)(?:\s|$)/;
+  const fenceRe = /^\s*(```+|~~~+)/;
+
+  for (const line of lines) {
+    const m = tocRow.exec(line);
+    if (m && !toc.has(m[1])) toc.set(m[1], Number(m[2]));
+  }
+  if (!toc.size) return null;
+
+  const votes = new Map();
+  const seen = new Set();
+  let page = null;
+  let fence = false;
+  for (const line of lines) {
+    if (fenceRe.test(line)) {
+      fence = !fence;
+      continue;
+    }
+    const pageMatch = PAGE_MARKER.exec(line);
+    if (pageMatch && !fence) {
+      page = Number(pageMatch[1]) + 1;
+      continue;
+    }
+    if (fence || page === null) continue;
+    const heading = bodyHeading.exec(line);
+    if (!heading || seen.has(heading[1]) || !toc.has(heading[1])) continue;
+    seen.add(heading[1]);
+    const offset = page - toc.get(heading[1]);
+    if (offset < 0) continue;
+    votes.set(offset, (votes.get(offset) || 0) + 1);
+  }
+
+  const total = [...votes.values()].reduce((a, b) => a + b, 0);
+  if (total < PAGE_OFFSET_MIN_SAMPLES) return null;
+  const [offset, agree] = [...votes].sort((a, b) => b[1] - a[1])[0];
+  if (agree / total < PAGE_OFFSET_MIN_AGREEMENT) return null;
+  return { offset, samples: total, agree };
+}
+
+function pageRange(ch, pageOffset = null) {
+  if (ch.firstPage === null || ch.firstPage === undefined) return '(페이지 불명)';
+  const pdf = ch.firstPage === ch.lastPage ? `p.${ch.firstPage}` : `p.${ch.firstPage}-${ch.lastPage}`;
+  const first = printedPage(ch.firstPage, pageOffset);
+  const last = printedPage(ch.lastPage, pageOffset);
+  if (first === null && last === null) return pdf;
+  // A chapter that starts in the front matter has no printed number to start
+  // from, so say so rather than let its end double as its start.
+  if (first === null) return `${pdf} · 책 앞부속~p.${last}`;
+  if (first === last) return `${pdf} · 책 p.${last}`;
+  return `${pdf} · 책 p.${first}-${last}`;
+}
+
+function buildToc({ title, source, chapters, files, pageStart, pageEnd, pageOffset = null, offsetSource = 'none' }) {
   const rows = chapters.map((ch, i) => {
     const lines = ch.text.split('\n').length;
-    return `| ${String(i + 1).padStart(2, '0')} | [${escapePipes(ch.title)}](${files[i]}) | ${pageRange(ch)} | ${lines} |`;
+    return `| ${String(i + 1).padStart(2, '0')} | [${escapePipes(ch.title)}](${files[i]}) | ${pageRange(ch, pageOffset)} | ${lines} |`;
   });
   return [
     `# ${title}`,
@@ -399,7 +569,10 @@ function buildToc({ title, source, chapters, files, pageStart, pageEnd }) {
     `- 원본: \`${source}\``,
     `- 변환: marker-pdf \`${MARKER_FLAGS.join(' ')}\``,
     `- 변환일: ${today()}`,
-    `- 원본 페이지: ${pageStart ?? '?'}-${pageEnd ?? '?'} (1-indexed로 환산됨)`,
+    `- 원본 페이지: PDF p.${pageStart ?? '?'}-${pageEnd ?? '?'} (1-indexed로 환산됨)`,
+    pageOffset === null
+      ? '- 인쇄 페이지: 없음 — PDF 페이지만 표기됨'
+      : `- 인쇄 페이지: **책 p.N = PDF p.N - ${pageOffset}** (${offsetSource}). 앞부속(PDF p.1-${pageOffset})은 인쇄 번호가 없어 PDF 페이지만 표기된다`,
     `- 챕터: ${chapters.length}`,
     '',
     '## 챕터',
@@ -426,9 +599,31 @@ function split(opts) {
 
   const markdown = fs.readFileSync(opts.md, 'utf8');
   const level = Number(opts.level || DEFAULT_LEVEL);
+
+  // Printed page numbers are on by default; --page-offset pins them when the
+  // book's TOC is too damaged to vote, --no-page-offset drops them entirely.
+  let pageOffset = null;
+  let offsetSource = 'none';
+  if (opts.no_page_offset) {
+    offsetSource = 'disabled';
+  } else if (opts.page_offset !== undefined) {
+    pageOffset = Number(opts.page_offset);
+    if (!Number.isInteger(pageOffset) || pageOffset < 0) {
+      return fail('split: --page-offset must be a non-negative integer');
+    }
+    offsetSource = 'given';
+  } else {
+    const detected = detectPageOffset(markdown.split('\n'));
+    if (detected) {
+      pageOffset = detected.offset;
+      offsetSource = `detected from ${detected.agree}/${detected.samples} TOC entries`;
+    }
+  }
+
   const { chapters, rejected, pageStart, pageEnd } = splitChapters(markdown, {
     level,
     requireNumbering: Boolean(opts.require_numbering),
+    pageOffset,
   });
   if (!chapters.length) return fail('split: no content found');
 
@@ -436,14 +631,17 @@ function split(opts) {
   fs.mkdirSync(outDir, { recursive: true });
   const files = chapters.map((ch, i) => chapterFile(i + 1, ch.title));
   chapters.forEach((ch, i) => {
-    const header = `<!-- 원본: PDF ${pageRange(ch)} -->\n\n# ${ch.title}\n\n`;
+    // The full banner lives in 00-toc.md, but a chapter is what gets opened on
+    // its own, so it carries a one-line pointer back to it.
+    const header =
+      `<!-- 원본: PDF ${pageRange(ch, pageOffset)} -->\n\n# ${ch.title}\n\n${CHAPTER_OCR_NOTE}\n\n`;
     fs.writeFileSync(path.join(outDir, files[i]), header + ch.text, 'utf8');
   });
 
   const title = typeof opts.title === 'string' ? opts.title : path.basename(opts.md, '.md');
   fs.writeFileSync(
     path.join(outDir, '00-toc.md'),
-    buildToc({ title, source: path.basename(opts.md), chapters, files, pageStart, pageEnd }),
+    buildToc({ title, source: path.basename(opts.md), chapters, files, pageStart, pageEnd, pageOffset, offsetSource }),
     'utf8',
   );
 
@@ -451,6 +649,11 @@ function split(opts) {
 
   console.log(`split: ${chapters.length} chapters -> ${outDir}`);
   console.log(`split: pages ${pageStart ?? '?'}-${pageEnd ?? '?'} (1-indexed)`);
+  console.log(
+    pageOffset === null
+      ? `split: printed page numbers omitted (${offsetSource})`
+      : `split: printed page = PDF page - ${pageOffset} (${offsetSource})`,
+  );
   if (rejected.length) {
     console.log(`split: ${rejected.length} heading candidates left inline (not split points):`);
     for (const r of rejected.slice(0, DEFAULT_LIMIT)) {
@@ -484,10 +687,10 @@ function truncate(text, max) {
 // --- check (OCR misread detector, design §5.4) ---
 
 /**
- * Three deterministic rules. `--fix` applies only the two that cannot guess
- * wrong (glossary terms, lowercase-by-spec URL slugs); brace imbalance is
- * reported and never auto-edited, since the cause is a split code block
- * (design §3.5), not a character misread.
+ * Four deterministic rules. `--fix` applies only the two that cannot guess
+ * wrong (glossary terms, lowercase-by-spec URL slugs); the two code-block
+ * rules are reported and never auto-edited, since repairing OCR'd code needs
+ * the source scan.
  *
  * Known limit: this catches KNOWN misreads only. Index/constant/variable
  * corruption (`dp[i][j]` -> `dp[i][i]`) stays invisible — design §5.5.
@@ -495,32 +698,9 @@ function truncate(text, max) {
 function checkText(text, glossary) {
   const findings = [];
   const lines = text.split('\n');
-  let fence = null;
-  let fenceStart = 0;
-  let braces = 0;
-
+  findings.push(...checkCodeBlocks(lines));
   lines.forEach((line, i) => {
-    const fenceMatch = /^\s*(```+|~~~+)/.exec(line);
-    if (fenceMatch) {
-      const token = fenceMatch[1][0].repeat(3);
-      if (!fence) {
-        fence = token;
-        fenceStart = i + 1;
-        braces = 0;
-      } else if (token === fence) {
-        if (braces !== 0) {
-          findings.push({ line: fenceStart, rule: 'brace-balance', detail: `code block off by ${braces}` });
-        }
-        fence = null;
-      }
-      return;
-    }
-    if (fence) {
-      for (const ch of line) {
-        if (ch === '{') braces++;
-        else if (ch === '}') braces--;
-      }
-    }
+    if (/^\s*(```+|~~~+)/.test(line)) return;
 
     for (const m of line.matchAll(/https?:\/\/[^\s)<>\]]+/g)) {
       const url = m[0];
@@ -546,9 +726,126 @@ function checkText(text, glossary) {
     }
   });
 
-  if (fence && braces !== 0) {
-    findings.push({ line: fenceStart, rule: 'brace-balance', detail: `unterminated code block off by ${braces}` });
+  findings.sort((a, b) => a.line - b.line);
+  return findings;
+}
+
+/**
+ * Code-block rules, run over whole blocks rather than line by line.
+ *
+ * `brace-balance` — marker closes and reopens the fence at every page break
+ * (`--paginate_output`), so one logical listing arrives as several blocks,
+ * each individually unbalanced. Counting per block reported 6 findings on a
+ * 10-page sample where only 2 were real. Blocks are therefore grouped into
+ * page-continuation runs and balance is summed per run: an intervening page
+ * marker keeps the run open, an intervening heading closes it (a new section
+ * means new code). Two classes of legitimate imbalance are then dropped —
+ * listings the book itself elides (`// ...`) and the file's first run, which
+ * continues from a page outside this file.
+ *
+ * The run sum also catches what per-block counting could not: when OCR
+ * invents closing braces on a page-final block, that block looks balanced but
+ * its continuation goes negative, so the run does not sum to zero.
+ *
+ * `stmt-merge` — OCR drops the newline between a statement and what follows,
+ * fusing two lines (`fast = fast.next;while (fast != null) {`). Braces still
+ * balance, so nothing else sees it. A trailing comment is normal after one
+ * space; the wide gap left by a collapsed line break is the signal.
+ */
+function checkCodeBlocks(lines) {
+  const findings = [];
+  const blocks = [];
+  let fence = null;
+  let start = 0;
+  let body = [];
+
+  lines.forEach((line, i) => {
+    const fenceMatch = /^\s*(```+|~~~+)/.exec(line);
+    if (fenceMatch) {
+      const token = fenceMatch[1][0].repeat(3);
+      if (!fence) {
+        fence = token;
+        start = i + 1;
+        body = [];
+      } else if (token === fence) {
+        blocks.push({ start, end: i + 1, body });
+        fence = null;
+      }
+      return;
+    }
+    if (fence) body.push(line);
+  });
+  if (fence) blocks.push({ start, end: lines.length, body, unterminated: true });
+
+  for (const block of blocks) {
+    block.balance = braceBalance(block.body);
+    block.elided = block.body.some((l) => ELIDED_LINE.test(l));
+    findings.push(...stmtMergeFindings(block));
   }
+
+  for (const [index, run] of continuationRuns(blocks, lines).entries()) {
+    const balance = run.reduce((sum, b) => sum + b.balance, 0);
+    if (balance === 0) continue;
+    // The first run continues from a page this file does not contain, so it
+    // closes braces it never opened. Only that direction is explained away —
+    // a positive first run has genuinely unclosed braces.
+    if ((index === 0 && balance < 0) || run.some((b) => b.elided)) continue;
+    const span = run.length > 1 ? ` (${run.length} blocks joined across page breaks)` : '';
+    const kind = run.some((b) => b.unterminated) ? 'unterminated code block' : 'code block';
+    findings.push({
+      line: run[0].start,
+      rule: 'brace-balance',
+      detail: `${kind} off by ${balance}${span}`,
+    });
+  }
+  return findings;
+}
+
+function braceBalance(body) {
+  let balance = 0;
+  for (const line of body) {
+    for (const ch of line) {
+      if (ch === '{') balance++;
+      else if (ch === '}') balance--;
+    }
+  }
+  return balance;
+}
+
+/** Blocks joined by a page break with no heading between them. */
+function continuationRuns(blocks, lines) {
+  const runs = [];
+  let run = [];
+  for (const [i, block] of blocks.entries()) {
+    if (i === 0) {
+      run = [block];
+      continue;
+    }
+    const gap = lines.slice(blocks[i - 1].end, block.start - 1);
+    const continues =
+      gap.some((l) => PAGE_MARKER.test(l) || PAGE_COMMENT.test(l)) && !gap.some((l) => HEADING_LINE.test(l));
+    if (continues) {
+      run.push(block);
+    } else {
+      runs.push(run);
+      run = [block];
+    }
+  }
+  if (run.length) runs.push(run);
+  return runs;
+}
+
+function stmtMergeFindings(block) {
+  const findings = [];
+  block.body.forEach((line, offset) => {
+    const match = STMT_MERGE.exec(line);
+    if (!match) return;
+    findings.push({
+      line: block.start + offset + 1,
+      rule: 'stmt-merge',
+      detail: truncate(line.trim(), 80),
+    });
+  });
   return findings;
 }
 
@@ -686,11 +983,52 @@ function ingest(opts) {
 
   const rel = `raw/books/${slug}`;
   console.log(`ingest: ${pages} markdown + ${assets} assets -> ${rel}/`);
+  warnOnSize(dir, rel);
   console.log('\nlog.md 에 append 할 줄 (직접 Write/Edit 로 추가할 것 — 훅이 그때 lint 를 돌린다):\n');
   console.log(`## [${ingested}] ingest | ${opts.book}`);
   console.log(`- Raw: \`${rel}/\` (${pages} 파일, 책 단위 1줄)`);
   console.log('- Created/Updated: (없음 — raw 적재만)');
   return 0;
+}
+
+/**
+ * Warn when a book is heavy enough to matter to the vault's git remote.
+ *
+ * Size varies by an order of magnitude between books, and the cause is
+ * invisible until after conversion: marker usually extracts just the figures
+ * (the first book ingested came to 5MB from 239 of them), but a book whose
+ * pages it treats as images instead yields one scan per page — a few hundred
+ * MB for a single title. GitHub blocks individual files over 100 MiB and
+ * recommends repositories stay under 1 GB, and because JPEG does not delta
+ * compress, a book adds its full weight to the history permanently: deleting
+ * it later does not shrink `.git` without a history rewrite.
+ *
+ * This warns rather than blocks — the size may well be intended.
+ */
+function warnOnSize(dir, rel) {
+  let mdBytes = 0;
+  let assetBytes = 0;
+  let largest = { rel: null, bytes: 0 };
+  for (const entry of walk(dir)) {
+    const { size } = fs.statSync(path.join(dir, entry));
+    if (entry.endsWith('.md')) mdBytes += size;
+    else assetBytes += size;
+    if (size > largest.bytes) largest = { rel: entry, bytes: size };
+  }
+
+  const totalMb = (mdBytes + assetBytes) / 1024 / 1024;
+  const oversizeFile = largest.bytes / 1024 / 1024 >= GITHUB_FILE_WARN_MB;
+  if (totalMb < INGEST_SIZE_WARN_MB && !oversizeFile) return;
+
+  console.log('');
+  console.log(`ingest: WARNING — ${rel}/ is ${totalMb.toFixed(1)}MB ` +
+    `(markdown ${(mdBytes / 1024 / 1024).toFixed(1)}MB + assets ${(assetBytes / 1024 / 1024).toFixed(1)}MB).`);
+  console.log(`  Largest file: ${largest.rel} (${(largest.bytes / 1024 / 1024).toFixed(1)}MB)`);
+  if (oversizeFile) {
+    console.log(`  Files over ${GITHUB_FILE_BLOCK_MB}MB are rejected by GitHub outright.`);
+  }
+  console.log('  This weight is permanent once committed — removing the book later leaves it in history.');
+  console.log('  If the assets are page scans rather than figures, re-convert with --disable_image_extraction.');
 }
 
 /** Drop an existing frontmatter block so re-ingest does not nest one inside another. */
