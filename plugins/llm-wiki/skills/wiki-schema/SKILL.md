@@ -90,7 +90,17 @@ frontmatter는 SCHEMA.md의 `raw/ Frontmatter` 절을 그대로 따른다(`sourc
 - 역링크: [[노트1]], [[노트2]]
 ```
 
-action은 log.md 헤더에 정의된 것(ingest, update, query, lint, create, archive, delete 등)을 사용한다. 500항목을 넘으면 `log-YYYY.md`로 회전한다.
+action은 log.md 헤더에 정의된 것(ingest, update, query, lint, create, archive, delete 등)을 사용한다.
+
+**log.md를 통째로 Read하지 않는다.** append는 꼬리만 있으면 된다 — `Read(log.md, offset=<끝 근처>, limit=5)`로 마지막 줄을 앵커로 잡고 Edit한다(줄 수는 규칙 1의 `tail -40`이나 `wc -l`로 안다). 파일이 커져도 append 비용이 일정해야 이 로그가 유지 가능하다.
+
+회전은 손으로 옮기지 말고 명령으로 한다 — lint가 `log-rotation`을 error로 올리면(**150KB 또는 500엔트리 중 먼저 오는 쪽**):
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lint.mjs" --vault "$WIKI" --rotate-log
+```
+
+`log-YYYY.md`(아카이브에 담긴 최신 엔트리의 연도)로 옮기고 헤더와 이전 이력 포인터를 남긴다. 아카이브도 Grep 전수검색 대상이라 과거 이력은 잃지 않는다.
 
 # 규칙 7: 정비 (lint) — 훅이 자동 실행한다
 
