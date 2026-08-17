@@ -260,6 +260,86 @@ test('--write-index regenerates catalogs and the root auto block', () => {
   assert.match(root, /Hub pages/);
 });
 
+// --- log.md rotation ---
+
+const LOG_HEADER = '# Wiki Log\n\n> Chronological record of all wiki actions. Append-only.\n> Format: `## [YYYY-MM-DD] action | subject`\n';
+
+/** Minimal vault whose only interesting file is log.md — rotation mutates it. */
+function makeLogVault(entries) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-wiki-log-'));
+  fs.writeFileSync(path.join(root, 'SCHEMA.md'), SCHEMA, 'utf8');
+  fs.writeFileSync(path.join(root, 'log.md'), `${LOG_HEADER}\n${entries}`, 'utf8');
+  return root;
+}
+
+test('--rotate-log archives by the newest entry year and leaves a pointer', () => {
+  const log = makeLogVault('## [2025-01-02] ingest | old\n- a\n\n## [2026-03-04] update | newer\n- b\n');
+  try {
+    const out = lint(log, ['--rotate-log']);
+    assert.match(out, /rotated log\.md → log-2026\.md \(2 entries/);
+
+    const archive = fs.readFileSync(path.join(log, 'log-2026.md'), 'utf8');
+    assert.match(archive, /# Wiki Log/, 'the archive keeps the header so it reads standalone');
+    assert.match(archive, /\[2025-01-02\][\s\S]*\[2026-03-04\]/, 'every entry moved, in order');
+
+    const fresh = fs.readFileSync(path.join(log, 'log.md'), 'utf8');
+    assert.match(fresh, /# Wiki Log/);
+    assert.match(fresh, /이전 이력: `log-2026\.md` \(2 entries\)/, 'past history stays discoverable');
+    assert.doesNotMatch(fresh, /^## \[\d{4}-/m, 'no entries carried over');
+  } finally {
+    fs.rmSync(log, { recursive: true, force: true });
+  }
+});
+
+test('rotating twice in a year does not overwrite the first archive', () => {
+  const log = makeLogVault('## [2026-03-04] update | first\n- a\n');
+  try {
+    lint(log, ['--rotate-log']);
+    fs.appendFileSync(path.join(log, 'log.md'), '## [2026-05-06] update | second\n- b\n', 'utf8');
+    assert.match(lint(log, ['--rotate-log']), /log-2026-2\.md/);
+    assert.ok(fs.existsSync(path.join(log, 'log-2026.md')));
+  } finally {
+    fs.rmSync(log, { recursive: true, force: true });
+  }
+});
+
+test('rotating an entry-less log is refused, not silently emptied', () => {
+  const log = makeLogVault('');
+  try {
+    const result = execFileSync(process.execPath, [LINT, '--vault', log, '--rotate-log'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    assert.equal(result, '');
+    assert.match(fs.readFileSync(path.join(log, 'log.md'), 'utf8'), /# Wiki Log/);
+    assert.ok(!fs.existsSync(path.join(log, 'log-2026.md')));
+  } finally {
+    fs.rmSync(log, { recursive: true, force: true });
+  }
+});
+
+test('log-rotation fires on bytes long before the entry count would', () => {
+  // Few entries, but heavy ones — the case the entry-count limit misses entirely.
+  const fat = Array.from({ length: 20 }, (_, i) => `## [2026-0${(i % 9) + 1}-01] update | entry ${i}\n${'x'.repeat(9000)}\n`).join('\n');
+  const log = makeLogVault(fat);
+  try {
+    const summary = lint(log);
+    assert.match(summary, /^log-rotation 1$/m);
+    const { items } = JSON.parse(lint(log, ['--group', 'log-rotation', '--json']));
+    assert.deepEqual(items[0].over, ['bytes'], '20 entries is nowhere near the entry limit');
+    assert.ok(items[0].bytes > items[0].byteLimit);
+    assert.equal(items[0].entries, 20);
+  } finally {
+    fs.rmSync(log, { recursive: true, force: true });
+  }
+});
+
+test('a small log raises nothing', () => {
+  const log = makeLogVault('## [2026-03-04] update | tiny\n- a\n');
+  try {
+    assert.doesNotMatch(lint(log), /log-rotation/);
+  } finally {
+    fs.rmSync(log, { recursive: true, force: true });
+  }
+});
+
 test('unknown group and missing vault fail loudly', () => {
   assert.throws(() => lint(vault, ['--group', 'nope']), /status 2|Command failed/);
   assert.throws(() => execFileSync(process.execPath, [LINT, '--vault', path.join(vault, 'nope')], { encoding: 'utf8' }));

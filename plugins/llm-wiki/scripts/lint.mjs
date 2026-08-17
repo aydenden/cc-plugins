@@ -42,6 +42,8 @@ const RAW_EXCLUDED = new Set(['feeds', 'assets']);
 const STALE_DAYS = 180;
 const OVERSIZED_LINES = 200;
 const LOG_ROTATION_LIMIT = 500;
+/** Bytes are the real cost of a log an agent might read; entries only proxy it. */
+const LOG_ROTATION_BYTES = 150 * 1024;
 const TITLE_DUP_THRESHOLD = 0.5;
 const DEFAULT_LIMIT = 30;
 const ROOT_HUB_COUNT = 15;
@@ -79,7 +81,7 @@ const GROUPS = [
  * Accepts both `--group id` and `--group=id` forms.
  */
 function parseArgs(argv) {
-  const opts = { vault: null, group: null, json: false, limit: DEFAULT_LIMIT, writeIndex: false, listGroups: false, help: false };
+  const opts = { vault: null, group: null, json: false, limit: DEFAULT_LIMIT, writeIndex: false, rotateLog: false, listGroups: false, help: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const eq = arg.indexOf('=');
@@ -92,6 +94,7 @@ function parseArgs(argv) {
       case '--limit': opts.limit = Number(next()); break;
       case '--json': opts.json = true; break;
       case '--write-index': opts.writeIndex = true; break;
+      case '--rotate-log': opts.rotateLog = true; break;
       case '--groups': opts.listGroups = true; break;
       case '-h': case '--help': opts.help = true; break;
       default: fail(`unknown argument: ${arg}`);
@@ -114,6 +117,7 @@ const HELP = `llm-wiki lint — vault health check and index generation
   node lint.mjs [--vault PATH]                     summary
   node lint.mjs --group <id> [--json] [--limit N]  drill down (default limit ${DEFAULT_LIMIT})
   node lint.mjs --write-index [--vault PATH]       regenerate directory catalogs
+  node lint.mjs --rotate-log [--vault PATH]        move log.md to log-YYYY.md, start fresh
   node lint.mjs --groups                           list group ids
 
 The vault path comes from --vault, else $WIKI_PATH, else $OBSIDIAN_VAULT_PATH.
@@ -470,14 +474,9 @@ function runChecks(vault, schema, model) {
   }
   results.set('raw-drift', drift.sort((a, b) => a.path.localeCompare(b.path)));
 
-  // log-rotation — one item, present only when the limit is exceeded.
-  const logPath = path.join(vault, 'log.md');
-  if (fs.existsSync(logPath)) {
-    const entries = (fs.readFileSync(logPath, 'utf8').match(/^## \[/gm) || []).length;
-    if (entries > LOG_ROTATION_LIMIT) {
-      results.set('log-rotation', [{ path: 'log.md', entries, limit: LOG_ROTATION_LIMIT }]);
-    }
-  }
+  // log-rotation — one item, present only when a limit is exceeded.
+  const rotation = measureLog(vault);
+  if (rotation && rotation.exceeded) results.set('log-rotation', [rotation]);
 
   // contested — explicit distrust markers; tiny by design, so an error group.
   results.set('contested', pages
@@ -674,6 +673,71 @@ function updateRootIndex(vault, schema, model, byDir) {
   return { status: 'updated', hubs: hubs.length, catalogs: catalogLines.length };
 }
 
+// --- log.md rotation ---
+
+/**
+ * Size up log.md against both limits. Bytes lead: an agent that reads the file
+ * pays for its size, not its entry count, and entry size drifts (this vault's
+ * recent entries run ~2x the all-time average). Entries stay as a second limit
+ * so a log of many tiny entries still rotates eventually.
+ */
+function measureLog(vault) {
+  const logPath = path.join(vault, 'log.md');
+  if (!fs.existsSync(logPath)) return null;
+  const text = fs.readFileSync(logPath, 'utf8');
+  const entries = (text.match(/^## \[/gm) || []).length;
+  const bytes = Buffer.byteLength(text, 'utf8');
+  const over = [];
+  if (bytes > LOG_ROTATION_BYTES) over.push('bytes');
+  if (entries > LOG_ROTATION_LIMIT) over.push('entries');
+  return {
+    path: 'log.md', entries, bytes,
+    entryLimit: LOG_ROTATION_LIMIT, byteLimit: LOG_ROTATION_BYTES,
+    exceeded: over.length > 0, over,
+  };
+}
+
+/** Everything before the first entry heading is the header block, and it survives rotation. */
+function splitLog(text) {
+  const firstEntry = text.search(/^## \[/m);
+  return firstEntry === -1
+    ? { header: text.trimEnd(), body: '' }
+    : { header: text.slice(0, firstEntry).trimEnd(), body: text.slice(firstEntry) };
+}
+
+const DEFAULT_LOG_HEADER = [
+  '# Wiki Log',
+  '',
+  '> Chronological record of all wiki actions. Append-only.',
+  '> Format: `## [YYYY-MM-DD] action | subject`',
+].join('\n');
+
+/**
+ * Move log.md aside and start a fresh one. The archive keeps the original header
+ * so it reads standalone, and the new log points at it — rotation must not make
+ * past history undiscoverable. Nothing is lost either way: Grep sweeps `log-*.md`
+ * exactly like everything else in the vault.
+ */
+function rotateLog(vault) {
+  const logPath = path.join(vault, 'log.md');
+  if (!fs.existsSync(logPath)) return { status: 'missing' };
+  const text = fs.readFileSync(logPath, 'utf8');
+  const { header, body } = splitLog(text);
+  if (!body) return { status: 'empty' };
+
+  // Name the archive after the newest entry it holds, not after today — the file
+  // is a record of when the work happened.
+  const dates = [...text.matchAll(/^## \[(\d{4})-\d{2}-\d{2}\]/gm)].map((m) => m[1]);
+  const year = dates.length ? dates[dates.length - 1] : 'archive';
+  let name = `log-${year}.md`;
+  for (let n = 2; fs.existsSync(path.join(vault, name)); n++) name = `log-${year}-${n}.md`;
+
+  const entries = (body.match(/^## \[/gm) || []).length;
+  fs.writeFileSync(path.join(vault, name), `${header || DEFAULT_LOG_HEADER}\n\n${body.trimEnd()}\n`, 'utf8');
+  fs.writeFileSync(logPath, `${header || DEFAULT_LOG_HEADER}\n> 이전 이력: \`${name}\` (${entries} entries) — Grep 대상이므로 검색은 그대로 된다.\n\n`, 'utf8');
+  return { status: 'rotated', archive: name, entries, bytes: Buffer.byteLength(text, 'utf8') };
+}
+
 // --- Reporting ---
 
 function printSummary(results) {
@@ -728,6 +792,13 @@ function main() {
     for (const entry of written) process.stdout.write(`wrote ${entry.path} (${entry.pages} pages)\n`);
     if (root.status === 'updated') process.stdout.write(`wrote index.md auto block (${root.catalogs} catalogs, ${root.hubs} hubs)\n`);
     else process.stderr.write(`[llm-wiki lint] root index.md not updated: ${root.status} — add ${AUTO_START} / ${AUTO_END}\n`);
+    return;
+  }
+
+  if (opts.rotateLog) {
+    const result = rotateLog(vault);
+    if (result.status === 'rotated') process.stdout.write(`rotated log.md → ${result.archive} (${result.entries} entries, ${Math.round(result.bytes / 1024)}KB)\n`);
+    else process.stderr.write(`[llm-wiki lint] log.md not rotated: ${result.status}\n`);
     return;
   }
 
