@@ -31,7 +31,7 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 |--------|--------------|------|
 | `/llm-wiki:capture <URL 또는 제목>` | Ingest | raw/ 캡처(sha256 dedup)까지 담당하고, 적재는 wiki-schema 스킬 절차에 위임 |
 | `/llm-wiki:recall <키워드>` | Query | Grep 전수검색 → 후보 합성 → 가치 있으면 queries/에 파일링 |
-| `/llm-wiki:research <주제>` | Ingest(research) | research-agent로 외부 조사 → 위키 페이지 작성 |
+| `/llm-wiki:research <주제>` | Ingest(research) | 서브에이전트 1개가 채널 라우팅·조사·`raw/` 원문 확보 → 메인이 wiki-schema 절차로 적재 |
 
 Lint 커맨드는 없다 — 정비는 아래 훅이 log 기록 직후 자동으로 돌린다.
 
@@ -64,11 +64,18 @@ Lint 커맨드는 없다 — 정비는 아래 훅이 log 기록 직후 자동으
 |------|------|
 | wiki-schema | **볼트 적재 절차의 소유자.** 볼트 쓰기 시 자동 적용 — SCHEMA.md 오리엔테이션, 레이어 구분(raw 불변), Grep 전수검색+쿼리 확장, frontmatter·태그, 교차참조(최소 2 outbound + 역링크 5), log 기록, lint 실행, Update Policy(모순 병기). `index.md`는 손대지 않는다(lint가 재생성) |
 
-## 에이전트
+## 리서치 채널
 
-| 에이전트 | 설명 |
-|----------|------|
-| research-agent | 볼트 검색 → 외부 조사까지 자율 수행하고, 적재는 wiki-schema 스킬 절차에 위임 |
+채널 레지스트리는 [`docs/research-channels.md`](docs/research-channels.md)가 SSoT다. **필수 계층**(WebSearch/WebFetch, 논문 5종 무키 REST, 트윗 단건)은 전 기기에서 설치 없이 돌고, **선택 계층**(gh·rdt-cli·twitter-cli·yt-dlp)은 그 질의에 필요할 때만 1회 탐지한다. 채널 부재·상류 오류는 오류가 아니라 축퇴이며, 빠진 채널은 산출물에 명시한다.
+
+무키 REST 두 채널은 의존성 0 스크립트가 감싼다:
+
+```bash
+node scripts/research-channels.mjs papers "<질의>" [--source id,...] [--limit N] [--json]
+node scripts/research-channels.mjs tweet <id 또는 URL>
+```
+
+전용 에이전트 파일은 두지 않는다 — 조사 프롬프트는 `/llm-wiki:research` 커맨드가 들고 있고, 적재 절차는 `wiki-schema` 스킬 한 곳에만 있다.
 
 ## 스키마 (볼트 SCHEMA.md가 정의 — 아래는 현재 값 요약)
 
