@@ -213,7 +213,7 @@ const USAGE = `ingest-book — scanned book PDF -> chapter markdown -> vault raw
   split   --md FILE --out DIR [--title T] [--level N] [--require-numbering] [--lane L]
           [--page-offset N | --no-page-offset]   인쇄 페이지 병기 (기본: 목차에서 자동 검출)
   check   --dir DIR [--fix] [--glossary FILE] [--json] [--limit N]
-  ingest  --dir DIR --book SLUG [--vault PATH] [--force]
+  ingest  --dir DIR --book SLUG [--vault PATH] [--force] [--assets DIR]
   queue   --books DIR [--out DIR] [--plan] [--limit N]
           [--free-floor-gb N] [--max-book-mb N] [--disable-images]
                      bulk convert; resumable. 'touch <out>/STOP' or SIGTERM
@@ -996,6 +996,72 @@ function vaultPath(opts) {
  * Write/Edit of log.md, so a script writing it directly would silently skip
  * index regeneration and lint (wiki-schema rule 6/7).
  */
+// --- Book assets (kept out of the vault's git history) ---
+
+/**
+ * Where a book's images live, as an ASCII id derived from its title.
+ *
+ * A Korean folder name would be the readable choice, but the assets tree is the
+ * one that crosses a cloud sync, and Korean filenames do not survive that
+ * intact: the same title is stored NFD on one mount and NFC on another, so
+ * `클린-코드` is two different byte strings depending on who wrote it and a
+ * link written on one machine misses the folder on the next. Twelve hex
+ * characters of sha256 over the NFC-normalised title sidestep normalisation,
+ * case folding, path-length limits and shell quoting in one move.
+ *
+ * The vault-side book folder keeps its readable Korean slug — it only ever
+ * travels through git, and a human browses it.
+ */
+function bookAssetId(title) {
+  const normalised = String(title).normalize('NFC');
+  return crypto.createHash('sha256').update(normalised, 'utf8').digest('hex').slice(0, 12);
+}
+
+const ISBN_RE = /ISBN[^0-9]{0,6}((?:97[89])?[0-9][0-9 -]{8,16}[0-9Xx])/;
+
+/** The book's ISBN if the copyright page survived OCR. Recorded, never used as the id. */
+function findIsbn(texts) {
+  for (const text of texts) {
+    const match = ISBN_RE.exec(text);
+    if (match) return match[1].replace(/[^0-9Xx]/g, '');
+  }
+  return null;
+}
+
+/** `![](_page_9_Picture_0.jpeg)` -> the same image under the assets prefix. */
+function rewriteAssetLinks(markdown, assetNames, prefix) {
+  return markdown.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (whole, alt, target) => {
+    const decoded = decodeURIComponent(target);
+    if (!assetNames.has(decoded)) return whole;
+    return `![${alt}](${prefix}/${encodeURIComponent(decoded)})`;
+  });
+}
+
+/**
+ * The assets root's own manifest: hash -> what book it is. Without it the tree
+ * is 200 opaque hex folders, and the mapping only exists inside the markdown
+ * that points at them. Rewritten whole on each ingest so a re-ingest updates
+ * its entry instead of appending a duplicate.
+ */
+function writeAssetIndex(assetsRoot, assetId, record) {
+  const indexPath = path.join(assetsRoot, 'index.json');
+  let index = {};
+  if (fs.existsSync(indexPath)) {
+    try {
+      index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+    } catch {
+      // A corrupt index must not block an ingest, but it must not be silently
+      // replaced either - the old bytes are kept alongside the fresh index.
+      fs.renameSync(indexPath, `${indexPath}.broken-${Date.now()}`);
+      console.error(`ingest: ${indexPath} was unreadable and has been set aside`);
+    }
+  }
+  index[assetId] = record;
+  const tmp = `${indexPath}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(index, null, 2)}\n`);
+  fs.renameSync(tmp, indexPath);
+}
+
 function ingest(opts) {
   const dir = typeof opts.dir === 'string' ? opts.dir : null;
   if (!dir) return fail('ingest: --dir DIR is required');
@@ -1011,27 +1077,52 @@ function ingest(opts) {
   if (fs.existsSync(dest) && !opts.force) return fail(`ingest: ${dest} already exists (--force to overwrite)`);
   fs.mkdirSync(dest, { recursive: true });
 
+  // Images go to a separate root that git does not track, because they are 93%
+  // of a converted book by size and JPEG does not delta-compress: committed
+  // once, they sit in .git for good even after a later delete.
+  const assetsRoot = path.resolve(
+    typeof opts.assets === 'string' ? opts.assets
+      : process.env.BOOK_ASSETS_PATH ?? path.join(booksRoot, '_assets'),
+  );
+  const assetId = bookAssetId(opts.book);
+  const assetDir = path.join(assetsRoot, assetId);
+  const assetPrefix = path.relative(dest, assetDir).split(path.sep).join('/');
+
   const ingested = today();
+  const sources = [...walk(dir)].sort();
+  const assetNames = new Set(sources.filter((rel) => !rel.endsWith('.md')));
+  if (assetNames.size > 0) fs.mkdirSync(assetDir, { recursive: true });
+
   let pages = 0;
   let assets = 0;
-  for (const rel of [...walk(dir)].sort()) {
+  const bodies = [];
+  for (const rel of sources) {
     const src = path.join(dir, rel);
-    const target = path.join(dest, rel);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
     if (!rel.endsWith('.md')) {
+      const target = path.join(assetDir, rel);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.copyFileSync(src, target);
       assets++;
       continue;
     }
-    const body = stripFrontmatter(fs.readFileSync(src, 'utf8'));
+    const target = path.join(dest, rel);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    const body = rewriteAssetLinks(stripFrontmatter(fs.readFileSync(src, 'utf8')), assetNames, assetPrefix);
+    bodies.push(body);
     const sha = crypto.createHash('sha256').update(body, 'utf8').digest('hex');
     fs.writeFileSync(target, `---\ningested: ${ingested}\nsha256: ${sha}\n---\n${body}`, 'utf8');
     pages++;
   }
 
+  if (assets > 0) writeAssetIndex(assetsRoot, assetId, { title: opts.book, slug, ingested, files: assets, isbn: findIsbn(bodies) });
+
   const rel = `raw/books/${slug}`;
-  console.log(`ingest: ${pages} markdown + ${assets} assets -> ${rel}/`);
-  warnOnSize(dir, rel);
+  console.log(`ingest: ${pages} markdown -> ${rel}/`);
+  console.log(`ingest: ${assets} assets -> ${assetDir} (linked as ${assetPrefix}/)`);
+  if (assets > 0 && !fs.existsSync(path.join(assetsRoot, '..', '.gitignore-checked'))) {
+    console.log(`ingest: make sure git ignores ${path.relative(vault, assetsRoot) || assetsRoot}`);
+  }
+  warnOnSize(dest, rel);
   console.log('\nlog.md 에 append 할 줄 (직접 Write/Edit 로 추가할 것 — 훅이 그때 lint 를 돌린다):\n');
   console.log(`## [${ingested}] ingest | ${opts.book}`);
   console.log(`- Raw: \`${rel}/\` (${pages} 파일, 책 단위 1줄)`);
@@ -1339,4 +1430,4 @@ function queue(opts) {
 const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
 if (invokedDirectly) process.exit(main(process.argv.slice(2)));
 
-export { pickLane, buildManifest, laneFlagText, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv };
+export { pickLane, buildManifest, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv };
