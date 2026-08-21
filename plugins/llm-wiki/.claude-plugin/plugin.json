@@ -1,6 +1,6 @@
 {
   "name": "llm-wiki",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "description": "Obsidian 볼트 기반 LLM Wiki — 볼트 SCHEMA.md(SSoT)를 따르는 ingest/query/lint 연산으로 지식을 복리 축적한다. 런타임 의존성 0, 검색은 CC 내장 Grep 전수검색. hermes llm-wiki와 같은 볼트·같은 컨벤션 공유.",
   "author": {
     "name": "aydenden"

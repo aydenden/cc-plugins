@@ -18,7 +18,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
-import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter } from './ingest-book.mjs';
+import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText } from './ingest-book.mjs';
 
 const SCRIPT = new URL('./ingest-book.mjs', import.meta.url).pathname;
 const SEP = '-'.repeat(48);
@@ -253,3 +253,33 @@ test('CLI doctor: reports every check and agrees with its own exit code', () => 
   }
   assert.equal(res.code === 0, !/^MISS/m.test(out));
 });
+
+test('laneFlagText: a known lane names its flags, an unrecorded one says so', () => {
+  assert.equal(laneFlagText('balanced'), '--mode balanced --paginate_output --output_format markdown');
+  assert.equal(laneFlagText('force_ocr'), '--force_ocr --paginate_output --output_format markdown');
+  // Never silently name a lane that may not be the one that ran.
+  assert.match(laneFlagText(null), /레인 미기록/);
+  assert.match(laneFlagText('fast'), /레인 미기록/);
+});
+
+test('CLI convert: an unknown lane is refused before marker is invoked', () => {
+  const root = tmpdir('ingest-book-lane-');
+  const pdf = path.join(root, 'book.pdf');
+  fs.writeFileSync(pdf, '%PDF-1.4\n');
+
+  const res = run(['convert', '--pdf', pdf, '--lane', 'fast']);
+  assert.equal(res.code, 2);
+  assert.match(res.stderr, /unknown --lane fast/);
+});
+
+test('CLI queue: refuses a missing --books instead of scanning the cwd', () => {
+  const missing = run(['queue']);
+  assert.equal(missing.code, 2);
+  assert.match(missing.stderr, /--books DIR is required/);
+
+  const root = tmpdir('ingest-book-queue-');
+  const notThere = run(['queue', '--books', path.join(root, 'nope')]);
+  assert.equal(notThere.code, 2);
+  assert.match(notThere.stderr, /not a directory/);
+});
+

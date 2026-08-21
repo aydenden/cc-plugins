@@ -35,7 +35,44 @@ const MARKER_BIN = 'marker_single';
 const DOCLING_BIN = 'docling';
 
 /** Fixed marker flags. `--use_llm` is absent on purpose: it ships pages to an external API (design §9-4). */
-const MARKER_FLAGS = ['--force_ocr', '--paginate_output', '--output_format', 'markdown'];
+const MARKER_BASE_FLAGS = ['--paginate_output', '--output_format', 'markdown'];
+
+/**
+ * Which OCR path a PDF needs, decided by whether it carries an extractable text
+ * layer. Measured over a fixed 20-page range on two books of this corpus:
+ *
+ *   truly textless page (pdftotext yields nothing)
+ *     --mode balanced   24.7 s/page, headings emitted as `##` (what `split` keys on)
+ *     --force_ocr       31.7 s/page, headings emitted as `### **bold**`
+ *   page carrying a text layer
+ *     --mode balanced    2.0 s/page, ZERO code fences  <- trusts the layer, destroys code
+ *     --force_ocr       13.4 s/page, 122 code fences
+ *
+ * The trap is that a scanned Korean book's "text layer" is usually junk - either
+ * a custom font encoding with no ToUnicode CMap (`>?@A@ BCD@EF@`) or a bad OCR
+ * layer baked in by the scanner (`//` read as `II`, 객체 as 객쳬). Both `fast`
+ * and `balanced` believe it and flatten code blocks into prose; only
+ * `--force_ocr` re-reads the page image. So balanced is the faster, cleaner
+ * path but ONLY where there is no layer at all to be fooled by.
+ *
+ * `--mode fast` is never used. It is the MPS default, and on a textless page it
+ * still block-OCRs at 26.4 s/page while emitting worse headings than balanced.
+ */
+const LANE_FLAGS = {
+  balanced: ['--mode', 'balanced'],
+  force_ocr: ['--force_ocr'],
+};
+
+/**
+ * How the toc records the flags a book was converted with. `split` only sees
+ * the markdown, so the lane has to be passed in; an unrecorded lane says so
+ * rather than naming a lane that may not be the one that ran.
+ */
+function laneFlagText(lane) {
+  const flags = LANE_FLAGS[lane];
+  if (!flags) return `${MARKER_BASE_FLAGS.join(' ')} (레인 미기록)`;
+  return [...flags, ...MARKER_BASE_FLAGS].join(' ');
+}
 
 /**
  * surya settings that marker exposes only through the environment, applied as
@@ -172,11 +209,15 @@ function parseArgs(argv) {
 const USAGE = `ingest-book — scanned book PDF -> chapter markdown -> vault raw/books/
 
   doctor  [--pdf FILE]                        check this host can run the pipeline
-  convert --pdf FILE [--out DIR] [--pages A-B]   marker conversion (1.3~2h for 462p)
-  split   --md FILE --out DIR [--title T] [--level N] [--require-numbering]
+  convert --pdf FILE [--out DIR] [--pages A-B] [--lane L]  marker conversion (~69 min for 462p)
+  split   --md FILE --out DIR [--title T] [--level N] [--require-numbering] [--lane L]
           [--page-offset N | --no-page-offset]   인쇄 페이지 병기 (기본: 목차에서 자동 검출)
   check   --dir DIR [--fix] [--glossary FILE] [--json] [--limit N]
-  ingest  --dir DIR --book SLUG [--vault PATH] [--force]`;
+  ingest  --dir DIR --book SLUG [--vault PATH] [--force]
+  queue   --books DIR [--out DIR] [--plan] [--limit N]
+          [--free-floor-gb N] [--max-book-mb N] [--disable-images]
+                     bulk convert; resumable. 'touch <out>/STOP' or SIGTERM
+                     stops it after the book in flight, never mid-book.`;
 
 function main(argv) {
   const { cmd, opts } = parseArgs(argv);
@@ -190,6 +231,7 @@ function main(argv) {
     case 'split': return split(opts);
     case 'check': return check(opts);
     case 'ingest': return ingest(opts);
+    case 'queue': return queue(opts);
     default:
       console.error(`unknown command: ${cmd}\n\n${USAGE}`);
       return 2;
@@ -300,15 +342,19 @@ function convert(opts) {
 
   const outDir = path.resolve(typeof opts.out === 'string' ? opts.out : './book-out');
   fs.mkdirSync(outDir, { recursive: true });
-  const args = [opts.pdf, ...MARKER_FLAGS, '--output_dir', outDir];
+
+  const lane = typeof opts.lane === 'string' ? opts.lane : pickLane(opts.pdf).lane;
+  if (!LANE_FLAGS[lane]) return fail(`convert: unknown --lane ${lane} (balanced|force_ocr)`);
+  const args = [opts.pdf, ...LANE_FLAGS[lane], ...MARKER_BASE_FLAGS, '--output_dir', outDir];
   if (typeof opts.pages === 'string') args.push('--page_range', opts.pages);
 
   const env = { ...SURYA_TUNING, ...process.env };
+  console.log(`convert: lane=${lane}`);
   console.log(`convert: ${MARKER_BIN} ${args.join(' ')}`);
   for (const [key, value] of Object.entries(SURYA_TUNING)) {
     if (process.env[key] === undefined) console.log(`convert: ${key}=${value} (default)`);
   }
-  console.log('convert: a full book takes 1.3~2h; the first run also loads models.');
+  console.log('convert: a 462-page book took ~69 min here; the first run also loads models.');
   const res = spawnSync(MARKER_BIN, args, { stdio: 'inherit', env });
   if (res.status !== 0) return fail(`convert: ${MARKER_BIN} exited ${res.status}`);
 
@@ -358,7 +404,7 @@ function* walk(root, rel = '') {
  * design proposed a second marker pass in JSON to read `SectionHeader` blocks
  * instead — that is rejected here: a mis-promoted heading IS a SectionHeader
  * block, so JSON does not solve the real false positive, while a second pass
- * doubles a 1.3~2h conversion. Fence tracking kills the code-block case, and
+ * doubles an hour-plus conversion. Fence tracking kills the code-block case, and
  * shape checks kill the sentence case.
  */
 function classifyHeading(text, requireNumbering) {
@@ -554,7 +600,7 @@ function pageRange(ch, pageOffset = null) {
   return `${pdf} · 책 p.${first}-${last}`;
 }
 
-function buildToc({ title, source, chapters, files, pageStart, pageEnd, pageOffset = null, offsetSource = 'none' }) {
+function buildToc({ title, source, chapters, files, pageStart, pageEnd, pageOffset = null, offsetSource = 'none', lane = null }) {
   const rows = chapters.map((ch, i) => {
     const lines = ch.text.split('\n').length;
     return `| ${String(i + 1).padStart(2, '0')} | [${escapePipes(ch.title)}](${files[i]}) | ${pageRange(ch, pageOffset)} | ${lines} |`;
@@ -567,7 +613,7 @@ function buildToc({ title, source, chapters, files, pageStart, pageEnd, pageOffs
     '## 변환 정보',
     '',
     `- 원본: \`${source}\``,
-    `- 변환: marker-pdf \`${MARKER_FLAGS.join(' ')}\``,
+    `- 변환: marker-pdf \`${laneFlagText(lane)}\``,
     `- 변환일: ${today()}`,
     `- 원본 페이지: PDF p.${pageStart ?? '?'}-${pageEnd ?? '?'} (1-indexed로 환산됨)`,
     pageOffset === null
@@ -619,6 +665,8 @@ function split(opts) {
       offsetSource = `detected from ${detected.agree}/${detected.samples} TOC entries`;
     }
   }
+
+  const lane = typeof opts.lane === 'string' ? opts.lane : null;
 
   const { chapters, rejected, pageStart, pageEnd } = splitChapters(markdown, {
     level,
@@ -1042,9 +1090,253 @@ function stripFrontmatter(text) {
   return text.slice(offset);
 }
 
+// --- Queue (bulk conversion) ---
+
+const PDFTOTEXT_BIN = 'pdftotext';
+const PDFINFO_BIN = 'pdfinfo';
+
+/** Page count from `pdfinfo`, or null when the tool cannot read the file. */
+function pdfPageCount(pdf) {
+  const res = spawnSync(PDFINFO_BIN, [pdf], { encoding: 'utf8', maxBuffer: 1 << 20 });
+  if (res.status !== 0) return null;
+  const match = /^Pages:\s+(\d+)$/m.exec(res.stdout);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Non-whitespace characters `pdftotext` can pull out of the WHOLE document.
+ *
+ * The whole document matters: a 20-page sample said 261 of 280 books were
+ * textless, and the full-document pass agreed — but only because it was run.
+ * A book with a text layer on a handful of pages would slip past a sample and
+ * then get silently mangled by the balanced lane.
+ */
+function pdfTextChars(pdf) {
+  const res = spawnSync(PDFTOTEXT_BIN, [pdf, '-'], { encoding: 'utf8', maxBuffer: 1 << 28 });
+  if (res.status !== 0) return null;
+  return res.stdout.replace(/\s+/g, '').length;
+}
+
+/**
+ * Route one PDF to an OCR lane. See `LANE_FLAGS` for why the rule is "any text
+ * layer at all -> force_ocr": the layer is far more likely to be junk than
+ * usable, and the cheap lanes have no way to tell the difference.
+ *
+ * When `pdftotext` is missing or fails, fall back to `force_ocr` — it is the
+ * slower lane but it is the one that cannot silently corrupt a book.
+ */
+function pickLane(pdf) {
+  const chars = pdfTextChars(pdf);
+  if (chars === null) return { lane: 'force_ocr', chars: null, reason: 'pdftotext unavailable' };
+  if (chars === 0) return { lane: 'balanced', chars: 0, reason: 'no text layer' };
+  return { lane: 'force_ocr', chars, reason: 'text layer present (assume junk)' };
+}
+
+/** Free bytes on the volume holding `dir`. */
+function freeBytes(dir) {
+  const st = fs.statfsSync(dir);
+  return st.bavail * st.bsize;
+}
+
+function dirStats(dir) {
+  let bytes = 0;
+  let images = 0;
+  const walk = (d) => {
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      bytes += fs.statSync(full).size;
+      if (/\.(jpe?g|png|webp)$/i.test(entry.name)) images++;
+    }
+  };
+  if (fs.existsSync(dir)) walk(dir);
+  return { bytes, images };
+}
+
+function writeJsonAtomic(file, value) {
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`);
+  fs.renameSync(tmp, file);
+}
+
+function fmtDuration(seconds) {
+  const s = Math.max(0, Math.round(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}h${String(m).padStart(2, '0')}m` : `${m}m${String(s % 60).padStart(2, '0')}s`;
+}
+
+/**
+ * Build the work list once and cache it. Scanning the book directory is a
+ * deliberate exception to the "never glob the cloud mount" rule that governs
+ * `convert`: bulk conversion needs the whole list, and this only runs against a
+ * folder the caller has already materialised locally. `queue` refuses to start
+ * if any entry is still a cloud placeholder.
+ */
+function buildManifest(booksDir) {
+  const files = fs.readdirSync(booksDir)
+    .filter((name) => /\.pdf$/i.test(name))
+    .sort();
+  const entries = [];
+  for (const [index, name] of files.entries()) {
+    const full = path.join(booksDir, name);
+    const { lane, chars, reason } = pickLane(full);
+    const pages = pdfPageCount(full);
+    entries.push({ file: name, pages, chars, lane, reason, status: 'pending' });
+    process.stderr.write(`\rscanning ${index + 1}/${files.length}`);
+  }
+  process.stderr.write('\n');
+  // Shortest first: an early book that finishes proves the pipeline before a
+  // 1,600-page one ties the GPU up for half a day.
+  entries.sort((a, b) => (a.pages ?? Infinity) - (b.pages ?? Infinity));
+  return entries;
+}
+
+function queue(opts) {
+  const guard = requireEnv();
+  if (guard) return guard;
+  for (const bin of [PDFTOTEXT_BIN, PDFINFO_BIN]) {
+    if (!which(bin)) return fail(`queue: ${bin} not on PATH (brew install poppler)`);
+  }
+  if (typeof opts.books !== 'string') return fail('queue: --books DIR is required');
+  const booksDir = path.resolve(opts.books);
+  if (!fs.existsSync(booksDir) || !fs.statSync(booksDir).isDirectory()) {
+    return fail(`queue: --books is not a directory: ${booksDir}`);
+  }
+  const outRoot = path.resolve(typeof opts.out === 'string' ? opts.out : './book-queue');
+  fs.mkdirSync(outRoot, { recursive: true });
+
+  const manifestPath = path.join(outRoot, 'queue.json');
+  let entries;
+  if (fs.existsSync(manifestPath)) {
+    entries = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    console.log(`queue: resuming ${manifestPath}`);
+  } else {
+    console.log(`queue: building manifest from ${booksDir}`);
+    entries = buildManifest(booksDir);
+    writeJsonAtomic(manifestPath, entries);
+  }
+
+  const byStatus = (s) => entries.filter((e) => e.status === s);
+  const pending = byStatus('pending');
+  const totalPages = entries.reduce((sum, e) => sum + (e.pages ?? 0), 0);
+  const pendingPages = pending.reduce((sum, e) => sum + (e.pages ?? 0), 0);
+  const lanes = entries.reduce((acc, e) => ({ ...acc, [e.lane]: (acc[e.lane] ?? 0) + 1 }), {});
+  console.log(`queue: ${entries.length} books, ${totalPages} pages total`);
+  console.log(`queue: lanes ${Object.entries(lanes).map(([k, v]) => `${k}=${v}`).join(' ')}`);
+  console.log(`queue: done=${byStatus('done').length} failed=${byStatus('failed').length} pending=${pending.length} (${pendingPages} pages)`);
+
+  if (opts.plan) {
+    for (const e of pending) console.log(`  ${String(e.pages ?? '?').padStart(5)}p  ${e.lane.padEnd(10)} ${e.file}`);
+    return 0;
+  }
+
+  const freeFloor = Number(opts.free_floor_gb ?? 20) * 1024 ** 3;
+  const maxBookBytes = Number(opts.max_book_mb ?? 300) * 1024 ** 2;
+  const limit = opts.limit === undefined ? Infinity : Number(opts.limit);
+  const logPath = path.join(outRoot, 'queue.log');
+  const note = (line) => {
+    console.log(line);
+    fs.appendFileSync(logPath, `${new Date().toISOString()} ${line}\n`);
+  };
+
+  // Two ways to ask for a clean stop, both of which let the book in flight
+  // finish: `touch <out>/STOP`, or a signal. Killing the process outright
+  // instead throws away however much of the current book has been converted -
+  // half an hour, for a long one.
+  //
+  // The handler works even though `spawnSync` blocks the event loop: the signal
+  // is delivered to libuv's watcher, which only runs once marker returns, so a
+  // signal mid-book lands exactly at the book boundary. A second one is an
+  // impatient operator, and gets the immediate exit they asked for.
+  const stopFile = path.join(outRoot, 'STOP');
+  let stopRequested = false;
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.on(signal, () => {
+      if (stopRequested) process.exit(130);
+      stopRequested = true;
+      console.log(`\nqueue: ${signal} received — finishing the current book, then stopping (again to force)`);
+    });
+  }
+
+  let processed = 0;
+  let elapsedPages = 0;
+  let elapsedSeconds = 0;
+  for (const entry of entries) {
+    if (entry.status !== 'pending') continue;
+    if (stopRequested) { note('queue: stop requested, stopping at a book boundary'); break; }
+    if (fs.existsSync(stopFile)) { note(`queue: ${stopFile} present, stopping at a book boundary`); break; }
+    if (processed >= limit) { note(`queue: --limit ${limit} reached, stopping`); break; }
+
+    const free = freeBytes(outRoot);
+    if (free < freeFloor) {
+      note(`queue: STOP — ${(free / 1024 ** 3).toFixed(1)}GB free is below the ${(freeFloor / 1024 ** 3).toFixed(0)}GB floor`);
+      break;
+    }
+
+    const bookDir = path.join(outRoot, 'books', slugify(entry.file.replace(/\.pdf$/i, '')));
+    // A book interrupted mid-run leaves a partial tree; marker would otherwise
+    // mix the old output into the retry.
+    fs.rmSync(bookDir, { recursive: true, force: true });
+    fs.mkdirSync(bookDir, { recursive: true });
+
+    const args = [
+      path.join(booksDir, entry.file),
+      ...LANE_FLAGS[entry.lane],
+      ...MARKER_BASE_FLAGS,
+      '--output_dir', bookDir,
+    ];
+    if (opts.disable_images) args.push('--disable_image_extraction');
+
+    note(`queue: [${processed + 1}] ${entry.file} (${entry.pages ?? '?'}p, ${entry.lane})`);
+    const started = Date.now();
+    const logFile = path.join(bookDir, 'marker.log');
+    const out = fs.openSync(logFile, 'w');
+    const res = spawnSync(MARKER_BIN, args, { stdio: ['ignore', out, out], env: { ...SURYA_TUNING, ...process.env } });
+    fs.closeSync(out);
+    const secs = (Date.now() - started) / 1000;
+
+    entry.secs = Math.round(secs);
+    const produced = res.status === 0 ? findMarkdown(bookDir) : null;
+    if (res.status !== 0 || !produced) {
+      entry.status = 'failed';
+      entry.rc = res.status;
+      note(`queue:   FAILED rc=${res.status} after ${fmtDuration(secs)} — see ${logFile}`);
+    } else {
+      const { bytes, images } = dirStats(bookDir);
+      entry.status = 'done';
+      entry.outBytes = bytes;
+      entry.images = images;
+      entry.mdBytes = fs.statSync(produced).size;
+      const perPage = entry.pages ? secs / entry.pages : null;
+      note(`queue:   done in ${fmtDuration(secs)}${perPage ? ` (${perPage.toFixed(1)}s/page)` : ''}, ${(bytes / 1024 ** 2).toFixed(1)}MB, ${images} images`);
+      if (bytes > maxBookBytes) {
+        note(`queue:   WARNING ${(bytes / 1024 ** 2).toFixed(0)}MB exceeds --max-book-mb; check whether the assets are page scans, not figures`);
+      }
+      if (entry.pages) { elapsedPages += entry.pages; elapsedSeconds += secs; }
+    }
+    writeJsonAtomic(manifestPath, entries);
+    processed++;
+    if (stopRequested || fs.existsSync(stopFile)) { note('queue: stopping — progress is recorded, rerun to resume'); break; }
+
+    // Rate from THIS run only. The recorded 8.9 s/page came from a single book;
+    // a live average over several is the number worth trusting.
+    if (elapsedPages > 0) {
+      const rate = elapsedSeconds / elapsedPages;
+      const left = entries.filter((e) => e.status === 'pending').reduce((sum, e) => sum + (e.pages ?? 0), 0);
+      note(`queue:   rate ${rate.toFixed(1)}s/page — ${left} pages left, ETA ${fmtDuration(left * rate)}`);
+    }
+  }
+
+  const failed = byStatus('failed');
+  console.log(`queue: done=${byStatus('done').length} failed=${failed.length} pending=${byStatus('pending').length}`);
+  for (const e of failed) console.log(`  FAILED rc=${e.rc} ${e.file}`);
+  return failed.length > 0 ? 1 : 0;
+}
+
 // --- Entry point ---
 
 const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
 if (invokedDirectly) process.exit(main(process.argv.slice(2)));
 
-export { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv };
+export { pickLane, buildManifest, laneFlagText, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv };
