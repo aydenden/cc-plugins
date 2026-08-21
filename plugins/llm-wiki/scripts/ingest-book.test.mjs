@@ -18,7 +18,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
-import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText } from './ingest-book.mjs';
+import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn } from './ingest-book.mjs';
 
 const SCRIPT = new URL('./ingest-book.mjs', import.meta.url).pathname;
 const SEP = '-'.repeat(48);
@@ -201,7 +201,7 @@ test('CLI ingest: raw frontmatter hashes the body the way lint does', () => {
   const chapters = path.join(root, 'chapters');
   fs.mkdirSync(chapters, { recursive: true });
   fs.writeFileSync(path.join(chapters, '00-toc.md'), '# toc\n', 'utf8');
-  fs.writeFileSync(path.join(chapters, '01-a.md'), '# 첫 장\n\n본문\n', 'utf8');
+  fs.writeFileSync(path.join(chapters, '01-a.md'), '# 첫 장\n\n![](_page_1_Diagram_0.jpeg)\n\n본문\n', 'utf8');
   fs.writeFileSync(path.join(chapters, '_page_1_Diagram_0.jpeg'), 'binary', 'utf8');
 
   const res = run(['ingest', '--dir', chapters, '--book', '테스트 책', '--vault', vault]);
@@ -214,9 +214,21 @@ test('CLI ingest: raw frontmatter hashes the body the way lint does', () => {
   const recorded = /sha256: ([0-9a-f]{64})/.exec(text)[1];
   assert.equal(recorded, crypto.createHash('sha256').update(body, 'utf8').digest('hex'));
   assert.match(text, /ingested: \d{4}-\d{2}-\d{2}/);
-  assert.ok(fs.existsSync(path.join(dest, '_page_1_Diagram_0.jpeg')));
+  // Images live outside the book folder so git never sees them, and the link
+  // in the markdown is rewritten to reach them.
+  const assetId = bookAssetId('테스트 책');
+  const assetDir = path.join(vault, 'raw', 'books', '_assets', assetId);
+  assert.ok(!fs.existsSync(path.join(dest, '_page_1_Diagram_0.jpeg')));
+  assert.ok(fs.existsSync(path.join(assetDir, '_page_1_Diagram_0.jpeg')));
+  assert.match(text, /!\[\]\(\.\.\/_assets\/[0-9a-f]{12}\/_page_1_Diagram_0\.jpeg\)/);
 
-  // The private vault repo keeps book text (2026-08-16 decision): nothing is gitignored.
+  const index = JSON.parse(fs.readFileSync(path.join(vault, 'raw', 'books', '_assets', 'index.json'), 'utf8'));
+  assert.equal(index[assetId].title, '테스트 책');
+  assert.equal(index[assetId].slug, '테스트-책');
+  assert.equal(index[assetId].files, 1);
+
+  // The private vault repo keeps book TEXT (2026-08-16 decision); only the
+  // assets root is meant to be ignored, and this command does not write one.
   assert.ok(!fs.existsSync(path.join(vault, 'raw', 'books', '.gitignore')));
   // The log line is printed for the agent to write, never written here.
   assert.match(res.stdout, /## \[\d{4}-\d{2}-\d{2}\] ingest \| 테스트 책/);
@@ -283,3 +295,33 @@ test('CLI queue: refuses a missing --books instead of scanning the cwd', () => {
   assert.match(notThere.stderr, /not a directory/);
 });
 
+test('bookAssetId: normalisation-proof, so a cloud sync cannot split one book in two', () => {
+  const nfc = '클린 코드'.normalize('NFC');
+  const nfd = '클린 코드'.normalize('NFD');
+  assert.notEqual(nfc, nfd);                       // the trap this guards against
+  assert.equal(bookAssetId(nfc), bookAssetId(nfd));
+  assert.match(bookAssetId(nfc), /^[0-9a-f]{12}$/);
+  assert.notEqual(bookAssetId('클린 코드'), bookAssetId('클린 아키텍처'));
+});
+
+test('rewriteAssetLinks: only known assets move, other links are left alone', () => {
+  const names = new Set(['_page_1_Diagram_0.jpeg', '그림 2.png']);
+  const md = [
+    '![](_page_1_Diagram_0.jpeg)',
+    '![캡션](%EA%B7%B8%EB%A6%BC%202.png)',   // percent-encoded name
+    '![](https://example.com/remote.png)',
+    '[본문 링크](02-b.md)',
+  ].join('\n');
+  const out = rewriteAssetLinks(md, names, '../_assets/abc123abc123');
+
+  assert.match(out, /!\[\]\(\.\.\/_assets\/abc123abc123\/_page_1_Diagram_0\.jpeg\)/);
+  assert.match(out, /!\[캡션\]\(\.\.\/_assets\/abc123abc123\/%EA%B7%B8%EB%A6%BC%202\.png\)/);
+  assert.match(out, /!\[\]\(https:\/\/example\.com\/remote\.png\)/);
+  assert.match(out, /\[본문 링크\]\(02-b\.md\)/);
+});
+
+test('findIsbn: reads the copyright page, ignores other numbers', () => {
+  assert.equal(findIsbn(['ISBN 979-11-6002-326-8 ']), '9791160023268');
+  assert.equal(findIsbn(['앞', 'ISBN:9784816336140']), '9784816336140');
+  assert.equal(findIsbn(['페이지 123', '전화 02-1234-5678']), null);
+});
