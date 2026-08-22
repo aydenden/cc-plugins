@@ -93,8 +93,23 @@ function laneFlagText(lane) {
  * cores) throughput peaked at 12 and regressed at 16 — so the right value on
  * another machine is a different number, and surya's own default is saner than
  * a figure measured on one laptop. Set SURYA_INFERENCE_PARALLEL to tune it.
+ *
+ * SURYA_GUIDED_LAYOUT is off because the installed llama.cpp cannot compile
+ * surya's layout JSON schema into a grammar. Left on, every layout call returns
+ * HTTP 400 ("failed to parse grammar"), marker logs "Layout inference failed"
+ * for every page, and the whole document falls through to full-page OCR --
+ * measured on 46 converted books, layout failed on 100% of pages. Turning it
+ * off removed the errors entirely with no replacement failure mode (the model
+ * emits valid JSON unguided: zero "Layout parse failed" over 40 pages), and
+ * neither output nor speed moved: two books, 40 pages, the only text diff was
+ * OCR noise and code-block indent width, and run time was 368s vs 369s over
+ * three alternating pairs (run-to-run spread was +-20%, far larger than the
+ * effect). Drop this line once llama.cpp is new enough to compile the schema.
  */
-const SURYA_TUNING = { SURYA_MAX_TOKENS_FULL_PAGE: '4096' };
+const SURYA_TUNING = {
+  SURYA_MAX_TOKENS_FULL_PAGE: '4096',
+  SURYA_GUIDED_LAYOUT: 'false',
+};
 
 const INSTALL_HINT = [
   'uv tool install --python 3.12 marker-pdf',
