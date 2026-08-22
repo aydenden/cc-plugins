@@ -177,6 +177,29 @@ const DEFAULT_LIMIT = 30;
 /** Below this, the text before the first heading is joined into chapter 1 instead of standing alone. */
 const PREAMBLE_MIN = 200;
 
+/**
+ * Depth at which a numbered heading stops being a chapter of its own.
+ *
+ * marker gives a scanned book's headings no usable level -- on the pilot book
+ * it emitted 136 `##` lines covering chapter titles, sections (`1.1`),
+ * sub-sections (`1.1.1`), running headers and even blurb author names alike.
+ * So the split point cannot come from `#` count; it comes from the section
+ * number. 2 keeps `9.2` and folds `9.2.4` into it, which is the granularity a
+ * reader cites.
+ */
+const SECTION_DEPTH_DEFAULT = 2;
+
+/**
+ * A heading is a running header, not a chapter, when it repeats across the
+ * book AND carries almost nothing under it. Neither half suffices alone:
+ * on the pilot book `요약` repeated 12 times as a real per-chapter summary
+ * (bodies 323-14541 chars), while `The Programmer's Brain` repeated 4 times
+ * with 0-86 chars. The gap between the two populations is wide enough that
+ * the exact threshold does not matter.
+ */
+const RUNNING_HEADER_MIN_REPEATS = 3;
+const RUNNING_HEADER_MAX_BODY = 200;
+
 /** OCR misreads confirmed on the pilot book (design §5.1). Extend via --glossary. */
 const DEFAULT_GLOSSARY = { Iru: 'lru', Ifu: 'lfu' };
 
@@ -226,6 +249,7 @@ const USAGE = `ingest-book — scanned book PDF -> chapter markdown -> vault raw
   doctor  [--pdf FILE]                        check this host can run the pipeline
   convert --pdf FILE [--out DIR] [--pages A-B] [--lane L]  marker conversion (~69 min for 462p)
   split   --md FILE --out DIR [--title T] [--level N] [--require-numbering] [--lane L]
+          [--section-depth N]                    N.N 까지만 챕터로 분할 (기본 2)
           [--page-offset N | --no-page-offset]   인쇄 페이지 병기 (기본: 목차에서 자동 검출)
   check   --dir DIR [--fix] [--glossary FILE] [--json] [--limit N]
   ingest  --dir DIR --book SLUG [--vault PATH] [--force] [--assets DIR]
@@ -422,10 +446,14 @@ function* walk(root, rel = '') {
  * doubles an hour-plus conversion. Fence tracking kills the code-block case, and
  * shape checks kill the sentence case.
  */
-function classifyHeading(text, requireNumbering) {
+function classifyHeading(text, requireNumbering, sectionDepth = SECTION_DEPTH_DEFAULT) {
   const numbered = /^\d+(\.\d+)+([.\s]|$)/.test(text);
   if (requireNumbering && !numbered) return { ok: false, reason: 'no section number' };
-  if (numbered) return { ok: true };
+  if (numbered) {
+    const depth = /^\d+(?:\.\d+)*/.exec(text)[0].split('.').length;
+    if (depth > sectionDepth) return { ok: false, reason: `deeper than section depth ${sectionDepth}` };
+    return { ok: true };
+  }
   if (!text.trim()) return { ok: false, reason: 'empty' };
   if (/^[\d\s.,]+$/.test(text)) return { ok: false, reason: 'digits only' };
   if (/[.。?!]$/.test(text)) return { ok: false, reason: 'ends like a sentence' };
@@ -446,7 +474,10 @@ function classifyHeading(text, requireNumbering) {
  * replaced rather than dropped, so provenance survives inside a chapter and
  * not just in its header.
  */
-function splitChapters(markdown, { level = DEFAULT_LEVEL, requireNumbering = false, pageOffset = null } = {}) {
+function splitChapters(
+  markdown,
+  { level = DEFAULT_LEVEL, requireNumbering = false, pageOffset = null, sectionDepth = SECTION_DEPTH_DEFAULT } = {},
+) {
   const lines = markdown.split('\n');
   const printed = (pdfPage) => printedPage(pdfPage, pageOffset);
   const headingRe = new RegExp(`^(#{1,${level}})\\s+(.*)$`);
@@ -457,8 +488,8 @@ function splitChapters(markdown, { level = DEFAULT_LEVEL, requireNumbering = fal
   let pageStart = null;
   let current = null;
 
-  const open = (title, startPage) => {
-    current = { title, body: [], firstPage: startPage, lastPage: startPage };
+  const open = (title, startPage, marker = '#'.repeat(level)) => {
+    current = { title, marker, body: [], firstPage: startPage, lastPage: startPage };
     chapters.push(current);
   };
 
@@ -485,9 +516,9 @@ function splitChapters(markdown, { level = DEFAULT_LEVEL, requireNumbering = fal
     const headingMatch = !fence && headingRe.exec(line);
     if (headingMatch) {
       const title = headingMatch[2].trim();
-      const verdict = classifyHeading(title, requireNumbering);
+      const verdict = classifyHeading(title, requireNumbering, sectionDepth);
       if (verdict.ok) {
-        open(title, page);
+        open(title, page, headingMatch[1]);
         continue;
       }
       rejected.push({ title, reason: verdict.reason, page });
@@ -513,8 +544,75 @@ function splitChapters(markdown, { level = DEFAULT_LEVEL, requireNumbering = fal
     chapters[0].title = '본문';
   }
 
-  for (const ch of chapters) ch.text = `${ch.body.join('\n').trim()}\n`;
-  return { chapters, rejected, pageStart, pageEnd: page };
+  const kept = demoteNonChapters(chapters, rejected);
+
+  for (const ch of kept) ch.text = `${ch.body.join('\n').trim()}\n`;
+  return { chapters: kept, rejected, pageStart, pageEnd: page };
+}
+
+/** Body text with page provenance comments and blank lines removed. */
+function substantiveBody(chapter) {
+  return chapter.body
+    .filter((line) => !PAGE_COMMENT.test(line))
+    .join('\n')
+    .trim();
+}
+
+/**
+ * Undo split points that a scanned book's heading levels made look real.
+ *
+ * marker promotes a page's running header to the same level as a chapter
+ * title, so on the pilot book eight `## CHAPTER` lines and four repetitions of
+ * the book's own title each opened a file holding nothing but that heading.
+ * They are folded back into the preceding chapter as ordinary text -- the same
+ * treatment `classifyHeading` gives a rejected heading -- so the words survive
+ * where they appeared and no file exists that a reader can open to find
+ * nothing. Merging backwards keeps document order; only a demoted first
+ * chapter merges forward, since it has no predecessor.
+ */
+function demoteNonChapters(chapters, rejected) {
+  const repeats = new Map();
+  for (const ch of chapters) repeats.set(ch.title, (repeats.get(ch.title) ?? 0) + 1);
+
+  const verdicts = chapters.map((ch) => {
+    const body = substantiveBody(ch);
+    if (ch.title === null) return null;
+    if (!body) return 'empty section';
+    if (repeats.get(ch.title) >= RUNNING_HEADER_MIN_REPEATS && body.length < RUNNING_HEADER_MAX_BODY) {
+      return `running header (${repeats.get(ch.title)}x, ${body.length} chars)`;
+    }
+    return null;
+  });
+  if (verdicts.every((v) => v !== null)) return chapters; // every heading suspect: trust none of this
+
+  const kept = [];
+  const pending = [];
+  chapters.forEach((ch, i) => {
+    const reason = verdicts[i];
+    if (!reason) {
+      const target = kept.length ? kept[kept.length - 1] : null;
+      const merged = pending.splice(0);
+      const lines = merged.flatMap((p) => [`${p.marker} ${p.title}`, ...p.body]);
+      if (target) {
+        target.body.push(...lines);
+        // The merged text came from later pages, so the range has to grow.
+        target.lastPage = merged[merged.length - 1]?.lastPage ?? target.lastPage;
+      } else if (merged.length) {
+        ch.body.unshift(...lines);
+        ch.firstPage = merged[0].firstPage ?? ch.firstPage;
+      }
+      kept.push(ch);
+      return;
+    }
+    rejected.push({ title: ch.title, reason, page: ch.firstPage });
+    pending.push(ch);
+  });
+  if (pending.length && kept.length) {
+    const last = kept[kept.length - 1];
+    last.body.push(...pending.flatMap((p) => [`${p.marker} ${p.title}`, ...p.body]));
+    last.lastPage = pending[pending.length - 1].lastPage ?? last.lastPage;
+  }
+  return kept;
 }
 
 /** Chapter file name: `NN-<kebab title>.md`, Korean kept, punctuation dropped. */
@@ -686,6 +784,7 @@ function split(opts) {
   const { chapters, rejected, pageStart, pageEnd } = splitChapters(markdown, {
     level,
     requireNumbering: Boolean(opts.require_numbering),
+    sectionDepth: opts.section_depth === undefined ? SECTION_DEPTH_DEFAULT : Number(opts.section_depth),
     pageOffset,
   });
   if (!chapters.length) return fail('split: no content found');
@@ -770,14 +869,19 @@ function checkText(text, glossary) {
       const slash = url.indexOf('/', url.indexOf('://') + 3);
       if (slash === -1) continue;
       const host = url.slice(url.indexOf('://') + 3, slash).toLowerCase();
+      // Only hosts whose path is lowercase by specification are reported.
+      // "uppercase anywhere in the path" was the first rule and it has no
+      // discriminating power on real books: over the 46 converted so far it
+      // fired on 452 of 1,682 URLs (26%) across 85 hosts, and the hosts it hit
+      // hardest -- oreil.ly, bit.ly, youtu.be, github.com -- have
+      // case-sensitive paths where uppercase is correct and a misread is
+      // undetectable by case anyway. The noise buried the code-block rules,
+      // which do find real damage. Widening this list is how coverage grows;
+      // proving a URL right needs reachability, not spelling.
+      if (!LOWERCASE_SLUG_HOSTS.has(host)) continue;
       const urlPath = url.slice(slash);
       if (!/[A-Z]/.test(urlPath)) continue;
-      findings.push({
-        line: i + 1,
-        rule: 'url-case',
-        detail: url,
-        fixable: LOWERCASE_SLUG_HOSTS.has(host),
-      });
+      findings.push({ line: i + 1, rule: 'url-case', detail: url, fixable: true });
     }
 
     for (const [wrong, right] of Object.entries(glossary)) {
@@ -948,6 +1052,7 @@ function check(opts) {
   }
 
   const stat = fs.statSync(target);
+  const base = stat.isDirectory() ? target : path.dirname(target);
   const files = stat.isDirectory()
     ? [...walk(target)].filter((r) => r.endsWith('.md')).sort().map((r) => path.join(target, r))
     : [target];
@@ -957,7 +1062,9 @@ function check(opts) {
   for (const file of files) {
     const text = fs.readFileSync(file, 'utf8');
     const findings = checkText(text, glossary);
-    for (const f of findings) all.push({ file: path.relative(process.cwd(), file), ...f });
+    // Relative to what was asked for, not to the cwd: a scratch dir outside the
+    // project turned every line into eight `../` segments and 200 columns.
+    for (const f of findings) all.push({ file: path.relative(base, file) || path.basename(file), ...f });
     if (opts.fix) {
       const fixed = fixText(text, glossary);
       if (fixed !== text) {
