@@ -704,7 +704,7 @@ function split(opts) {
   const title = typeof opts.title === 'string' ? opts.title : path.basename(opts.md, '.md');
   fs.writeFileSync(
     path.join(outDir, '00-toc.md'),
-    buildToc({ title, source: path.basename(opts.md), chapters, files, pageStart, pageEnd, pageOffset, offsetSource }),
+    buildToc({ title, source: path.basename(opts.md), chapters, files, pageStart, pageEnd, pageOffset, offsetSource, lane }),
     'utf8',
   );
 

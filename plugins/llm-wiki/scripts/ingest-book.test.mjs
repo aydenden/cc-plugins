@@ -175,6 +175,21 @@ test('CLI split: writes chapters, a toc with the OCR warning, and page comments'
   assert.match(res.stdout, /1 heading candidates left inline/);
 });
 
+test('CLI split: --lane reaches the toc, so the conversion line names the lane that ran', () => {
+  const root = tmpdir('ingest-book-split-lane-');
+  const md = path.join(root, 'book.md');
+  fs.writeFileSync(md, MARKER_MD, 'utf8');
+
+  const withLane = path.join(root, 'with-lane');
+  assert.equal(run(['split', '--md', md, '--out', withLane, '--lane', 'balanced']).code, 0);
+  assert.match(fs.readFileSync(path.join(withLane, '00-toc.md'), 'utf8'), /--mode balanced/);
+
+  // Omitted stays honest rather than naming a lane that may not be the one that ran.
+  const noLane = path.join(root, 'no-lane');
+  assert.equal(run(['split', '--md', md, '--out', noLane]).code, 0);
+  assert.match(fs.readFileSync(path.join(noLane, '00-toc.md'), 'utf8'), /레인 미기록/);
+});
+
 test('CLI check: reports findings with exit 1, --fix rewrites only the safe rules', () => {
   const root = tmpdir('ingest-book-check-');
   const file = path.join(root, '01-x.md');
