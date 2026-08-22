@@ -104,7 +104,47 @@ test('classifyHeading: numbering wins, sentence shape loses', () => {
   assert.equal(classifyHeading('가'.repeat(80)).ok, false);
   // --require-numbering tightens it to dotted section numbers only.
   assert.equal(classifyHeading('선형 배열', true).ok, false);
-  assert.equal(classifyHeading('2.18.1 선형 배열', true).ok, true);
+  assert.equal(classifyHeading('2.18 선형 배열', true).ok, true);
+});
+
+test('splitChapters: a running header opens no file and its words survive inline', () => {
+  // `## CHAPTER` is what marker makes of the header printed on every chapter
+  // opener: it repeats, and nothing sits under it. `요약` repeats just as often
+  // but carries a real section, so it has to keep its own file.
+  const body = (n) => `${'요약 본문 문장. '.repeat(30)}\n\n`;
+  const md = ['1.1 첫 절', 'CHAPTER', '요약', '1.2 둘째 절', 'CHAPTER', '요약', '1.3 셋째 절', 'CHAPTER', '요약']
+    .map((t) => (t === 'CHAPTER' ? `## CHAPTER\n\n` : `## ${t}\n\n${body()}`))
+    .join('');
+
+  const { chapters, rejected } = splitChapters(md);
+
+  assert.deepEqual(chapters.map((c) => c.title), ['1.1 첫 절', '요약', '1.2 둘째 절', '요약', '1.3 셋째 절', '요약']);
+  assert.equal(rejected.filter((r) => r.reason === 'empty section').length, 3);
+  // Nothing is dropped: the demoted heading reappears as text in the chapter
+  // it interrupted.
+  assert.match(chapters[0].text, /## CHAPTER/);
+  assert.equal(chapters.filter((c) => !c.text.trim()).length, 0);
+});
+
+test('splitChapters: a repeated heading with almost nothing under it is a running header', () => {
+  const md = ['머리', '머리', '머리']
+    .map((t, i) => `## ${t}\n\n짧은 꼬리 ${i}\n\n## ${i + 1}.1 실제 절\n\n${'본문 문장. '.repeat(40)}\n\n`)
+    .join('');
+
+  const { chapters, rejected } = splitChapters(md);
+
+  assert.deepEqual(chapters.map((c) => c.title), ['1.1 실제 절', '2.1 실제 절', '3.1 실제 절']);
+  assert.equal(rejected.filter((r) => /^running header \(3x/.test(r.reason)).length, 3);
+  assert.match(chapters[0].text, /짧은 꼬리 0/);
+});
+
+test('classifyHeading: a sub-section deeper than the cut is not a chapter of its own', () => {
+  assert.equal(classifyHeading('9.2 언어적 안티패턴').ok, true);
+  assert.equal(classifyHeading('9.2.4 안티패턴이 혼란을 일으키는 이유').ok, false);
+  assert.match(classifyHeading('9.2.4 안티패턴이 혼란을 일으키는 이유').reason, /section depth 2/);
+  // The cut is a knob, not a constant.
+  assert.equal(classifyHeading('9.2.4 안티패턴이 혼란을 일으키는 이유', false, 3).ok, true);
+  assert.equal(classifyHeading('9.2', false, 1).ok, false);
 });
 
 test('checkText: the three deterministic rules fire once each', () => {
