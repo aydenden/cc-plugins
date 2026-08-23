@@ -18,7 +18,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
-import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn, readSkipList, trimUrl, checkUrlReachability } from './ingest-book.mjs';
+import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn, readSkipList, trimUrl, checkUrlReachability, glossaryHits, normalizeGlossary } from './ingest-book.mjs';
 
 const SCRIPT = new URL('./ingest-book.mjs', import.meta.url).pathname;
 const SEP = '-'.repeat(48);
@@ -572,4 +572,82 @@ test('CLI check --urls: reports through the normal finding path and exit code', 
   const off = run(['check', '--dir', md]);
   assert.equal(off.code, 0);
   assert.doesNotMatch(off.stdout, /url-dead/);
+});
+
+test('glossary: Hangul has no word boundary, so the old \\b rule matched nothing', () => {
+  // The bug this replaced: \b is defined over [A-Za-z0-9_], so it never fires
+  // beside Hangul and every Korean entry was silently dead.
+  assert.equal(new RegExp('\\b스크립\\b').test('스크립 가이드'), false);
+
+  const g = normalizeGlossary({ 스크립: '스크럼' });
+  assert.equal(glossaryHits('스크립 가이드', '스크립', g.get('스크립')).length, 1);
+  // Particles attach directly in Korean — 스크럼에서 is one token, not two.
+  assert.equal(glossaryHits('스크립에서 배운다', '스크립', g.get('스크립')).length, 1);
+});
+
+test('glossary: `unless` protects the real word the misread is a prefix of', () => {
+  // Measured over the 46 converted books: 스크립 958 hits in 28 books,
+  // 스크립트 751 in 24. Without this a global rule corrupts most of its hits.
+  const g = normalizeGlossary({ 스크립: { to: '스크럼', unless: ['스크립트'] } });
+  const entry = g.get('스크립');
+  assert.equal(glossaryHits('스크립트를 쓴다', '스크립', entry).length, 0);
+  assert.equal(glossaryHits('스크립 팀은 스크립트를 쓴다', '스크립', entry).length, 1);
+
+  assert.equal(
+    fixText('스크립에서 스크립트를 쓴다. 스크립 팀.', { 스크립: { to: '스크럼', unless: ['스크립트'] } }),
+    '스크럼에서 스크립트를 쓴다. 스크럼 팀.',
+  );
+});
+
+test('glossary: ASCII entries keep their word boundary', () => {
+  const g = normalizeGlossary({ Iru: 'lru' });
+  assert.equal(glossaryHits('use Iru cache', 'Iru', g.get('Iru')).length, 1);
+  assert.equal(glossaryHits('Irusive is a word', 'Iru', g.get('Iru')).length, 0);
+});
+
+test('CLI check --glossary-dir: a book picks up the file named for it', () => {
+  const root = tmpdir('ingest-book-gloss-');
+  const dir = path.join(root, 'gloss');
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, 'kanban.json'),
+    JSON.stringify({ 스크립: { to: '스크럼', unless: ['스크립트'] } }), 'utf8');
+
+  const book = path.join(root, 'kanban.md');
+  fs.writeFileSync(book, '스크립 팀은 스크립트를 쓴다.\n', 'utf8');
+  const other = path.join(root, 'other.md');
+  fs.writeFileSync(other, '스크립 팀은 스크립트를 쓴다.\n', 'utf8');
+
+  const hit = run(['check', '--dir', book, '--glossary-dir', dir, '--fix']);
+  assert.equal(hit.code, 1);
+  assert.equal(fs.readFileSync(book, 'utf8'), '스크럼 팀은 스크립트를 쓴다.\n');
+
+  // A book with no file of its own gets the defaults only, and is left alone.
+  const miss = run(['check', '--dir', other, '--glossary-dir', dir]);
+  assert.equal(miss.code, 0);
+  assert.equal(fs.readFileSync(other, 'utf8'), '스크립 팀은 스크립트를 쓴다.\n');
+});
+
+test('check --json stays machine-readable when a per-book glossary is loaded', () => {
+  const root = tmpdir('ingest-book-gloss-json-');
+  const dir = path.join(root, 'gloss');
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, 'b.json'), JSON.stringify({ 얘자일: '애자일' }), 'utf8');
+  const book = path.join(root, 'b.md');
+  fs.writeFileSync(book, '얘자일 이야기\n', 'utf8');
+
+  const res = run(['check', '--dir', book, '--glossary-dir', dir, '--json']);
+  // The "glossary loaded" note must not land on stdout in front of the JSON.
+  const parsed = JSON.parse(res.stdout);
+  assert.equal(parsed.findings.length, 1);
+});
+
+test('default glossary: the corpus-safe Korean misreads are fixed with no glossary file', () => {
+  // Verified over the 46 converted books: no legitimate word contains either,
+  // which is what makes them safe outside a per-book glossary.
+  const root = tmpdir('ingest-book-gloss-default-');
+  const book = path.join(root, 'b.md');
+  fs.writeFileSync(book, '얘자일 팀은 뛰어남니다.\n', 'utf8');
+
+  assert.equal(run(['check', '--dir', book, '--fix']).code, 1);
+  assert.equal(fs.readFileSync(book, 'utf8'), '애자일 팀은 뛰어납니다.\n');
 });
