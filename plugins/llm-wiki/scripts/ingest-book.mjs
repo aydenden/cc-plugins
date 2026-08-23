@@ -226,8 +226,19 @@ const SECTION_DEPTH_DEFAULT = 2;
 const RUNNING_HEADER_MIN_REPEATS = 3;
 const RUNNING_HEADER_MAX_BODY = 200;
 
-/** OCR misreads confirmed on the pilot book (design §5.1). Extend via --glossary. */
-const DEFAULT_GLOSSARY = { Iru: 'lru', Ifu: 'lfu' };
+/**
+ * OCR misreads safe to fix anywhere, because no legitimate word contains them.
+ * Verified over the 46 converted books: 얘자일 8 hits / 뛰어남니다 8 hits, and
+ * no word of Korean has either as a part. Book-specific misreads do NOT belong
+ * here -- see `normalizeGlossary` for why 스크립 -> 스크럼 must be per-book --
+ * they go in a `--glossary` file or a `--glossary-dir` named for the book.
+ */
+const DEFAULT_GLOSSARY = {
+  Iru: 'lru',
+  Ifu: 'lfu',
+  얘자일: '애자일',
+  뛰어남니다: '뛰어납니다',
+};
 
 /** Hosts whose URL path is lowercase by specification, so uppercase there is certainly a misread. */
 const LOWERCASE_SLUG_HOSTS = new Set(['leetcode.com']);
@@ -277,7 +288,7 @@ const USAGE = `ingest-book — scanned book PDF -> chapter markdown -> vault raw
   split   --md FILE --out DIR [--title T] [--level N] [--require-numbering] [--lane L]
           [--section-depth N]                    N.N 까지만 챕터로 분할 (기본 2)
           [--page-offset N | --no-page-offset]   인쇄 페이지 병기 (기본: 목차에서 자동 검출)
-  check   --dir DIR [--fix] [--glossary FILE] [--json] [--limit N]
+  check   --dir DIR [--fix] [--glossary FILE] [--glossary-dir DIR] [--json] [--limit N]
           [--urls] [--urls-cache FILE] [--urls-timeout S] [--urls-parallel N]
                      --urls 는 네트워크를 쓴다 (기본 off). 404/410 만 결함으로
                      보고한다 — 403/405/429·5xx 는 서버가 답을 거부한 것이지
@@ -288,7 +299,8 @@ const USAGE = `ingest-book — scanned book PDF -> chapter markdown -> vault raw
                      bulk convert; resumable. 'touch <out>/STOP' or SIGTERM
                      stops it after the book in flight, never mid-book.
   load    [--out DIR] [--vault PATH] [--plan] [--limit N] [--skip FILE]
-          [--assets DIR] [--glossary FILE] [--section-depth N] [--fix] [--force]
+          [--assets DIR] [--glossary FILE] [--glossary-dir DIR] [--section-depth N]
+          [--fix] [--force]
                      split -> check -> ingest every converted book in the queue.
                      Safe to run while 'queue' converts: own state file, no GPU.
                      'touch <out>/STOP-LOAD' stops it at a book boundary.`;
@@ -920,11 +932,10 @@ function checkText(text, glossary) {
       findings.push({ line: i + 1, rule: 'url-case', detail: url, fixable: true });
     }
 
-    for (const [wrong, right] of Object.entries(glossary)) {
-      const re = new RegExp(`\\b${escapeRe(wrong)}\\b`, 'g');
-      const hits = line.match(re);
-      if (hits) {
-        findings.push({ line: i + 1, rule: 'glossary', detail: `${wrong} -> ${right} (${hits.length})`, fixable: true });
+    for (const [wrong, entry] of normalizeGlossary(glossary)) {
+      const hits = glossaryHits(line, wrong, entry);
+      if (hits.length) {
+        findings.push({ line: i + 1, rule: 'glossary', detail: `${wrong} -> ${entry.to} (${hits.length})`, fixable: true });
       }
     }
   });
@@ -1057,10 +1068,61 @@ function escapeRe(s) {
 }
 
 /** Apply the two safe rules. Returns the rewritten text. */
+/**
+ * A glossary entry in its full form: what to replace, and the longer words the
+ * misread is a legitimate part of.
+ *
+ * `unless` exists because Korean has no word boundary a regex can use. `\\b` is
+ * defined over `[A-Za-z0-9_]`, so it never matches beside Hangul at all --
+ * measured: `new RegExp('\\\\b스크립\\\\b').test('스크립 가이드')` is false. Every
+ * Korean entry added to this glossary before now silently matched nothing.
+ *
+ * Dropping the boundary for Hangul is right (particles attach directly:
+ * 스크럼에서 is one token) but then a misread that prefixes a real word eats
+ * it. Measured over the 46 converted books: `스크립` appears 958 times in 28
+ * books and `스크립트` 751 times in 24 -- a global 스크립 -> 스크럼 rule would
+ * corrupt three quarters of its own hits. In 칸반과 스크럼 alone the split is
+ * 126 to 0, which is why this belongs in a per-book glossary with the real
+ * word named as an exception.
+ */
+function normalizeGlossary(raw) {
+  const out = new Map();
+  for (const [wrong, value] of Object.entries(raw ?? {})) {
+    const entry = typeof value === 'string' ? { to: value } : value;
+    out.set(wrong, { to: entry.to, unless: entry.unless ?? [] });
+  }
+  return out;
+}
+
+/** Start offsets of every real hit of `wrong` in `line`. */
+function glossaryHits(line, wrong, entry) {
+  const hits = [];
+  // ASCII terms keep word boundaries; `Iru` must not fire inside `Irusive`.
+  if (!/[^\x00-\x7F]/.test(wrong)) {
+    for (const m of line.matchAll(new RegExp(`\\b${escapeRe(wrong)}\\b`, 'g'))) hits.push(m.index);
+  } else {
+    for (let i = line.indexOf(wrong); i !== -1; i = line.indexOf(wrong, i + 1)) hits.push(i);
+  }
+  if (!entry.unless.length) return hits;
+  return hits.filter((at) => !entry.unless.some((word) => {
+    // The hit is spurious when it falls inside an occurrence of a real word.
+    for (let i = line.indexOf(word); i !== -1; i = line.indexOf(word, i + 1)) {
+      if (at >= i && at + wrong.length <= i + word.length) return true;
+    }
+    return false;
+  }));
+}
+
 function fixText(text, glossary) {
   let out = text;
-  for (const [wrong, right] of Object.entries(glossary)) {
-    out = out.replace(new RegExp(`\\b${escapeRe(wrong)}\\b`, 'g'), right);
+  for (const [wrong, entry] of normalizeGlossary(glossary)) {
+    out = out.split('\n').map((line) => {
+      // Right to left, so an earlier hit's offset stays valid after a splice.
+      for (const at of glossaryHits(line, wrong, entry).reverse()) {
+        line = line.slice(0, at) + entry.to + line.slice(at + wrong.length);
+      }
+      return line;
+    }).join('\n');
   }
   out = out.replace(/https?:\/\/[^\s)<>\]]+/g, (url) => {
     const start = url.indexOf('://') + 3;
@@ -1220,12 +1282,30 @@ function check(opts) {
   if (!fs.existsSync(target)) return fail(`check: no such path: ${target}`);
 
   let glossary = { ...DEFAULT_GLOSSARY };
-  if (typeof opts.glossary === 'string') {
+  const readGlossary = (file) => {
     try {
-      glossary = { ...glossary, ...JSON.parse(fs.readFileSync(opts.glossary, 'utf8')) };
+      glossary = { ...glossary, ...JSON.parse(fs.readFileSync(file, 'utf8')) };
+      return null;
     } catch (e) {
-      return fail(`check: cannot read glossary ${opts.glossary}: ${e.message}`);
+      return fail(`check: cannot read glossary ${file}: ${e.message}`);
     }
+  };
+  // A book's own misreads live in a file named for it, so one --glossary-dir
+  // serves a whole shelf: `load` passes the directory once and each book picks
+  // up whatever has been confirmed for it, or nothing if it has no file yet.
+  if (typeof opts.glossary_dir === 'string') {
+    const stem = path.basename(path.resolve(target).replace(/\.md$/i, ''));
+    const perBook = path.join(opts.glossary_dir, `${stem}.json`);
+    if (fs.existsSync(perBook)) {
+      const err = readGlossary(perBook);
+      if (err) return err;
+      // stderr, not stdout: --json output has to stay machine-readable.
+      console.error(`check: glossary ${perBook}`);
+    }
+  }
+  if (typeof opts.glossary === 'string') {
+    const err = readGlossary(opts.glossary);
+    if (err) return err;
   }
 
   const stat = fs.statSync(target);
@@ -1875,7 +1955,10 @@ function load(opts) {
         })],
         // `check` exits 1 on findings by design; only a refusal (2) is a failure.
         ['check', () => {
-          const rc = check({ dir: chapters, fix: opts.fix, glossary: opts.glossary, json: true });
+          const rc = check({
+            dir: chapters, fix: opts.fix,
+            glossary: opts.glossary, glossary_dir: opts.glossary_dir, json: true,
+          });
           return rc === 2 ? 2 : 0;
         }],
         ['ingest', () => ingest({
@@ -1935,4 +2018,4 @@ function countFindings(logFile) {
 const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
 if (invokedDirectly) process.exit(main(process.argv.slice(2)));
 
-export { pickLane, buildManifest, laneFlagText, readSkipList, trimUrl, probeUrls, checkUrlReachability, bookAssetId, rewriteAssetLinks, findIsbn, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv };
+export { pickLane, buildManifest, laneFlagText, readSkipList, trimUrl, probeUrls, checkUrlReachability, normalizeGlossary, glossaryHits, bookAssetId, rewriteAssetLinks, findIsbn, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv };
