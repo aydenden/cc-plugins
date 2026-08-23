@@ -23,7 +23,7 @@ const probe = (over = {}) => ({ spawned: true, code: 0, out: '', timedOut: false
 // --- Registry ---
 
 test('every channel is installable, probed for real, and self-describing', () => {
-  assert.deepEqual(CHANNELS.map((c) => c.id), ['yt-dlp', 'gh', 'rdt', 'twitter']);
+  assert.deepEqual(CHANNELS.map((c) => c.id), ['yt-dlp', 'gh', 'rdt', 'twitter', 'agent-browser', 'scrapling']);
   for (const channel of CHANNELS) {
     assert.ok(channel.label && channel.bin, `${channel.id} needs a label and a binary`);
     assert.ok(Object.keys(channel.install).length, `${channel.id} needs at least one install path`);
@@ -36,6 +36,27 @@ test('the X channel carries its known-broken subcommand', () => {
   // agent-reach's doctor called this channel fully available while search 404'd.
   assert.match(byId('twitter').broken.join(' '), /search/);
   assert.equal(byId('yt-dlp').auth, null); // the one channel that needs no human step
+});
+
+test('browser-bypass channels download their browser as part of installing', () => {
+  // A bypass binary without its browser renders nothing, so the download is not
+  // a follow-up the user has to guess — it is part of the channel's install.
+  for (const id of ['agent-browser', 'scrapling']) {
+    assert.ok(byId(id).postInstall?.length, `${id} must carry its browser download step`);
+  }
+  // `[fetchers]` alone crashes on .md output (missing markdownify) — the extra matters.
+  assert.match(formatCmd(byId('scrapling').install.uv), /scrapling\[shell\]/);
+  assert.equal(byId('agent-browser').auth, null);
+  // The ladder's ceiling is recorded where a reader will hit it.
+  assert.match(byId('agent-browser').broken.join(' '), /403/);
+});
+
+test('every platform can install both browser-bypass channels', () => {
+  for (const [platform, managers] of Object.entries(MANAGERS)) {
+    for (const id of ['agent-browser', 'scrapling']) {
+      assert.ok(installCommand(byId(id), managers), `${platform} cannot install ${id}`);
+    }
+  }
 });
 
 test('every platform has a manager list and pipx is always reachable', () => {
@@ -117,6 +138,11 @@ test('install without --yes changes nothing and says so', () => {
   assert.equal(result.code, 0);
   assert.match(result.out, /--yes/);
   assert.match(result.out, /아무것도 바꾸지 않았다/);
+});
+
+test('plan prints the browser download step so nothing installs invisibly', () => {
+  const out = runCli(['plan', '--channel', 'scrapling']).out;
+  assert.match(out, /scrapling/);
 });
 
 test('CLI lists channels and help offline', () => {

@@ -52,9 +52,9 @@ channel is degradation, not failure.
  * every platform because the two Python CLIs have no other install path.
  */
 const MANAGERS = {
-  darwin: ['brew', 'pipx'],
-  linux: ['apt', 'dnf', 'pacman', 'pipx'],
-  win32: ['winget', 'scoop', 'pipx'],
+  darwin: ['brew', 'uv', 'pipx', 'npm'],
+  linux: ['apt', 'dnf', 'pacman', 'uv', 'pipx', 'npm'],
+  win32: ['winget', 'scoop', 'uv', 'pipx', 'npm'],
 };
 
 /**
@@ -112,6 +112,34 @@ const CHANNELS = [
     probe: { cmd: ['twitter', 'status'], kind: 'auth-yaml' },
     auth: 'twitter login   # 브라우저 쿠키를 추출한다 — 기기마다 1회',
     broken: ['search — 상시 HTTP 404 (2026-08-16 실측). user-posts / list / following 은 정상'],
+  },
+  {
+    id: 'agent-browser',
+    bin: 'agent-browser',
+    label: '브라우저 우회 — JS 렌더링·단순 봇필터 페이지',
+    install: {
+      brew: ['brew', 'install', 'agent-browser'],
+      npm: ['npm', 'install', '-g', 'agent-browser'],
+    },
+    // The binary alone renders nothing — Playwright's Chromium is a separate download.
+    postInstall: [['agent-browser', 'install']],
+    probe: { cmd: ['agent-browser', '--version'], kind: 'version' },
+    auth: null,
+    broken: ['상류가 아예 거부하는 사이트는 실브라우저로도 403이다 (g2.com, 2026-08-23 실측 — 3계단 scrapling도 동일). 그 URL은 축퇴로 기록한다'],
+  },
+  {
+    id: 'scrapling',
+    bin: 'scrapling',
+    label: '브라우저 우회 — Cloudflare 챌린지 페이지',
+    install: {
+      // `[shell]` is the extra that carries markdownify; `[fetchers]` alone makes
+      // `.md` output crash with ModuleNotFoundError (2026-08-23 실측).
+      uv: ['uv', 'tool', 'install', 'scrapling[shell]'],
+      pipx: ['pipx', 'install', 'scrapling[shell]'],
+    },
+    postInstall: [['scrapling', 'install']],
+    probe: { cmd: ['scrapling', '--version'], kind: 'version' },
+    auth: null,
   },
 ];
 
@@ -262,6 +290,9 @@ function printPlan(channels, managers) {
       const install = installCommand(channel, managers);
       out.push(install ? `${channel.id} — ${formatCmd(install.cmd)}` : `${channel.id} — 설치 불가: 쓸 패키지 매니저가 없다`);
     }
+    if (!present) {
+      for (const step of channel.postInstall || []) out.push(`${channel.id} — ${formatCmd(step)}   # 브라우저 바이너리 내려받기`);
+    }
     if (channel.auth) auth.push(`${channel.id}: ${channel.auth}`);
   }
   if (auth.length) {
@@ -285,7 +316,20 @@ function runInstall(opts) {
     if (!install) continue;
     process.stdout.write(`\n$ ${formatCmd(install.cmd)}\n`);
     const result = run(install.cmd, { capture: false });
-    process.stdout.write(result.code === 0 ? `${channel.id} 설치 완료\n` : `${channel.id} 설치 실패 (exit ${result.code}) — 위 출력을 확인해라\n`);
+    if (result.code !== 0) {
+      process.stdout.write(`${channel.id} 설치 실패 (exit ${result.code}) — 위 출력을 확인해라\n`);
+      continue;
+    }
+    // A browser-bypass binary without its browser is `missing` in every way that matters,
+    // so the download is part of installing the channel, not a follow-up the user must guess.
+    for (const step of channel.postInstall || []) {
+      process.stdout.write(`\n$ ${formatCmd(step)}\n`);
+      const post = run(step, { capture: false });
+      if (post.code !== 0) {
+        process.stdout.write(`${channel.id} 후속 단계 실패 (exit ${post.code}) — 브라우저 없이는 이 채널이 동작하지 않는다\n`);
+      }
+    }
+    process.stdout.write(`${channel.id} 설치 완료\n`);
   }
   return 0;
 }

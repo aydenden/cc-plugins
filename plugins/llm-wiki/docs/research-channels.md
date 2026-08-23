@@ -63,7 +63,32 @@ X 전체 검색은 불가능하다(`twitter search` 404, syndication timeline은
 차단). 그래서 **추적 계정 목록 페이지가 채널의 선행 조건**이며, 볼트에 페이지로 둔다
 (계정마다 추적 이유를 함께 적는다). 목록이 없으면 X 채널은 동작하지 않으므로 축퇴로 처리한다.
 
+## 브라우저 우회 계층 — 축퇴가 아니라 상향 사다리
+
+선택 계층이 채널을 **늘리는** 것이라면, 이 계층은 이미 고른 소스에 **도달하지 못했을 때** 올라간다.
+`WebFetch`가 403·빈 본문·"Just a moment…"를 돌려줬을 때만 발동하며, 절차는
+`${CLAUDE_PLUGIN_ROOT}/docs/browser-fallback.md`가 소유한다.
+
+| 계단 | 채널 | 채널 id | 뚫는 것 |
+|---|---|---|---|
+| 1 | WebFetch (CC 내장) | — | 평범한 공개 페이지 |
+| 2 | `agent-browser read <url>` | `agent-browser` | JS 렌더링, UA 기반 봇 필터, CF 인터스티셜, 로그인 벽(`--profile`) |
+| 3 | `scrapling extract stealthy-fetch` | `scrapling` | 브라우저 세션 없이 파일 직행 수집, 프록시·헤더 제어 |
+
+- **한 번에 한 계단만 올라간다.** 같은 계단에서 플래그를 바꿔 재시도하지 않는다.
+- 3계단은 2계단의 상위 집합이 **아니다**(2026-08-23 실측: CF 데모는 2계단만 통과). 순서대로 간다.
+- 세 계단이 다 막히면 그 소스는 포기하고 **산출물의 제외 채널에 URL과 함께 남긴다.**
+- `agent-browser` 세션은 조사 종료 시 `agent-browser close --all`로 닫는다.
+- robots.txt·ToS를 존중한다. 사람이 브라우저로 읽을 수 있는 공개 페이지에 도달하기 위한 사다리이지
+  대량 수집·유료 콘텐츠 우회가 아니다.
+
+설치·진단은 선택 계층과 같은 커맨드가 담당한다:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-channels.mjs" check --channel agent-browser,scrapling
+```
+
 ## 감싸지 않는 것
 
-WebSearch·WebFetch(CC 내장), context7(MCP), Reddit·X 수집·YouTube·gh(이미 CLI).
+WebSearch·WebFetch(CC 내장), context7(MCP), Reddit·X 수집·YouTube·gh·agent-browser·scrapling(이미 CLI).
 래퍼를 두면 유지비만 늘고 얻는 게 없다.
