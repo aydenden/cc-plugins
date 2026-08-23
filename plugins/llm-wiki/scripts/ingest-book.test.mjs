@@ -18,7 +18,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
-import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn } from './ingest-book.mjs';
+import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn, readSkipList } from './ingest-book.mjs';
 
 const SCRIPT = new URL('./ingest-book.mjs', import.meta.url).pathname;
 const SEP = '-'.repeat(48);
@@ -404,4 +404,108 @@ test('findIsbn: reads the copyright page, ignores other numbers', () => {
   assert.equal(findIsbn(['ISBN 979-11-6002-326-8 ']), '9791160023268');
   assert.equal(findIsbn(['앞', 'ISBN:9784816336140']), '9784816336140');
   assert.equal(findIsbn(['페이지 123', '전화 02-1234-5678']), null);
+});
+
+/**
+ * A converted-queue sandbox: one book marker has already produced markdown for,
+ * one recorded in the manifest but with nothing on disk, and a vault to load into.
+ */
+function loadFixture() {
+  const root = tmpdir('ingest-book-load-');
+  const q = path.join(root, 'q');
+  const bookDir = path.join(q, 'books', 'test-book', 'Test Book');
+  fs.mkdirSync(bookDir, { recursive: true });
+  fs.writeFileSync(path.join(bookDir, 'Test Book.md'), [
+    '', `{0}${SEP}`, '',
+    '머리말이다. 이 정도로는 챕터가 서지 않는다.', '',
+    '## 1 첫 번째 장', '',
+    '첫 장의 본문이다. 본문 있는 챕터로 인정받을 만큼 충분히 길게 쓴 문장을 이어 붙인다. 계속 이어 쓴다.', '',
+    `{1}${SEP}`, '',
+    '## 2 두 번째 장', '',
+    '둘째 장의 본문이다. 마찬가지로 분량을 확보하기 위해 여러 문장을 이어 쓴다. 여기까지가 본문이다.', '',
+  ].join('\n'), 'utf8');
+
+  fs.writeFileSync(path.join(q, 'queue.json'), JSON.stringify([
+    { file: 'Test Book.pdf', pages: 40, lane: 'balanced', status: 'done' },
+    { file: 'Never Ran.pdf', pages: 10, lane: 'balanced', status: 'pending' },
+  ]), 'utf8');
+
+  const vault = path.join(root, 'vault');
+  fs.mkdirSync(vault, { recursive: true });
+  fs.writeFileSync(path.join(vault, 'SCHEMA.md'), '# SCHEMA\n', 'utf8');
+  return { root, q, vault };
+}
+
+test('CLI load: takes a converted book through split -> check -> ingest and records it', () => {
+  const { q, vault } = loadFixture();
+
+  const res = run(['load', '--out', q, '--vault', vault]);
+  assert.equal(res.code, 0, res.stderr);
+  assert.match(res.stdout, /Test Book\.pdf — ok \(2 chapters/);
+  // Only a converted book is eligible; a pending one is not offered.
+  assert.match(res.stdout, /1 converted, 1 to load/);
+
+  const state = JSON.parse(fs.readFileSync(path.join(q, 'load.json'), 'utf8'));
+  assert.equal(state.length, 1);
+  assert.equal(state[0].status, 'loaded');
+  assert.equal(state[0].chapters, 2);
+
+  const dest = path.join(vault, 'raw', 'books', 'test-book');
+  assert.deepEqual(fs.readdirSync(dest).sort(), ['00-toc.md', '01-1-첫-번째-장.md', '02-2-두-번째-장.md']);
+  // The lane the queue recorded has to reach the toc; split cannot infer it.
+  assert.match(fs.readFileSync(path.join(dest, '00-toc.md'), 'utf8'), /--mode balanced/);
+  // The log.md lines are collected, not left for the operator to retype 184 times.
+  assert.match(fs.readFileSync(path.join(q, 'load-log.md'), 'utf8'), /ingest \| Test Book/);
+});
+
+test('CLI load: a second run is a no-op, and --force reproduces the same book exactly', () => {
+  const { q, vault } = loadFixture();
+  const dest = path.join(vault, 'raw', 'books', 'test-book');
+
+  assert.equal(run(['load', '--out', q, '--vault', vault]).code, 0);
+  const first = fs.readdirSync(dest).sort();
+
+  assert.match(run(['load', '--out', q, '--vault', vault]).stdout, /0 to load, 1 skipped/);
+
+  // The trap: chapters written inside the marker output tree make findMarkdown
+  // pick 00-toc.md on the rerun and split the index into chapters of its own,
+  // and a previous split's files survive into the vault beside the new ones.
+  const forced = run(['load', '--out', q, '--vault', vault, '--force']);
+  assert.equal(forced.code, 0, forced.stderr);
+  assert.match(forced.stdout, /ok \(2 chapters/);
+  assert.deepEqual(fs.readdirSync(dest).sort(), first);
+});
+
+test('CLI load: a skip list keeps a book out of the vault, a missing conversion fails it', () => {
+  const { root, q, vault } = loadFixture();
+
+  const skip = path.join(root, 'skip.txt');
+  fs.writeFileSync(skip, '# 제외\nTest Book.pdf\n', 'utf8');
+  assert.match(run(['load', '--out', q, '--vault', vault, '--skip', skip]).stdout, /0 to load, 1 skipped/);
+  assert.equal(fs.existsSync(path.join(vault, 'raw', 'books', 'test-book')), false);
+
+  // A book the manifest calls converted but that has no markdown is recorded as
+  // failed and reported, not a crash that takes the rest of the run down.
+  const manifest = path.join(q, 'queue.json');
+  const entries = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+  entries[1].status = 'done';
+  fs.writeFileSync(manifest, JSON.stringify(entries), 'utf8');
+
+  const res = run(['load', '--out', q, '--vault', vault]);
+  assert.equal(res.code, 1);
+  assert.match(res.stdout, /Never Ran\.pdf — FAILED/);
+  assert.match(res.stdout, /loaded=1 failed=1/);
+  const state = JSON.parse(fs.readFileSync(path.join(q, 'load.json'), 'utf8'));
+  assert.equal(state.find((e) => e.file === 'Never Ran.pdf').stage, 'find');
+});
+
+test('readSkipList: comments and the .pdf suffix are optional, an NFD name still matches', () => {
+  const root = tmpdir('ingest-book-skip-');
+  const file = path.join(root, 'skip.txt');
+  fs.writeFileSync(file, ['# 주석', '', '함께 자라기.pdf', '클린 코드'.normalize('NFD')].join('\n'), 'utf8');
+
+  const skip = readSkipList(file);
+  assert.equal(skip.has('함께 자라기'), true);
+  assert.equal(skip.has('클린 코드'.normalize('NFC')), true);   // the NFD trap
+  assert.equal(skip.has('# 주석'), false);
 });
