@@ -322,11 +322,36 @@ test('CLI doctor: reports every check and agrees with its own exit code', () => 
 });
 
 test('laneFlagText: a known lane names its flags, an unrecorded one says so', () => {
-  assert.equal(laneFlagText('balanced'), '--mode balanced --paginate_output --output_format markdown');
-  assert.equal(laneFlagText('force_ocr'), '--force_ocr --paginate_output --output_format markdown');
+  const base = '--paginate_output --output_format markdown --common_element_threshold 1.1 --max_streak 999999';
+  assert.equal(laneFlagText('balanced'), `--mode balanced ${base}`);
+  assert.equal(laneFlagText('force_ocr'), `--force_ocr ${base}`);
   // Never silently name a lane that may not be the one that ran.
   assert.match(laneFlagText(null), /레인 미기록/);
   assert.match(laneFlagText('fast'), /레인 미기록/);
+});
+
+test('convert: the IgnoreTextProcessor kill switch reaches marker itself, not just the toc', () => {
+  const root = tmpdir('ingest-book-flags-');
+  const pdf = path.join(root, 'book.pdf');
+  fs.writeFileSync(pdf, '%PDF-1.4\n');
+
+  // Stub marker_single so the real converter is never invoked; it only records argv.
+  const bin = path.join(root, 'bin');
+  fs.mkdirSync(bin);
+  const argvFile = path.join(root, 'argv.txt');
+  fs.writeFileSync(path.join(bin, 'marker_single'), `#!/bin/sh\nprintf '%s\\n' "$@" > ${argvFile}\n`, 'utf8');
+  fs.chmodSync(path.join(bin, 'marker_single'), 0o755);
+
+  run(['convert', '--pdf', pdf, '--lane', 'balanced', '--out', path.join(root, 'out')], {
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+  });
+
+  const argv = fs.readFileSync(argvFile, 'utf8').trim().split('\n');
+  // A subheading that opens a bullet list is otherwise deleted as a running foot.
+  assert.deepEqual(argv.slice(argv.indexOf('--common_element_threshold'), argv.indexOf('--common_element_threshold') + 2),
+    ['--common_element_threshold', '1.1']);
+  assert.deepEqual(argv.slice(argv.indexOf('--max_streak'), argv.indexOf('--max_streak') + 2),
+    ['--max_streak', '999999']);
 });
 
 test('CLI convert: an unknown lane is refused before marker is invoked', () => {
