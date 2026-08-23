@@ -26,6 +26,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
@@ -277,6 +278,10 @@ const USAGE = `ingest-book — scanned book PDF -> chapter markdown -> vault raw
           [--section-depth N]                    N.N 까지만 챕터로 분할 (기본 2)
           [--page-offset N | --no-page-offset]   인쇄 페이지 병기 (기본: 목차에서 자동 검출)
   check   --dir DIR [--fix] [--glossary FILE] [--json] [--limit N]
+          [--urls] [--urls-cache FILE] [--urls-timeout S] [--urls-parallel N]
+                     --urls 는 네트워크를 쓴다 (기본 off). 404/410 만 결함으로
+                     보고한다 — 403/405/429·5xx 는 서버가 답을 거부한 것이지
+                     링크가 틀린 것이 아니다.
   ingest  --dir DIR --book SLUG [--vault PATH] [--force] [--assets DIR]
   queue   --books DIR [--out DIR] [--plan] [--limit N]
           [--free-floor-gb N] [--max-book-mb N] [--disable-images]
@@ -1068,6 +1073,147 @@ function fixText(text, glossary) {
   return out;
 }
 
+/**
+ * URL reachability — the opt-in half of link checking (`--urls`).
+ *
+ * `url-case` can only ever catch a misread that changes case on a host whose
+ * path is lowercase by specification; whether a URL is *right* is a question
+ * about the network, not the spelling. This asks the network.
+ *
+ * Measured before choosing what counts as a defect:
+ *
+ *   https://leetcode.com/problems/two-sum/   403   live, correct, bot-blocked
+ *   https://oreil.ly/xyz-nonexistent         404   genuinely gone
+ *   https://nonexistent-host-xyz-987.com     000   DNS failure
+ *
+ * So only 404/410 are reported as dead. 403/405/429 and 5xx mean the server
+ * declined to answer, not that the link is wrong -- reporting them would
+ * rebuild exactly the noise problem that shrank `url-case` to a whitelist.
+ * A connection failure (000) is reported under its own rule because it is as
+ * likely to be this machine's network as the book's URL.
+ *
+ * HEAD, per the ticket, with a GET retry for the one known HEAD failure mode
+ * (405). Measured HEAD against GET on the sample above: identical codes.
+ * curl rather than node's http: everything else in this file shells out
+ * synchronously too, and `--parallel` gets the whole batch in one process.
+ */
+const URL_DEAD_CODES = new Set(['404', '410']);
+const URL_CHECK_DEFAULTS = { timeout: 8, parallel: 8 };
+
+/**
+ * The URL as the book meant it: markdown escaping and sentence punctuation
+ * stripped back off.
+ *
+ * marker escapes `_` and `*` inside URLs and the backslash then travels into
+ * the request. Measured on the corpus sample: both
+ * `commons.wikimedia.org/wiki/File:The\\_test\\_automation\\_pyramid.png` and
+ * `docs.aws.amazon.com/ko\\_kr/...` answered 404 escaped and 200 unescaped —
+ * a dead-link report on a page that is fine.
+ */
+function trimUrl(url) {
+  let out = url.replace(/\\+([_*[\]()~`>#+\-=|{}.!])/g, '$1').replace(/[.,;:!?'"]+$/, '');
+  // A closing paren belongs to the URL only if an opening one is inside it.
+  while (out.endsWith(')') && (out.match(/\(/g) || []).length < (out.match(/\)/g) || []).length) {
+    out = out.slice(0, -1);
+  }
+  return out;
+}
+
+/**
+ * Ask curl for the whole batch at once; returns Map(url -> http code string).
+ *
+ * The URLs are matched back by their `-o` target, not by `url_effective`:
+ * with `-L` the effective URL is wherever the redirect landed, and curl
+ * reports in completion order, so neither identifies which request answered.
+ * `%{filename_effective}` is the `-o` path, which is positionally bound to the
+ * URL that follows it -- so an index file name carries the mapping through
+ * both redirects and out-of-order completion.
+ */
+function probeUrls(urls, { timeout, parallel }) {
+  const codes = new Map();
+  if (!urls.length) return codes;
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ingest-book-urls-'));
+  try {
+    const ask = (urlList, method) => {
+      const args = [
+        '-s', '-L', '--parallel', '--parallel-max', String(parallel),
+        '--max-time', String(timeout),
+        '-w', '%{http_code} %{filename_effective}\n',
+        ...(method === 'HEAD' ? ['-I'] : []),
+      ];
+      // `-o` is positional in curl: one per URL, or every response after the
+      // first lands on stdout and corrupts the -w report.
+      urlList.forEach((url, i) => args.push('-o', path.join(scratch, String(i)), url));
+      const res = spawnSync('curl', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+      const out = new Map();
+      for (const line of (res.stdout || '').split('\n')) {
+        const m = /^(\d{3}) (.+)$/.exec(line.trim());
+        if (m) out.set(urlList[Number(path.basename(m[2]))], m[1]);
+      }
+      return out;
+    };
+
+    for (const [url, code] of ask(urls, 'HEAD')) codes.set(url, code);
+    // The one known HEAD failure mode: a server that refuses the method
+    // outright. Everything else HEAD answers, GET would answer the same way.
+    const retry = urls.filter((u) => codes.get(u) === '405');
+    for (const [url, code] of ask(retry, 'GET')) codes.set(url, code);
+    for (const url of urls) if (!codes.has(url)) codes.set(url, '000');
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+  return codes;
+}
+
+/**
+ * Reachability findings for every URL in `files`, checked once per distinct URL.
+ *
+ * The cache is what makes this usable over a corpus: `load` runs `check` per
+ * book, and the same shortener and docs links recur across a shelf of books.
+ */
+function checkUrlReachability(files, opts) {
+  const timeout = Number(opts.urls_timeout ?? URL_CHECK_DEFAULTS.timeout);
+  const parallel = Number(opts.urls_parallel ?? URL_CHECK_DEFAULTS.parallel);
+  const cachePath = typeof opts.urls_cache === 'string' ? opts.urls_cache : null;
+  const cache = cachePath && fs.existsSync(cachePath)
+    ? JSON.parse(fs.readFileSync(cachePath, 'utf8'))
+    : {};
+
+  const sites = new Map();          // url -> [{ file, line }]
+  for (const file of files) {
+    const lines = fs.readFileSync(file, 'utf8').split('\n');
+    // Fence state, not just fence lines: a URL inside a code block is example
+    // text, and probing it spends a request to learn nothing.
+    let inFence = false;
+    lines.forEach((line, i) => {
+      if (/^\s*(```+|~~~+)/.test(line)) { inFence = !inFence; return; }
+      if (inFence) return;
+      for (const m of line.matchAll(/https?:\/\/[^\s)<>\]]+/g)) {
+        const url = trimUrl(m[0]);
+        if (!url.includes('.')) continue;
+        if (!sites.has(url)) sites.set(url, []);
+        sites.get(url).push({ file, line: i + 1 });
+      }
+    });
+  }
+
+  const fresh = [...sites.keys()].filter((u) => cache[u] === undefined);
+  const codes = probeUrls(fresh, { timeout, parallel });
+  for (const [url, code] of codes) cache[url] = code;
+  if (cachePath) writeJsonAtomic(cachePath, cache);
+
+  const findings = [];
+  const summary = { checked: sites.size, probed: fresh.length, dead: 0, unreachable: 0 };
+  for (const [url, seen] of sites) {
+    const code = cache[url];
+    const rule = URL_DEAD_CODES.has(code) ? 'url-dead' : code === '000' ? 'url-unreachable' : null;
+    if (!rule) continue;
+    summary[rule === 'url-dead' ? 'dead' : 'unreachable']++;
+    for (const at of seen) findings.push({ ...at, rule, detail: `${code} ${url}`, fixable: false });
+  }
+  return { findings, summary };
+}
+
 function check(opts) {
   const target = typeof opts.dir === 'string' ? opts.dir : null;
   if (!target) return fail('check: --dir DIR (or FILE) is required');
@@ -1105,9 +1251,23 @@ function check(opts) {
     }
   }
 
+  // Opt-in and last: it is the only rule that leaves the machine, and every
+  // other finding is available without waiting on the network.
+  let urlSummary = null;
+  if (opts.urls) {
+    if (!which('curl')) return fail('check: --urls needs curl on PATH');
+    const { findings, summary } = checkUrlReachability(files, opts);
+    urlSummary = summary;
+    for (const f of findings) all.push({ ...f, file: path.relative(base, f.file) || path.basename(f.file) });
+    all.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  }
+
   if (opts.json) {
-    console.log(JSON.stringify({ files: files.length, findings: all }, null, 2));
+    console.log(JSON.stringify({ files: files.length, urls: urlSummary, findings: all }, null, 2));
     return all.length ? 1 : 0;
+  }
+  if (urlSummary) {
+    console.log(`CHECK urls checked=${urlSummary.checked} probed=${urlSummary.probed} dead=${urlSummary.dead} unreachable=${urlSummary.unreachable}`);
   }
 
   const byRule = new Map();
@@ -1775,4 +1935,4 @@ function countFindings(logFile) {
 const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
 if (invokedDirectly) process.exit(main(process.argv.slice(2)));
 
-export { pickLane, buildManifest, laneFlagText, readSkipList, bookAssetId, rewriteAssetLinks, findIsbn, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv };
+export { pickLane, buildManifest, laneFlagText, readSkipList, trimUrl, probeUrls, checkUrlReachability, bookAssetId, rewriteAssetLinks, findIsbn, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv };

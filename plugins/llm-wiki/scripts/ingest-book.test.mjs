@@ -18,7 +18,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
-import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn, readSkipList } from './ingest-book.mjs';
+import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn, readSkipList, trimUrl, checkUrlReachability } from './ingest-book.mjs';
 
 const SCRIPT = new URL('./ingest-book.mjs', import.meta.url).pathname;
 const SEP = '-'.repeat(48);
@@ -508,4 +508,68 @@ test('readSkipList: comments and the .pdf suffix are optional, an NFD name still
   assert.equal(skip.has('함께 자라기'), true);
   assert.equal(skip.has('클린 코드'.normalize('NFC')), true);   // the NFD trap
   assert.equal(skip.has('# 주석'), false);
+});
+
+test('trimUrl: markdown escaping and sentence punctuation come back off', () => {
+  // Measured false positive: escaped it 404s, unescaped it is 200. marker
+  // double-escapes inside link text, so one pass over a single backslash is
+  // not enough.
+  assert.equal(
+    trimUrl('https://commons.wikimedia.org/wiki/File:The\\\\_test\\\\_automation\\\\_pyramid.png'),
+    'https://commons.wikimedia.org/wiki/File:The_test_automation_pyramid.png',
+  );
+  assert.equal(trimUrl('https://example.com/a.'), 'https://example.com/a');
+  assert.equal(trimUrl('https://example.com/a_b'), 'https://example.com/a_b');
+  assert.equal(trimUrl('https://example.com/x(y)'), 'https://example.com/x(y)');
+  assert.equal(trimUrl('https://example.com/x)'), 'https://example.com/x');
+});
+
+test('check --urls: only 404/410 are dead, a declining server is not a defect', () => {
+  const root = tmpdir('ingest-book-urls-');
+  const md = path.join(root, 'book.md');
+  fs.writeFileSync(md, [
+    '- 살아 있음: https://alive.example/ok',
+    '- 봇 차단이지 결함이 아님: https://blocked.example/page',
+    '- 서버 장애이지 결함이 아님: https://broken.example/page',
+    '- 사라짐: https://gone.example/missing',
+    '- 닿지 않음: https://nodns.example/x',
+    '- 코드블록 안은 제외:',
+    '```',
+    'curl https://incode.example/nope',
+    '```',
+  ].join('\n'), 'utf8');
+
+  // A seeded cache is the whole probe result, so the test never leaves the machine.
+  const cache = path.join(root, 'cache.json');
+  fs.writeFileSync(cache, JSON.stringify({
+    'https://alive.example/ok': '200',
+    'https://blocked.example/page': '403',
+    'https://broken.example/page': '500',
+    'https://gone.example/missing': '404',
+    'https://nodns.example/x': '000',
+  }), 'utf8');
+
+  const { findings, summary } = checkUrlReachability([md], { urls_cache: cache });
+  assert.equal(summary.probed, 0, 'a cached URL must not be probed again');
+  assert.equal(summary.checked, 5, 'a URL inside a code fence is not a link');
+  assert.deepEqual(findings.map((f) => f.rule).sort(), ['url-dead', 'url-unreachable']);
+  assert.match(findings.find((f) => f.rule === 'url-dead').detail, /404 https:\/\/gone\.example/);
+});
+
+test('CLI check --urls: reports through the normal finding path and exit code', () => {
+  const root = tmpdir('ingest-book-urls-cli-');
+  const md = path.join(root, 'book.md');
+  fs.writeFileSync(md, '- 참고: https://gone.example/missing\n', 'utf8');
+  const cache = path.join(root, 'cache.json');
+  fs.writeFileSync(cache, JSON.stringify({ 'https://gone.example/missing': '404' }), 'utf8');
+
+  const res = run(['check', '--dir', md, '--urls', '--urls-cache', cache]);
+  assert.equal(res.code, 1);
+  assert.match(res.stdout, /CHECK urls checked=1 probed=0 dead=1 unreachable=0/);
+  assert.match(res.stdout, /url-dead/);
+
+  // Without the flag the network rule does not run at all.
+  const off = run(['check', '--dir', md]);
+  assert.equal(off.code, 0);
+  assert.doesNotMatch(off.stdout, /url-dead/);
 });
