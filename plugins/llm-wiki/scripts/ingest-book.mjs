@@ -34,8 +34,33 @@ import { spawnSync } from 'node:child_process';
 const MARKER_BIN = 'marker_single';
 const DOCLING_BIN = 'docling';
 
-/** Fixed marker flags. `--use_llm` is absent on purpose: it ships pages to an external API (design §9-4). */
-const MARKER_BASE_FLAGS = ['--paginate_output', '--output_format', 'markdown'];
+/**
+ * Fixed marker flags. `--use_llm` is absent on purpose: it ships pages to an
+ * external API (design §9-4).
+ *
+ * The two `common_element` values disable marker's `IgnoreTextProcessor`, which
+ * strips repeated running heads/feet by collecting each page's first and last
+ * text block. Its scan set is `(Text, SectionHeader, TextInlineMath)` —
+ * `ListGroup`, `Footnote` and `PageFooter` are absent — so a subheading that
+ * opens a bullet list counts as the page's *last* block and, once it repeats
+ * often enough, is deleted from the output. Measured on 「애자일 프랙티스」
+ * p.40-79: eight 「균형 유지하기」 headings, all eight dropped with
+ * `ignore_for_output=True`, all eight restored by these flags — the diff added
+ * exactly those 8 lines and nothing else. Raising the ratio above 1.0 and the
+ * streak past any real page count puts both branches out of reach.
+ *
+ * Turning the processor off does not leak running heads here: on a true scan
+ * with a running foot on every page (「익스트림 프로그래밍」 p.40-79) the
+ * output was byte-identical, because surya types those blocks `PageFooter` and
+ * `MarginaliaProcessor` removes them independently. Speed was unchanged
+ * (216.6s vs 217.2s). Evidence: book-queue/session5/FINDINGS-ccp-glx.md §4.
+ */
+const MARKER_BASE_FLAGS = [
+  '--paginate_output',
+  '--output_format', 'markdown',
+  '--common_element_threshold', '1.1',
+  '--max_streak', '999999',
+];
 
 /**
  * Which OCR path a PDF needs, decided by whether it carries an extractable text
