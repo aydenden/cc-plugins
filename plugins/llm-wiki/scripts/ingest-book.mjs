@@ -281,7 +281,12 @@ const USAGE = `ingest-book — scanned book PDF -> chapter markdown -> vault raw
   queue   --books DIR [--out DIR] [--plan] [--limit N]
           [--free-floor-gb N] [--max-book-mb N] [--disable-images]
                      bulk convert; resumable. 'touch <out>/STOP' or SIGTERM
-                     stops it after the book in flight, never mid-book.`;
+                     stops it after the book in flight, never mid-book.
+  load    [--out DIR] [--vault PATH] [--plan] [--limit N] [--skip FILE]
+          [--assets DIR] [--glossary FILE] [--section-depth N] [--fix] [--force]
+                     split -> check -> ingest every converted book in the queue.
+                     Safe to run while 'queue' converts: own state file, no GPU.
+                     'touch <out>/STOP-LOAD' stops it at a book boundary.`;
 
 function main(argv) {
   const { cmd, opts } = parseArgs(argv);
@@ -296,6 +301,7 @@ function main(argv) {
     case 'check': return check(opts);
     case 'ingest': return ingest(opts);
     case 'queue': return queue(opts);
+    case 'load': return load(opts);
     default:
       console.error(`unknown command: ${cmd}\n\n${USAGE}`);
       return 2;
@@ -1270,10 +1276,16 @@ function ingest(opts) {
     console.log(`ingest: make sure git ignores ${path.relative(vault, assetsRoot) || assetsRoot}`);
   }
   warnOnSize(dest, rel);
+  // The log.md lines are the format's only definition; `load` collects them
+  // through the sink rather than rebuilding them and drifting.
+  const logLines = [
+    `## [${ingested}] ingest | ${opts.book}`,
+    `- Raw: \`${rel}/\` (${pages} 파일, 책 단위 1줄)`,
+    '- Created/Updated: (없음 — raw 적재만)',
+  ];
   console.log('\nlog.md 에 append 할 줄 (직접 Write/Edit 로 추가할 것 — 훅이 그때 lint 를 돌린다):\n');
-  console.log(`## [${ingested}] ingest | ${opts.book}`);
-  console.log(`- Raw: \`${rel}/\` (${pages} 파일, 책 단위 1줄)`);
-  console.log('- Created/Updated: (없음 — raw 적재만)');
+  for (const line of logLines) console.log(line);
+  if (Array.isArray(opts.log_sink)) opts.log_sink.push(...logLines);
   return 0;
 }
 
@@ -1572,9 +1584,195 @@ function queue(opts) {
   return failed.length > 0 ? 1 : 0;
 }
 
+/**
+ * Run one book's console-noisy stage into a log file instead of the terminal.
+ *
+ * `split`/`check`/`ingest` report through `console`, which is right when a
+ * human runs one book and wrong when 184 run unattended — the chapter and
+ * finding lists would bury the per-book verdict. Capturing keeps the full
+ * report next to the book, the same way `queue` keeps `marker.log`.
+ */
+function captureConsole(logFile, fn) {
+  const chunks = [];
+  const sink = (...args) => chunks.push(args.map(String).join(' '));
+  const real = { log: console.log, error: console.error, warn: console.warn };
+  console.log = sink; console.error = sink; console.warn = sink;
+  try {
+    return fn();
+  } finally {
+    console.log = real.log; console.error = real.error; console.warn = real.warn;
+    fs.appendFileSync(logFile, `${chunks.join('\n')}\n`);
+  }
+}
+
+/** Book stems the operator has decided not to put in the vault, one per line. */
+function readSkipList(file) {
+  return new Set(
+    fs.readFileSync(file, 'utf8')
+      .split('\n')
+      .map((line) => line.trim().replace(/\.pdf$/i, ''))
+      .filter((line) => line && !line.startsWith('#'))
+      .map((line) => line.normalize('NFC')),
+  );
+}
+
+/**
+ * Take every converted book the rest of the way: split -> check -> ingest.
+ *
+ * A separate subcommand rather than a `queue` stage, and a separate state file
+ * rather than a field on `queue.json`, because the two are meant to run at the
+ * same time: conversion is GPU-bound for days while this is pure CPU and file
+ * work, and both write their manifest after every book — sharing one file
+ * would have them clobber each other's progress.
+ *
+ * `check` returning findings is not a failure here. It reports OCR suspicion
+ * that a human reads later; a book is only failed when a stage refuses to
+ * produce output.
+ */
+function load(opts) {
+  const outRoot = path.resolve(typeof opts.out === 'string' ? opts.out : './book-queue');
+  const manifestPath = path.join(outRoot, 'queue.json');
+  if (!fs.existsSync(manifestPath)) return fail(`load: no queue manifest at ${manifestPath}`);
+  const queueEntries = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+
+  const vault = vaultPath(opts);
+  if (!vault) return fail('load: set WIKI_PATH (or OBSIDIAN_VAULT_PATH), or pass --vault');
+  if (!fs.existsSync(path.join(vault, 'SCHEMA.md'))) return fail(`load: not a vault (no SCHEMA.md): ${vault}`);
+
+  let skip = new Set();
+  if (typeof opts.skip === 'string') {
+    if (!fs.existsSync(opts.skip)) return fail(`load: no such skip list: ${opts.skip}`);
+    skip = readSkipList(opts.skip);
+  }
+
+  const statePath = path.join(outRoot, 'load.json');
+  const state = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : [];
+  const byFile = new Map(state.map((e) => [e.file, e]));
+
+  const converted = queueEntries.filter((e) => e.status === 'done');
+  const todo = converted.filter((e) => {
+    const stem = e.file.replace(/\.pdf$/i, '').normalize('NFC');
+    if (skip.has(stem)) return false;
+    const prior = byFile.get(e.file);
+    return !prior || prior.status !== 'loaded' || opts.force;
+  });
+
+  const skipped = converted.length - todo.length;
+  console.log(`load: ${converted.length} converted, ${todo.length} to load, ${skipped} skipped (list + already loaded)`);
+  if (opts.plan) {
+    for (const e of todo) console.log(`  ${String(e.pages ?? '?').padStart(5)}p  ${e.file}`);
+    return 0;
+  }
+
+  const limit = opts.limit === undefined ? Infinity : Number(opts.limit);
+  const stopFile = path.join(outRoot, 'STOP-LOAD');
+  let stopRequested = false;
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.on(signal, () => {
+      if (stopRequested) process.exit(130);
+      stopRequested = true;
+      console.log(`\nload: ${signal} received — finishing the current book, then stopping (again to force)`);
+    });
+  }
+
+  const logMd = path.join(outRoot, 'load-log.md');
+  let processed = 0;
+  let failed = 0;
+  for (const entry of todo) {
+    if (stopRequested) { console.log('load: stop requested, stopping at a book boundary'); break; }
+    if (fs.existsSync(stopFile)) { console.log(`load: ${stopFile} present, stopping at a book boundary`); break; }
+    if (processed >= limit) { console.log(`load: --limit ${limit} reached, stopping`); break; }
+
+    const title = entry.file.replace(/\.pdf$/i, '');
+    const slug = slugify(title);
+    const bookDir = path.join(outRoot, 'books', slug);
+    const record = { file: entry.file, slug, title, status: 'failed', stage: null };
+    const started = Date.now();
+
+    const md = fs.existsSync(bookDir) ? findMarkdown(bookDir) : null;
+    if (!md) {
+      record.stage = 'find';
+      record.error = `no markdown under ${bookDir}`;
+      console.log(`load: [${processed + 1}] ${entry.file} — FAILED (no converted markdown)`);
+    } else {
+      // Chapters live OUTSIDE the marker output tree, and are cleared first.
+      // Both matter on a rerun: `findMarkdown` returns the largest .md under
+      // bookDir, so chapters written there make it pick 00-toc.md the second
+      // time and split the index into chapters of its own; and a previous
+      // split's files under different titles would otherwise survive into the
+      // vault alongside the new ones.
+      const chapters = path.join(outRoot, 'chapters', slug);
+      fs.rmSync(chapters, { recursive: true, force: true });
+      const logFile = path.join(bookDir, 'load.log');
+      fs.writeFileSync(logFile, '');
+      const logSink = [];
+
+      const stages = [
+        ['split', () => split({
+          md, out: chapters, title, lane: entry.lane,
+          section_depth: opts.section_depth, level: opts.level,
+          page_offset: opts.page_offset, no_page_offset: opts.no_page_offset,
+        })],
+        // `check` exits 1 on findings by design; only a refusal (2) is a failure.
+        ['check', () => {
+          const rc = check({ dir: chapters, fix: opts.fix, glossary: opts.glossary, json: true });
+          return rc === 2 ? 2 : 0;
+        }],
+        ['ingest', () => ingest({
+          dir: chapters, book: title, vault, assets: opts.assets,
+          force: true, log_sink: logSink,
+        })],
+      ];
+
+      let rc = 0;
+      for (const [name, run] of stages) {
+        record.stage = name;
+        rc = captureConsole(logFile, run);
+        if (rc !== 0) break;
+      }
+      if (rc === 0) {
+        record.status = 'loaded';
+        record.stage = 'done';
+        // 00-toc.md is the index, not a chapter — counting it overstates every book by one.
+        record.chapters = fs.readdirSync(chapters).filter((f) => f.endsWith('.md') && f !== '00-toc.md').length;
+        record.findings = countFindings(logFile);
+        if (logSink.length) fs.appendFileSync(logMd, `${logSink.join('\n')}\n\n`);
+        console.log(`load: [${processed + 1}] ${entry.file} — ok (${record.chapters} chapters, ${record.findings} findings)`);
+      } else {
+        record.error = `${record.stage} exited ${rc}`;
+        console.log(`load: [${processed + 1}] ${entry.file} — FAILED at ${record.stage} rc=${rc} — see ${logFile}`);
+      }
+    }
+
+    record.secs = Math.round((Date.now() - started) / 1000);
+    const at = state.findIndex((e) => e.file === entry.file);
+    if (at === -1) state.push(record); else state[at] = record;
+    writeJsonAtomic(statePath, state);
+    if (record.status !== 'loaded') failed++;
+    processed++;
+  }
+
+  const loaded = state.filter((e) => e.status === 'loaded').length;
+  console.log(`load: loaded=${loaded} failed=${failed} of ${converted.length} converted`);
+  if (loaded) console.log(`load: log.md lines collected in ${logMd}`);
+  return failed > 0 ? 1 : 0;
+}
+
+/** Findings count from the `check --json` report captured in a book's load log. */
+function countFindings(logFile) {
+  const text = fs.readFileSync(logFile, 'utf8');
+  const start = text.lastIndexOf('{\n  "files"');
+  if (start === -1) return null;
+  try {
+    return JSON.parse(text.slice(start, text.indexOf('\n}', start) + 2)).findings.length;
+  } catch {
+    return null;
+  }
+}
+
 // --- Entry point ---
 
 const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
 if (invokedDirectly) process.exit(main(process.argv.slice(2)));
 
-export { pickLane, buildManifest, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv };
+export { pickLane, buildManifest, laneFlagText, readSkipList, bookAssetId, rewriteAssetLinks, findIsbn, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv };
