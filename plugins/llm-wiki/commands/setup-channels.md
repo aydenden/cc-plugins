@@ -1,9 +1,9 @@
 ---
-description: 선택 계층 리서치 채널(gh·Reddit·X·YouTube)을 진단하고 설치한다
+description: 선택 계층 리서치 채널(gh·Reddit·X·YouTube)과 브라우저 우회 도구(agent-browser·scrapling)를 진단하고 설치한다
 argument-hint: "[check | plan | install] [채널 id]"
 ---
 
-선택 계층 리서치 채널을 점검해줘. 인자: $ARGUMENTS
+선택 계층 리서치 채널과 브라우저 우회 도구를 점검해줘. 인자: $ARGUMENTS
 
 ## 이 커맨드가 없어도 리서치는 돈다
 
@@ -35,7 +35,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-channels.mjs" install --yes   # 실제
 
 - `--yes` 없이는 **아무것도 바꾸지 않는다.** 먼저 `plan`을 보여주고 사용자 승인을 받은 뒤에 `--yes`를 붙인다.
 - 특정 채널만: `--channel yt-dlp,gh`
-- 패키지 매니저는 플랫폼에서 자동 감지한다(brew / apt / dnf / pacman / winget / scoop / pipx). 하나도 없으면 설치 불가를 그대로 보고한다.
+- 패키지 매니저는 플랫폼에서 자동 감지한다(brew / apt / dnf / pacman / uv / pipx / winget / scoop / npm). 하나도 없으면 설치 불가를 그대로 보고한다.
+- `agent-browser`·`scrapling`은 바이너리만으로는 렌더링하지 못한다. 설치 후 브라우저 내려받기(`agent-browser install` / `scrapling install`)까지 이 커맨드가 이어서 실행하며, `plan`에도 그 줄이 보인다.
 
 ## 3. 인증은 자동화하지 않는다
 

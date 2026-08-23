@@ -44,6 +44,9 @@ Task 도구로 `general-purpose` 서브에이전트 **하나만** 띄운다. 병
    질의 성격에 맞는 채널만 고른다. 필요한 선택 채널만 1회 탐지하고, 실패하면 즉시 축퇴한다.
 2. 조사 원칙: 공식 문서·1차 자료 우선, 최신 우선, 각 사실에 출처 URL과 발행일.
    추측 금지 — 출처 없는 사실은 보고하지 않는다.
+2-1. **WebFetch가 403·빈 본문·"Just a moment…"로 막히면 포기하기 전에 브라우저 사다리를 한 계단
+   올라간다.** 절차는 `${CLAUDE_PLUGIN_ROOT}/docs/browser-fallback.md`를 Read해 그대로 따른다.
+   한 번에 한 계단이고, 세 계단이 다 막히면 그 URL을 조사 제외 채널에 남긴다.
 3. **원문을 반드시 `raw/`에 파일로 남긴다.** 요약만으로 페이지를 쓰면 품질이 떨어지므로
    메인이 필요한 원문을 골라 읽을 수 있어야 한다. 저장 위치·frontmatter(`source_url`/
    `ingested`/`sha256`)·재ingest 감지는 `${CLAUDE_PLUGIN_ROOT}/skills/wiki-schema/SKILL.md`
