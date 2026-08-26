@@ -1,5 +1,5 @@
 {
-  "description": "Guard CC auto memory: block oversized MEMORY.md writes (PreToolUse) and run a once-a-day stale/bloat check on topic files (SessionStart).",
+  "description": "Guard CC auto memory: block writes that bloat MEMORY.md past its derived budget (PreToolUse), and run a once-a-day stale/broken-link/orphan check (SessionStart).",
   "hooks": {
     "PreToolUse": [
       {
@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/index-guard.sh",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/index-guard.mjs\"",
             "timeout": 5
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory-check.sh",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/memory-check.mjs\"",
             "asyncRewake": true,
             "timeout": 30
           }

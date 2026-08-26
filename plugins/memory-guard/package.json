@@ -1,8 +1,8 @@
 {
   "name": "@aydenden/plugin-memory-guard",
   "private": true,
-  "version": "0.2.0",
-  "description": "CC auto memory 비대·stale 방지 — OpenCode에서 opencode-claude-memory의 memory_save 도구가 MEMORY.md 인덱스를 한도 초과로 키우는 것을 차단하고, 하루 1회 stale·깨진 링크 점검을 수행. CC 플러그인 구조(hooks/scripts)를 OC Plugin API로 주입.",
+  "version": "0.3.0",
+  "description": "CC auto memory 비대·stale 방지 — OpenCode에서 opencode-claude-memory의 memory_save 도구가 MEMORY.md 인덱스를 한도 밖으로 키우는 것을 차단하고, 하루 1회 깨진 링크·고아 토픽·노후를 점검한다. 판정과 한도는 CC 훅과 같은 src/core.mjs 를 쓴다.",
   "main": "src/index.ts",
   "license": "MIT",
   "dependencies": {
