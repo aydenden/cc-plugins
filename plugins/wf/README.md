@@ -44,6 +44,7 @@ scripts/
   check-citations.sh    인용 경로 실존 검사        (차단)
   check-coverage.sh     축 수 vs 산출물 항목 수     (차단)
   check-negation.sh     "없음" 주장에 검색 명령 유무 (경고)
+  check-deps.sh         의존성 유무 + 설치법 (design 0단계)
 templates/
   workflow.local.md          스펙 형식
   spec-software-dev.local.md 소프트웨어 개발 기본 스펙
@@ -53,9 +54,49 @@ templates/
   domain.md                  CONTEXT.md · ADR 레이아웃
 ```
 
-## 고정 의존성
+## 설치
 
-`bd`(beads) · mattpocock 스킬군 · `orca` · `agent-browser`. 런타임 감지나 폴백은 없다 — 도구가 없으면 그 사실을 보고하고 멈춘다. 선택지를 열어두면 스킬마다 분기가 생기고, 그 분기를 매 세션 LLM이 다시 해석하면서 동작이 흔들린다.
+런타임 감지나 폴백은 없다 — 도구가 없으면 그 사실을 보고하고 멈춘다. 선택지를 열어두면 스킬마다 분기가 생기고, 그 분기를 매 세션 LLM이 다시 해석하면서 동작이 흔들린다.
+
+무엇이 있는지 먼저 확인한다. `wf:design`도 0단계에서 이걸 돌린다.
+
+```bash
+plugins/wf/scripts/check-deps.sh
+```
+
+**필수** — 없으면 생성된 워크플로우가 실행되지 않는다.
+
+```bash
+brew install beads                                    # bd
+/plugin marketplace add anthropics/claude-plugins-official   # → plugin-dev 설치 (create-plugin 인계 대상)
+/plugin marketplace add steveyegge/beads                     # → beads 설치 (SessionStart bd prime 훅)
+```
+
+**조건부** — 없으면 해당 단계를 설계에서 뺀다.
+
+```bash
+brew install --cask orca      # 세션 스폰·워크트리
+brew install agent-browser    # 웹 검증
+brew install node             # npx skills — 스킬 레지스트리 조사
+```
+
+**위임 대상 스킬** — 사고 절차는 이쪽에 맡긴다. 없으면 그 판단을 대신할 스킬을 `find-skills`로 조사한다.
+
+```bash
+npx skills add mattpocock/skills@grill-with-docs
+npx skills add mattpocock/skills@to-prd
+npx skills add mattpocock/skills@to-issues
+npx skills add mattpocock/skills@implement
+npx skills add mattpocock/skills@tdd
+npx skills add mattpocock/skills@code-review
+npx skills add mattpocock/skills@diagnosing-bugs
+npx skills add mattpocock/skills@triage
+npx skills add mattpocock/skills@handoff
+npx skills add mattpocock/skills@prototype
+npx skills add mattpocock/skills@wayfinder
+npx skills add mattpocock/skills@domain-modeling
+npx skills add mattpocock/skills@research
+```
 
 이 위에 얹히는 것만 `find-skills`로 조사해 사용자와 협의한다.
 
