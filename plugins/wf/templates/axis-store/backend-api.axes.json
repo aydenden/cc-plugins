@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "domain": "backend-api",
+  "description": "HTTP API 엔드포인트 — 계약·저장·인가",
+  "axes": [
+    {
+      "id": "contract",
+      "when": "",
+      "ask": "요청·응답 스키마가 무엇인가? 필드마다 타입과 필수 여부는?",
+      "source_hint": "OpenAPI 명세, 기존 엔드포인트의 DTO",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "error-codes",
+      "when": "",
+      "ask": "실패마다 어떤 코드·메시지를 주나? 클라이언트가 분기할 수 있나?",
+      "source_hint": "에러 코드 카탈로그, 기존 예외 핸들러",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "authz",
+      "when": "",
+      "ask": "누가 부를 수 있나? 자원 소유자 검사는 어디서 하나?",
+      "source_hint": "인증 미들웨어, 기존 엔드포인트의 가드",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축(인증·인가)"
+    },
+    {
+      "id": "validation",
+      "when": "",
+      "ask": "입력 검증의 경계는 어디이고 무엇을 거부하나?",
+      "source_hint": "검증 라이브러리 사용 패턴",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "transaction",
+      "when": "쓰기가 여러 테이블에 걸치는가",
+      "ask": "트랜잭션 경계가 어디인가? 부분 실패 시 무엇이 남나?",
+      "source_hint": "기존 서비스 레이어의 트랜잭션 선언",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "idempotency",
+      "when": "재시도되는 쓰기인가",
+      "ask": "같은 요청이 두 번 오면 어떻게 되나?",
+      "source_hint": "멱등 키 처리, 유니크 제약",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "performance",
+      "when": "목록·조인 조회인가",
+      "ask": "N+1이 나나? 어떤 인덱스에 기대나?",
+      "source_hint": "쿼리 로그, 스키마의 인덱스 정의",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "observability",
+      "when": "",
+      "ask": "실패를 무엇으로 알아채나? 어떤 필드를 로깅하나?",
+      "source_hint": "로깅 규약, 기존 핸들러의 로그",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축(로깅·관측)"
+    },
+    {
+      "id": "compat",
+      "when": "기존 엔드포인트를 바꾸는가",
+      "ask": "기존 클라이언트가 깨지나? 버전 전략은?",
+      "source_hint": "호출자 목록, 배포된 클라이언트 버전",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축(하위호환)"
+    }
+  ]
+}

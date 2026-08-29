@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/aydenden/cc-plugins/axis-data/axes/_schema.json",
+  "title": "wf domain axis set",
+  "type": "object",
+  "required": ["schema", "domain", "description", "axes"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": 1, "description": "Format version of this file." },
+    "domain": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Matches the filename stem, so a file can be found from its content."
+    },
+    "description": {
+      "type": "string",
+      "description": "What kind of work this set applies to. Shown by `axis-sync.sh list`."
+    },
+    "extends": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Domains whose axes are inherited. Resolved one level; on a duplicate id the child's entry replaces the parent's, keeping the parent's position."
+    },
+    "axes": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The axes that are live. This is the only key `ids` reads.",
+      "items": {
+        "type": "object",
+        "required": ["id", "ask", "added_by"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "Stable identifier, lowercase ASCII. check-coverage.sh greps the artifact for this exact string, so the artifact's row must carry the id itself."
+          },
+          "when": {
+            "type": "string",
+            "description": "Condition that switches the axis on. Empty means it always applies. An unconditional list forces 'not applicable' rows onto unrelated work, and that fatigue is what makes a list stop being read."
+          },
+          "ask": {
+            "type": "string",
+            "description": "The question put to the user during the definition stage."
+          },
+          "source_hint": {
+            "type": "string",
+            "description": "Where the evidence for this axis usually lives."
+          },
+          "added_by": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The rework or observation that produced this axis. Required — once the list is long this is the only way to tell an axis born of real rework from one that merely sounded thorough."
+          }
+        }
+      }
+    },
+    "retired": {
+      "type": "array",
+      "description": "Axes that were dropped. Kept out of `axes` so nothing reading the live list has to filter, and read only by the retrospective before adding an axis — an axis dropped for a reason should not quietly return.",
+      "items": {
+        "type": "object",
+        "required": ["id", "retired_by"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "retired_by": { "type": "string", "minLength": 1, "description": "Why it was dropped." }
+        }
+      }
+    }
+  }
+}

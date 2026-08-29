@@ -36,7 +36,7 @@ references/
   toolchain.md          고정 의존성 + 겹치는 기능의 채택 결정
   beads-contract.md     bd 호출 규약 + 실측 제약 (문서와 어긋나는 항목 포함)
   stage-patterns.md     흔한 단계와 이음매/위임 판정 기준
-  axis-patterns.md      축 문법 · 네 출처 · 도메인별 기본 축
+  axis-patterns.md      축 문법 · 네 출처 · 원격 축 저장소
   preview-patterns.md   정직한 렌더링 · as-is 파일 대조
   evidence-patterns.md  검증 6종 × 단계 성격별 선택
   spec-change.md        스펙 변경의 파급 · drift · 손수정 보존
@@ -45,7 +45,9 @@ scripts/
   check-coverage.sh     축 수 vs 산출물 항목 수     (차단)
   check-negation.sh     "없음" 주장에 검색 명령 유무 (경고)
   check-deps.sh         의존성 유무 + 설치법 (design 0단계)
+  axis-sync.sh          도메인 축 저장소 pull/push (refs/wf/axes)
 templates/
+  axis-store/                축 저장소 씨앗 (스키마 + frontend·backend-api)
   workflow.local.md          스펙 형식
   spec-software-dev.local.md 소프트웨어 개발 기본 스펙
   PRIME.md                   bd prime 오버라이드 (메모리 정책 반전)
@@ -78,6 +80,7 @@ brew install beads                                    # bd
 brew install --cask orca      # 세션 스폰·워크트리
 brew install agent-browser    # 웹 검증
 brew install node             # npx skills — 스킬 레지스트리 조사
+brew install jq               # 축 저장소 조회 (axis-sync.sh ids/resolve)
 ```
 
 **조사·조작 스킬** — 설계 4단계의 스킬 조사와 브라우저 검증이 여기 기댄다. 소유자가 다르므로 주의.
@@ -106,6 +109,21 @@ npx skills add mattpocock/skills@research
 ```
 
 이 위에 얹히는 것만 `find-skills`로 조사해 사용자와 협의한다.
+
+## 도메인 축 저장소
+
+도메인별 기본 축은 문서가 아니라 데이터다. 저장소의 커스텀 ref `refs/wf/axes`에 도메인당 JSON 하나로 살고, `main`과는 만나지 않는다 — 브랜치도 태그도 아니라 웹 브랜치 목록에 안 뜨고 기본 clone이 안 가져온다.
+
+```bash
+plugins/wf/scripts/axis-sync.sh init            # 최초 1회 — 씨앗 생성 (push 는 안 함)
+plugins/wf/scripts/axis-sync.sh pull            # 생성 또는 fast-forward
+plugins/wf/scripts/axis-sync.sh list            # 도메인 목록
+plugins/wf/scripts/axis-sync.sh resolve <도메인>  # extends 병합
+plugins/wf/scripts/axis-sync.sh ids <도메인>      # check-coverage.sh 입력
+plugins/wf/scripts/axis-sync.sh push "메시지"      # 커밋·발행
+```
+
+로컬 store는 `~/.cache/wf/axis-store` (`WF_AXIS_STORE`로 변경). 플러그인 디렉토리에 두지 않는다 — 설치 캐시는 버전마다 새 디렉토리라 버전업 즉시 고아가 된다. 형식과 운영 규칙은 `references/axis-patterns.md`.
 
 ## 검증 우회
 
