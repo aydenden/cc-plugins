@@ -1,0 +1,68 @@
+# wf — 워크플로우 생성기
+
+작업 흐름을 설명하면 그에 맞는 **워크플로우 플러그인**을 설계한다. 플러그인 구조 생성·검증·테스트는 `plugin-dev:create-plugin`이 이미 소유하므로, 이 플러그인은 그것이 갖지 못한 앞단만 담당하고 결과를 넘긴다.
+
+```
+wf:design  워크플로우 설명
+             → 단계 분해 · 이음매/위임 판정
+             → 증거 저장소 결정
+             → find-skills 조사 → 필수/추천/대안/제외 → 협의
+             → 정의 단계에 검토 축 + 구현 전 프리뷰
+             → 단계별 증거 검사 설계 (hook + script)
+             → .claude/<name>.local.md 스펙 기록
+             → create-plugin Phase 4~8 로 인계
+
+wf:retro   재작업·주기 회고 → 원인 단계 → 빠진 축 → 스펙에 추가
+             → 축이면 재생성 불필요 (실행 시점에 읽힘)
+             → 단계·위임 스킬·증거 저장소 변경이면
+               drift 확인 → 영향 파일 제시 → 컨펌 → 생성물 반영
+```
+
+## 왜 축과 프리뷰가 있나
+
+검증은 보통 **만들어진 것**을 검사한다. 그런데 가장 비싼 실패는 **만들어지지 않은 것**이다 — 검토 축이 통째로 빠지면 검토된 축만 완벽하게 통과하고, 누락은 결과물이 나온 뒤에야 드러나 재작업이 된다.
+
+그래서 두 장치를 넣는다.
+
+- **축(커버리지)** — 정의 단계에 "무엇을 정의해야 하는지"의 목록을 두고, 켜진 축 수와 산출물 항목 수를 스크립트가 센다. 축은 스킬이 아니라 스펙 파일의 데이터라서 회고로 자란다.
+- **구현 전 프리뷰** — 정의를 정적 HTML로 렌더링해 빈 곳을 눈에 보이게 만든다. 미정의를 그럴듯하게 채우지 않는 것이 규칙이다.
+
+## 구성
+
+```
+skills/design/     워크플로우 설계 진입점
+skills/retro/      회고 → 축 추가
+references/
+  toolchain.md          고정 의존성 + 겹치는 기능의 채택 결정
+  beads-contract.md     bd 호출 규약 + 실측 제약 (문서와 어긋나는 항목 포함)
+  stage-patterns.md     흔한 단계와 이음매/위임 판정 기준
+  axis-patterns.md      축 문법 · 네 출처 · 도메인별 기본 축
+  preview-patterns.md   정직한 렌더링 · as-is 파일 대조
+  evidence-patterns.md  검증 6종 × 단계 성격별 선택
+  spec-change.md        스펙 변경의 파급 · drift · 손수정 보존
+scripts/
+  check-citations.sh    인용 경로 실존 검사        (차단)
+  check-coverage.sh     축 수 vs 산출물 항목 수     (차단)
+  check-negation.sh     "없음" 주장에 검색 명령 유무 (경고)
+templates/
+  workflow.local.md          스펙 형식
+  spec-software-dev.local.md 소프트웨어 개발 기본 스펙
+  PRIME.md                   bd prime 오버라이드 (메모리 정책 반전)
+  issue-tracker.md           mattpocock 스킬군에 beads 고정
+  triage-labels.md           트리아지 상태 정의
+  domain.md                  CONTEXT.md · ADR 레이아웃
+```
+
+## 고정 의존성
+
+`bd`(beads) · mattpocock 스킬군 · `orca` · `agent-browser`. 런타임 감지나 폴백은 없다 — 도구가 없으면 그 사실을 보고하고 멈춘다. 선택지를 열어두면 스킬마다 분기가 생기고, 그 분기를 매 세션 LLM이 다시 해석하면서 동작이 흔들린다.
+
+이 위에 얹히는 것만 `find-skills`로 조사해 사용자와 협의한다.
+
+## 검증 우회
+
+차단하는 hook에는 우회 경로가 있어야 한다. 없으면 오탐 한 번에 검사 전체가 꺼진다.
+
+```bash
+touch .claude/wf-skip-checks    # 의도적 우회. 끝나면 지운다
+```
