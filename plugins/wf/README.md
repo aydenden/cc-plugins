@@ -80,6 +80,13 @@ brew install agent-browser    # 웹 검증
 brew install node             # npx skills — 스킬 레지스트리 조사
 ```
 
+**조사·조작 스킬** — 설계 4단계의 스킬 조사와 브라우저 검증이 여기 기댄다. 소유자가 다르므로 주의.
+
+```bash
+npx skills add vercel-labs/skills@find-skills
+npx skills add vercel-labs/agent-browser@agent-browser
+```
+
 **위임 대상 스킬** — 사고 절차는 이쪽에 맡긴다. 없으면 그 판단을 대신할 스킬을 `find-skills`로 조사한다.
 
 ```bash

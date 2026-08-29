@@ -40,6 +40,14 @@ have_cmd agent-browser && row ok "agent-browser (웹 검증)"     || row opt "ag
 have_cmd npx           && row ok "npx (스킬 레지스트리 조사)"  || row opt "npx"           "brew install node"
 
 echo
+echo "조사·조작 스킬 — 설계 4단계(스킬 조사)와 브라우저 검증이 여기 기댄다"
+for pair in "find-skills:vercel-labs/skills" "agent-browser:vercel-labs/agent-browser"; do
+  s="${pair%%:*}"; repo="${pair##*:}"
+  if have_skill "$s"; then printf '  ✓ %s\n' "$s"
+  else printf '  · %s — 없음 → npx skills add %s@%s\n' "$s" "$repo" "$s"; fi
+done
+
+echo
 echo "위임 대상 스킬 — 없으면 그 판단을 대신할 스킬을 조사해야 한다"
 for s in grill-with-docs to-prd to-issues implement tdd code-review \
          diagnosing-bugs triage handoff prototype wayfinder domain-modeling research; do
