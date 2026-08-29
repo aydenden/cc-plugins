@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "domain": "frontend",
+  "description": "화면에 렌더링되는 기능 — 컴포넌트·페이지·상호작용",
+  "axes": [
+    {
+      "id": "behavior",
+      "when": "",
+      "ask": "이 기능이 무엇을 하는가 — 입력, 동작, 결과는?",
+      "source_hint": "기획서, 지라 본문, 컨플루언스",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "style",
+      "when": "화면에 렌더링되는가",
+      "ask": "시각 정의의 출처는 — 목업? 디자인 토큰? 기존 컴포넌트 재사용?",
+      "source_hint": "정적 목업, Figma 프레임, as-is 구현의 스타일 레이어",
+      "added_by": "seed — 2026-08 재작업: 기능 축만 보고 스타일을 통째로 놓침"
+    },
+    {
+      "id": "state",
+      "when": "",
+      "ask": "로딩·빈 목록·에러·비활성 각각 무엇을 보여주나?",
+      "source_hint": "목업의 상태 프레임, 기존 컴포넌트의 상태 처리",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "responsive",
+      "when": "모바일·태블릿을 지원하는가",
+      "ask": "브레이크포인트마다 레이아웃이 어떻게 달라지나?",
+      "source_hint": "디자인 시스템의 breakpoint 토큰, 기존 페이지의 미디어 쿼리",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "a11y",
+      "when": "키보드·스크린리더 대상인가",
+      "ask": "포커스 순서, 레이블, 역할(role)은 무엇인가?",
+      "source_hint": "기존 컴포넌트의 aria 속성, 프로젝트 접근성 기준",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "i18n",
+      "when": "다국어 프로젝트인가",
+      "ask": "문구가 어느 리소스에 들어가나? 길이 변동을 견디나?",
+      "source_hint": "메시지 리소스 파일",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "permission",
+      "when": "역할에 따라 보이는 것이 달라지는가",
+      "ask": "역할별로 무엇이 숨겨지고 무엇이 비활성인가?",
+      "source_hint": "권한 정책, 기존 화면의 가드",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "performance",
+      "when": "목록·대용량 렌더링인가",
+      "ask": "몇 건까지 견디나? 가상화·페이지네이션이 필요한가?",
+      "source_hint": "as-is의 실측, 예상 데이터 규모",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "reuse",
+      "when": "",
+      "ask": "이미 있는 컴포넌트로 되는가, 왜 새로 만드나?",
+      "source_hint": "컴포넌트 디렉토리 목록",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축(코드 중복)"
+    },
+    {
+      "id": "security",
+      "when": "사용자 입력을 렌더링하는가",
+      "ask": "XSS 경로가 있나? 원문 렌더링 지점은?",
+      "source_hint": "innerHTML·v-html·dangerouslySetInnerHTML 사용처",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축"
+    },
+    {
+      "id": "recurring",
+      "when": "",
+      "ask": "이 영역에서 이전에 반복된 이슈가 있나?",
+      "source_hint": "회고 기록, 닫힌 버그 티켓",
+      "added_by": "seed — axis-patterns.md 도메인별 기본 축(이전 반복 이슈)"
+    }
+  ]
+}

@@ -38,6 +38,7 @@ echo "조건부 도구 — 없으면 해당 단계를 설계에서 뺀다"
 have_cmd orca          && row ok "orca (세션 스폰·워크트리)"   || row opt "orca"          "brew install --cask orca"
 have_cmd agent-browser && row ok "agent-browser (웹 검증)"     || row opt "agent-browser" "brew install agent-browser"
 have_cmd npx           && row ok "npx (스킬 레지스트리 조사)"  || row opt "npx"           "brew install node"
+have_cmd jq            && row ok "jq (축 저장소 조회)"          || row opt "jq"            "brew install jq"
 
 echo
 echo "조사·조작 스킬 — 설계 4단계(스킬 조사)와 브라우저 검증이 여기 기댄다"

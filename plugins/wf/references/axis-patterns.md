@@ -28,7 +28,7 @@ axes:
   behavior  ← 지라 본문, 컨플루언스 <링크>
   style     ← Figma <프레임>, as-is 촬영 <경로>
   state     ← 근거 없음  ⚠
-  성능      ← 해당 없음 (정적 조회)
+  performance ← 해당 없음 (정적 조회)
 진행할까요?
 ```
 
@@ -68,20 +68,66 @@ axes:
 
 축 목록이 스킬 본문이 아니라 `.claude/<plugin>.local.md`에 데이터로 있으므로 **재생성 없이 자란다.** 이것이 워크플로우가 시간이 지나며 좋아지는 유일한 경로다. `wf:retro`가 이 절차를 소유한다.
 
-# 도메인별 기본 축
+# 축 id는 grep 대상이다
 
-출발점일 뿐 완결된 목록이 아니다. 위 네 출처로 매번 도출하고 회고로 채운다.
+`check-coverage.sh`는 산출물에서 축 id 문자열을 찾아 판정한다. 그래서 id는 **영문 소문자·하이픈으로 고정**하고, 산출물의 행에 그 id가 그대로 나타나야 한다. 설명은 한국어로 쓰되 행의 식별자는 id를 쓴다.
 
-**프론트엔드 기능**
-behavior · style · state(로딩/빈/에러/비활성) · 반응형 · 접근성 · i18n · 권한 · 성능 · 코드 중복(기존 컴포넌트 재사용) · 보안 · 이전 반복 이슈
+```markdown
+| performance | 목록 500건까지 실측, 가상화 불필요 | as-is 실측 |
+```
 
-**백엔드 API**
-계약(요청/응답 스키마) · 에러 코드 · 인증·인가 · 검증 · 트랜잭션 경계 · 멱등성 · 성능(N+1·인덱스) · 로깅·관측 · 하위호환
+# 도메인별 기본 축 — 원격 저장소
 
-**데이터 파이프라인**
-스키마 · 지연·주기 · 실패·재시도 · 멱등성 · 백필 · 데이터 품질 검사 · 비용
+기본 축은 이 문서에 하드코딩되지 않는다. 문서에 박아두면 도메인이 늘 때마다 스킬을 고쳐야 하고, 회고로 나온 축이 다음 프로젝트에 전달되지 않는다.
 
-**마이그레이션**
-as-is 파일 레이어 대조 · 동작 동등성 · 스타일 동등성 · 테스트 이관 · 성능 회귀 · 미사용 코드 판별
+축은 저장소의 **커스텀 ref `refs/wf/axes`** 에 도메인별 JSON으로 산다.
 
-마이그레이션의 첫 축은 반드시 넣는다. as-is 파일 목록과 to-be 정의 항목을 매핑해 대응물 없는 레이어를 드러내는 것이 가장 값싼 누락 탐지다.
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" pull              # 생성 또는 fast-forward
+"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" list              # 어떤 도메인이 있나
+"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" resolve frontend  # extends 병합된 도메인
+"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" ids frontend      # id만 → check-coverage.sh 입력
+"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" retired frontend  # 뺀 축과 뺀 이유
+"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" push "메시지"       # 커밋·발행
+```
+
+**왜 커스텀 ref인가.** `refs/heads`·`refs/tags` 밖이라 브랜치도 태그도 아니다 — 웹 브랜치 목록에 안 뜨고, `ls-remote --heads`에 안 잡히고, 기본 clone/fetch가 안 가져온다(GitHub 실측). `main`은 마켓플레이스가 읽는 배포 브랜치이고 축은 그와 무관한 주기로 자라는 데이터라, 둘이 만나지 않는 것이 맞다. 로컬 store는 워킹트리가 있는 평범한 저장소라 손편집은 그대로 된다 — 숨는 건 원격 쪽뿐이다.
+
+대가는 분명하다: **웹 UI에서 보거나 고칠 수 없고**, 기본 refspec을 쓰는 미러는 이 데이터를 안 따라온다. 접근 경로는 `axis-sync.sh` 하나다.
+
+**저장 위치.** `~/.cache/wf/axis-store` (`WF_AXIS_STORE`로 변경). 플러그인 디렉토리에 두지 않는다 — 설치 캐시는 버전마다 새 디렉토리라 버전업 즉시 축이 고아가 된다.
+
+**최초 1회.** ref가 아직 없으면 `axis-sync.sh init`이 씨앗 도메인으로 store를 만든다. **push는 하지 않는다** — 원격 쓰기는 명령이 따로다.
+
+## 파일 형식
+
+```json
+{
+  "schema": 1,
+  "domain": "frontend-vue",
+  "description": "Vue 3 화면 기능",
+  "extends": ["frontend"],
+  "axes": [
+    { "id": "style",
+      "when": "화면에 렌더링되는가",
+      "ask": "시각 정의의 출처는 — 목업? 디자인 토큰? 기존 컴포넌트 재사용?",
+      "source_hint": "정적 목업, Figma 프레임, as-is 구현의 스타일 레이어",
+      "added_by": "2026-08 상세 화면 재작업 — 기능 축만 검토되어 스타일이 통째로 누락" }
+  ],
+  "retired": [
+    { "id": "analytics", "retired_by": "2026-09 — 트래킹이 플랫폼 레이어로 이동, 기능 정의에서 판단할 것이 없어짐" }
+  ]
+}
+```
+
+필수는 `schema`·`domain`·`description`·`axes`, 축의 필수는 `id`·`ask`·`added_by`다. 스키마 원본은 store의 `axes/_schema.json`.
+
+**`extends`** 는 한 단계 병합된다. 같은 id가 있으면 자식 것이 부모의 자리를 그대로 차지한다 — 파생 도메인이 공통 축을 베끼지 않고 질문만 바꿀 수 있다.
+
+**`retired`** 는 뺀 축을 `axes` 밖에 둔다. 같은 배열에 남기면 켜진 축과 죽은 축을 매 실행마다 다시 갈라야 하고 그 판정은 언젠가 틀린다. 그렇다고 지우기만 하면 근거는 히스토리에만 남는데 **아무도 히스토리를 grep하지 않아** 같은 축이 몇 달 뒤 그럴듯한 얼굴로 다시 들어온다. 읽는 시점이 다르므로(회고가 축을 추가하기 직전에만 본다) 배열을 나눈다.
+
+축에 심각도 구분은 두지 않는다. 검사의 차단/경고는 그 검사의 오탐 위험에 대한 판단이지만, 축의 존재는 **누가 그걸 봤는가**에 대한 것이라 경고로 낮춘다고 덜 위험해지지 않는다 — "경고 축"은 곧 안 보는 축이 된다. 해당 없으면 "해당 없음" 행을 쓰고, 정말 급하면 `.claude/wf-skip-checks`가 있다.
+
+**무엇을 올리나.** 같은 종류의 다른 프로젝트에서도 같은 누락을 잡았을 축만 올린다. 이 저장소의 특정 모듈이나 이 팀만의 규칙은 프로젝트 `.claude/<플러그인>.local.md`에 남긴다 — 올리면 다른 프로젝트에서 영구히 "해당 없음"인 행이 된다.
+
+씨앗으로 `frontend`(behavior·style·state·responsive·a11y·i18n·permission·performance·reuse·security·recurring)와 `backend-api`(contract·error-codes·authz·validation·transaction·idempotency·performance·observability·compat)가 들어 있다. 출발점일 뿐 완결된 목록이 아니다 — 위 네 출처로 매번 도출하고 회고로 채운다.
