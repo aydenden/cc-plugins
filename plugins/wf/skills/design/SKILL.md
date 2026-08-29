@@ -89,7 +89,7 @@ npx skills find "<단계 키워드>"
 "${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" list
 ```
 
-매칭되는 도메인이 있으면 `resolve <도메인>`으로 꺼내(`extends`가 병합된 형태다) **출발점으로 제시한다.** 없으면 새 도메인이므로 아래 네 출처로 도출하고, 8단계에서 저장소에 새 파일로 넣을지 정한다. 저장소가 아직 없으면(`pull`이 "does not exist"로 실패) 그 사실만 알리고 계속 간다 — 축 도출이 막히지는 않는다. 최초 1회는 `axis-sync.sh init`이 씨앗을 만든다.
+매칭되는 도메인이 있으면 `resolve <도메인>`으로 꺼내(`extends`가 병합된 형태다) **출발점으로 제시한다.** 없으면 새 도메인이므로 아래 네 출처로 도출한다 — 저장소에 새 도메인으로 올릴지는 8단계에서 정한다(기본은 올리지 않는 것이다). 저장소가 아직 없으면(`pull`이 "does not exist"로 실패) 그 사실만 알리고 계속 간다 — 축 도출이 막히지는 않는다. 최초 1회는 `axis-sync.sh init`이 씨앗을 만든다.
 
 저장소에서 꺼낸 축도 **그대로 쓰지 않는다.** 이 프로젝트에 해당하지 않는 축은 빼고, 왜 뺐는지 사용자에게 확인받는다. 남의 프로젝트 축을 다 켜면 "해당 없음" 행만 늘어난다.
 
@@ -122,6 +122,31 @@ npx skills find "<단계 키워드>"
 협의 결과를 `.claude/<플러그인명>.local.md`에 쓴다. 형식은 `${CLAUDE_PLUGIN_ROOT}/templates/workflow.local.md`, 소프트웨어 개발 기본형은 `spec-software-dev.local.md`.
 
 스킬 본문이 아니라 데이터로 두는 이유는 **축과 규약이 재생성 없이 자라야** 하기 때문이다. 회고로 축이 하나 늘 때마다 플러그인을 다시 만들어야 한다면 아무도 안 늘린다.
+
+## 5단계에서 새 도메인을 도출했다면
+
+축 저장소에 매칭되는 도메인이 없어 새로 도출한 경우다. **기본은 올리지 않는 것이다** — 프로젝트마다 도메인 파일이 하나씩 생기면 `list`가 목록으로서 쓸모없어지고, 남의 프로젝트에서 영구히 "해당 없음"인 축만 늘어난다.
+
+올리는 조건은 하나다: **같은 종류의 다른 프로젝트에서도 이 축들이 대부분 그대로 켜지겠는가.** 이 저장소의 특정 모듈·이 팀만의 규칙에 기댄 축이 절반을 넘으면 올리지 않고 `local.md`에만 둔다. 판단이 서지 않으면 사용자에게 묻는다.
+
+올리기로 했으면 기존 도메인을 상속할 수 있는지부터 본다. `frontend`가 있는데 Vue 프로젝트라면 새 도메인이 아니라 `extends`다 — 공통 축을 베끼면 한쪽만 고쳐지고 갈라진다.
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" pull
+"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" list   # 상속할 부모가 있나
+cat > "$("${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" path)/axes/<도메인>.json" <<'JSON'
+{ "schema": 1, "domain": "<도메인>", "description": "<어떤 작업에 켜지나>",
+  "extends": ["<부모 도메인>"],
+  "axes": [ { "id": "<영문-소문자>", "when": "", "ask": "...", "source_hint": "...",
+              "added_by": "<이 축이 어디서 나왔나 — 관찰이면 무엇을 관찰했는지>" } ] }
+JSON
+"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" ids <도메인>          # 병합 결과 확인
+"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" push "add <도메인> domain"
+```
+
+`added_by`는 여기서도 비우지 않는다. 설계 단계의 축은 재작업이 아니라 관찰에서 나오므로 **무엇을 관찰했는지**를 쓴다 — "as-is의 `LegacyDetail.vue` 스타일 레이어가 별도로 존재", "기존 엔드포인트 12개 전부 멱등 키를 다룸" 같은 것. "일반적으로 필요"는 근거가 아니다.
+
+형식과 운영 규칙은 `references/axis-patterns.md`에 있다.
 
 # 9. create-plugin에 인계한다
 
