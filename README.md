@@ -42,6 +42,12 @@ same kind. A project-specific axis — this repository's module, this team's rul
 project's `.claude/<plugin>.local.md`. Put it here and it becomes a row that is permanently
 "not applicable" everywhere else.
 
+An axis carries its bar, not only its question. `closed_when` says what the artifact's row must
+hold for the axis to count as closed; `excluded_when` says what must have been searched, and found
+absent, before the row may read "not applicable". Leave them out and every project rebuilds the bar
+from scratch — lower each time, and a verdict reached by not looking becomes indistinguishable from
+one reached by looking.
+
 Never clear `added_by`. Once the list is long it is the only way to tell an axis that came out of
 real rework from one that was added because it sounded thorough — and a list of the latter stops
 being read.
