@@ -9,6 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import {
   parseArgs, parseArxiv, reconstructAbstract, normalizeDoi, dateFromParts,
@@ -16,7 +17,7 @@ import {
   decodeEntities, truncate, formatAuthors, SOURCES,
 } from './research-channels.mjs';
 
-const SCRIPT = new URL('./research-channels.mjs', import.meta.url).pathname;
+const SCRIPT = fileURLToPath(new URL('./research-channels.mjs', import.meta.url));
 
 // Trimmed from a real export.arxiv.org response (2026-08-16 shape).
 const ARXIV_ATOM = `<?xml version="1.0" encoding="UTF-8"?>

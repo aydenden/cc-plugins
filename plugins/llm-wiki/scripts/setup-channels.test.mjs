@@ -10,12 +10,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import {
   CHANNELS, MANAGERS, parseArgs, parseAuthYaml, classify, detectManagers, installCommand, formatCmd,
 } from './setup-channels.mjs';
 
-const SCRIPT = new URL('./setup-channels.mjs', import.meta.url).pathname;
+const SCRIPT = fileURLToPath(new URL('./setup-channels.mjs', import.meta.url));
 
 const byId = (id) => CHANNELS.find((c) => c.id === id);
 const probe = (over = {}) => ({ spawned: true, code: 0, out: '', timedOut: false, ...over });

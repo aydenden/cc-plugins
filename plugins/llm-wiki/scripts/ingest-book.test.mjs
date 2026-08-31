@@ -17,10 +17,11 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn, readSkipList, trimUrl, checkUrlReachability, glossaryHits, normalizeGlossary } from './ingest-book.mjs';
 
-const SCRIPT = new URL('./ingest-book.mjs', import.meta.url).pathname;
+const SCRIPT = fileURLToPath(new URL('./ingest-book.mjs', import.meta.url));
 const SEP = '-'.repeat(48);
 
 /** marker markdown as produced with --paginate_output (page ids are 0-indexed). */
