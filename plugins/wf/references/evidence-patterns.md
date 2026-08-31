@@ -50,7 +50,7 @@ hook은 오탐이 나면 작업을 막는다. **명시적 우회 플래그를 �
 ## 스크립트
 
 - `scripts/check-citations.sh <파일...>` — 문서에서 경로 패턴을 뽑아 실존 검사
-- `scripts/check-coverage.sh <축목록> <산출물>` — 켜진 축 수와 산출물 항목 수 대조
+- `scripts/check-coverage.sh <축목록> <산출물>` — 켜진 축마다 행이 있는지(`UNADDRESSED`), 그 행에 출처·사유가 있는지(`INCOMPLETE`) 대조
 - `scripts/check-negation.sh <파일...>` — "없음/없다/찾지 못" 주장 옆에 검색 명령이 있는지
 
 생성기는 이 셋을 생성되는 플러그인의 `scripts/`로 복사하고, 필요한 단계의 hook에서 부르게 한다.

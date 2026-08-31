@@ -1,6 +1,6 @@
 {
   "name": "wf",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "워크플로우 생성기 — 작업 흐름을 설명하면 그에 맞는 워크플로우 플러그인을 설계한다. 단계 분해와 이음매/위임 판정, find-skills 조사와 협의, 정의 단계의 검토 축과 구현 전 프리뷰, 단계별 증거 검사(존재·인용·실행·불변식·부정·커버리지)를 설계하고 plugin-dev:create-plugin에 인계한다.",
   "author": {
     "name": "aydenden"

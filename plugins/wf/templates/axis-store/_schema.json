@@ -47,6 +47,14 @@
             "type": "string",
             "description": "Where the evidence for this axis usually lives."
           },
+          "closed_when": {
+            "type": "string",
+            "description": "What the artifact's row must carry for this axis to count as closed. Without it the axis travels with its question but not its bar, and every project re-invents the bar — usually lower."
+          },
+          "excluded_when": {
+            "type": "string",
+            "description": "What must have been searched, and found absent, before the row may read 'not applicable'. A verdict reached by not looking is indistinguishable in the artifact from one reached by looking, which is why this is stated per axis rather than left to judgement."
+          },
           "added_by": {
             "type": "string",
             "minLength": 1,
