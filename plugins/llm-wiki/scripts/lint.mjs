@@ -119,6 +119,19 @@ function fail(message) {
   process.exit(2);
 }
 
+/**
+ * Read a UTF-8 file with newlines normalized to LF.
+ *
+ * The vault is a git repo, so a Windows checkout with `core.autocrlf=true` hands
+ * back CRLF while the committed bytes are LF. Every parser below — and the raw/
+ * `sha256:`, which is recorded once and verified on every machine — has to see
+ * the same text on each platform, so normalize at the single read boundary
+ * instead of teaching each regex about `\r`.
+ */
+function readText(file) {
+  return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+}
+
 const HELP = `llm-wiki lint — vault health check and index generation
 
   node lint.mjs [--vault PATH]                     summary
@@ -141,7 +154,7 @@ The vault path comes from --vault, else $WIKI_PATH, else $OBSIDIAN_VAULT_PATH.
 function loadSchema(vault) {
   const schemaPath = path.join(vault, 'SCHEMA.md');
   if (!fs.existsSync(schemaPath)) fail(`${schemaPath} not found — the vault is not an LLM Wiki`);
-  const text = fs.readFileSync(schemaPath, 'utf8');
+  const text = readText(schemaPath);
 
   // Frontmatter contract: the first fenced yaml block under "## Frontmatter".
   const fmSection = section(text, 'Frontmatter');
@@ -247,7 +260,6 @@ function parseFrontmatter(text) {
   // The body starts after the closing `---` line, newline included — that is
   // the span the raw/ sha256: is computed over (verified against the vault).
   let bodyOffset = end + 4;
-  if (text[bodyOffset] === '\r') bodyOffset++;
   if (text[bodyOffset] === '\n') bodyOffset++;
   return { fields, order, raw, bodyOffset };
 }
@@ -292,7 +304,7 @@ function loadVault(vault, schema) {
     const dir = rel.includes('/') ? rel.slice(0, rel.indexOf('/')) : '';
     const name = path.basename(rel);
     if (!pageDirs.has(dir) || NON_PAGE_FILES.has(name)) continue;
-    const text = fs.readFileSync(path.join(vault, rel), 'utf8');
+    const text = readText(path.join(vault, rel));
     const fm = parseFrontmatter(text);
     const body = fm ? text.slice(fm.bodyOffset) : text;
     const h1 = body.match(/^#\s+(.+)$/m);
@@ -472,7 +484,7 @@ function runChecks(vault, schema, model) {
   // hashing it would report every feed file as drifted.
   const drift = [];
   for (const rel of walk(vault, 'raw')) {
-    const text = fs.readFileSync(path.join(vault, rel), 'utf8');
+    const text = readText(path.join(vault, rel));
     const fm = parseFrontmatter(text);
     const recorded = fm && fm.fields.sha256;
     if (!recorded || !/^[0-9a-f]{64}$/.test(String(recorded))) continue;
@@ -678,7 +690,7 @@ function writeIndexes(vault, schema, model) {
 function updateRootIndex(vault, schema, model, byDir) {
   const rootPath = path.join(vault, 'index.md');
   if (!fs.existsSync(rootPath)) return { status: 'missing' };
-  const text = fs.readFileSync(rootPath, 'utf8');
+  const text = readText(rootPath);
   const start = text.indexOf(AUTO_START);
   const end = text.indexOf(AUTO_END);
   if (start === -1 || end === -1 || end < start) return { status: 'no-markers' };
@@ -723,7 +735,7 @@ function updateRootIndex(vault, schema, model, byDir) {
 function measureLog(vault) {
   const logPath = path.join(vault, 'log.md');
   if (!fs.existsSync(logPath)) return null;
-  const text = fs.readFileSync(logPath, 'utf8');
+  const text = readText(logPath);
   const entries = (text.match(/^## \[/gm) || []).length;
   const bytes = Buffer.byteLength(text, 'utf8');
   const over = [];
@@ -760,7 +772,7 @@ const DEFAULT_LOG_HEADER = [
 function rotateLog(vault) {
   const logPath = path.join(vault, 'log.md');
   if (!fs.existsSync(logPath)) return { status: 'missing' };
-  const text = fs.readFileSync(logPath, 'utf8');
+  const text = readText(logPath);
   const { header, body } = splitLog(text);
   if (!body) return { status: 'empty' };
 

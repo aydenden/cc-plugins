@@ -29,6 +29,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 // --- Constants ---
 
@@ -2015,7 +2016,7 @@ function countFindings(logFile) {
 
 // --- Entry point ---
 
-const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
+const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 if (invokedDirectly) process.exit(main(process.argv.slice(2)));
 
 export { pickLane, buildManifest, laneFlagText, readSkipList, trimUrl, probeUrls, checkUrlReachability, normalizeGlossary, glossaryHits, bookAssetId, rewriteAssetLinks, findIsbn, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv };

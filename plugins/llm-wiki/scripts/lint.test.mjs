@@ -12,8 +12,10 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const LINT = new URL('./lint.mjs', import.meta.url).pathname;
+// `URL.pathname` yields `/C:/…` on Windows, which resolves to `C:\C:\…`.
+const LINT = fileURLToPath(new URL('./lint.mjs', import.meta.url));
 
 const SCHEMA = `# Wiki Schema
 
@@ -364,4 +366,59 @@ test('a small log raises nothing', () => {
 test('unknown group and missing vault fail loudly', () => {
   assert.throws(() => lint(vault, ['--group', 'nope']), /status 2|Command failed/);
   assert.throws(() => execFileSync(process.execPath, [LINT, '--vault', path.join(vault, 'nope')], { encoding: 'utf8' }));
+});
+
+test('a CRLF working copy parses the same as LF', () => {
+  // A git checkout with core.autocrlf=true hands back CRLF while the committed
+  // bytes are LF, so every parser here must see the same text on both.
+  const crlf = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-wiki-crlf-'));
+  try {
+    const write = (rel, body) => {
+      fs.mkdirSync(path.join(crlf, path.dirname(rel)), { recursive: true });
+      fs.writeFileSync(path.join(crlf, rel), body.replace(/\n/g, '\r\n'), 'utf8');
+    };
+    write('SCHEMA.md', SCHEMA);
+    write('log.md', '# Log\n');
+    write('concepts/a.md', '---\ntype: concept\ntags: [approved]\nsummary: page a\ndate: 2026-08-16\nsources:\n  - https://example.com/a\n---\n\n# A\n\n[[concepts/b]]\n');
+    write('concepts/b.md', '---\ntype: concept\ntags: [approved]\nsummary: page b\ndate: 2026-08-16\nsources:\n  - https://example.com/b\n---\n\n# B\n\n[[concepts/a]]\n');
+    // A removed field must still be caught, which only works if the SCHEMA
+    // "Removed fields" list was parsed out of the CRLF text.
+    write('concepts/c.md', '---\ntype: concept\ntags: [approved]\nsummary: page c\ndate: 2026-08-16\ntitle: removed field\nsources:\n  - https://example.com/c\n---\n\n# C\n\n[[concepts/a]]\n');
+
+    const out = lint(crlf).split('\n');
+    assert.match(out[0], /^LINT error=\d+ backlog=\d+$/);
+    const fm = JSON.parse(lint(crlf, ['--group', 'frontmatter', '--json', '--limit', '100']));
+    assert.equal(fm.items.filter((i) => i.path === 'concepts/a.md').length, 0, 'a valid CRLF page is not a frontmatter error');
+    const removed = fm.items.find((i) => i.path === 'concepts/c.md');
+    assert.ok(removed && removed.problems.includes('removed field title'), 'the SCHEMA removed-field list is parsed out of CRLF text');
+  } finally {
+    fs.rmSync(crlf, { recursive: true, force: true });
+  }
+});
+
+test('raw sha256 matches whether the working copy is LF or CRLF', () => {
+  // The digest is recorded once and read on every platform, so it must be
+  // computed over LF-normalized text rather than the checkout's bytes.
+  const digest = (body) => crypto.createHash('sha256').update(body, 'utf8').digest('hex');
+  const body = '# Source\n\nbody line one\nbody line two\n';
+  const make = (eol) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-wiki-eol-'));
+    const write = (rel, text) => {
+      fs.mkdirSync(path.join(root, path.dirname(rel)), { recursive: true });
+      fs.writeFileSync(path.join(root, rel), text.replace(/\n/g, eol), 'utf8');
+    };
+    write('SCHEMA.md', SCHEMA);
+    write('log.md', '# Log\n');
+    write('raw/articles/one.md', `---\nsource_url: https://example.com/one\ningested: 2026-08-16\nsha256: ${digest(body)}\n---\n${body}`);
+    return root;
+  };
+  for (const eol of ['\n', '\r\n']) {
+    const root = make(eol);
+    try {
+      const drift = JSON.parse(lint(root, ['--group', 'raw-drift', '--json', '--limit', '100']));
+      assert.equal(drift.total, 0, `no drift with ${eol === '\n' ? 'LF' : 'CRLF'} line endings`);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  }
 });
