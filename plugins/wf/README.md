@@ -42,7 +42,7 @@ references/
   spec-change.md        스펙 변경의 파급 · drift · 손수정 보존
 scripts/
   check-citations.sh    인용 경로 실존 검사        (차단)
-  check-coverage.sh     축 수 vs 산출물 항목 수     (차단)
+  check-coverage.sh     축마다 행 + 그 행의 근거     (차단)
   check-negation.sh     "없음" 주장에 검색 명령 유무 (경고)
   check-deps.sh         의존성 유무 + 설치법 (design 0단계)
   axis-sync.sh          도메인 축 저장소 pull/push (refs/wf/axes)

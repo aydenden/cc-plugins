@@ -97,6 +97,8 @@ npx skills find "<단계 키워드>"
 
 축과 **충족 근거를 짝지어** 제시하고 컨펌받는 형태로 설계한다. 근거가 비는 축이 눈에 띄는 것이 이 방식의 값이다.
 
+저장소의 축은 질문(`ask`)만이 아니라 **판정 기준**(`closed_when`·`excluded_when`)을 갖고 온다. 산출물 형태를 정할 때 그 기준이 행에 실제로 담기게 만든다 — 담기지 않으면 `check-coverage.sh`가 빈칸을 잡을 뿐 기준 자체는 아무 데도 없게 된다.
+
 # 6. 구현 전 프리뷰를 넣을지 판단한다
 
 정의 산출물을 실행 가능한 형태로 렌더링할 수 있으면 넣는다. 문서로만 있으면 빠진 절은 스크롤하며 넘어가지지만, 렌더링하면 빠진 정의가 눈에 보이는 결함이 된다.
@@ -138,6 +140,8 @@ cat > "$("${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" path)/axes/<도메인>.jso
 { "schema": 1, "domain": "<도메인>", "description": "<어떤 작업에 켜지나>",
   "extends": ["<부모 도메인>"],
   "axes": [ { "id": "<영문-소문자>", "when": "", "ask": "...", "source_hint": "...",
+              "closed_when": "<행이 무엇을 담고 있어야 이 축이 닫힌 것인가>",
+              "excluded_when": "<무엇을 찾아본 뒤라야 「해당 없음」이라 쓸 수 있나>",
               "added_by": "<이 축이 어디서 나왔나 — 관찰이면 무엇을 관찰했는지>" } ] }
 JSON
 "${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" ids <도메인>          # 병합 결과 확인

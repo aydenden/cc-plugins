@@ -14,6 +14,8 @@ axes:
     when: "화면에 렌더링되는가"
     ask: "시각 정의의 출처는 — 목업? 디자인 토큰? 기존 컴포넌트 재사용?"
     source_hint: "정적 목업, Figma 프레임, as-is 구현의 스타일 레이어"
+    closed_when: "치수·색·타이포가 값마다 출처와 함께 적혀 있다"
+    excluded_when: "정본에 이 화면이 없다는 것을 찾아본 뒤 적는다"
     added_by: "2026-08 재작업 — 기능 축만 보고 스타일을 통째로 놓침"
 ```
 
@@ -34,6 +36,15 @@ axes:
 
 "근거 없음"이 눈에 띄는 것이 이 방식의 값이다.
 
+## 축에는 질문만이 아니라 판정 기준이 붙는다
+
+`ask`만 가진 축은 물음표만 갖고 이동한다. **무엇이면 닫힌 것인가**가 축과 함께 오지 않으면 프로젝트마다 그 기준을 다시 세우고, 다시 세운 기준은 대개 더 낮다.
+
+- `closed_when` — 산출물의 행이 무엇을 담고 있어야 이 축이 닫힌 것인가
+- `excluded_when` — 「해당 없음」이라 쓰려면 **무엇을 찾아본 뒤**여야 하는가
+
+**「해당 없음」은 관측이지 침묵이 아니다.** 성립: `해당 없음 — 목업 3종·디자인 파일·기획서 어디에도 이 화면의 실패 상태가 없다 (2026-08-26 확인)`. 불성립: `해당 없음 — 이번 범위 아님`, 빈칸, `추후`. 찾아보지 않고 낸 판정은 산출물에서 찾아보고 낸 판정과 구분되지 않는다 — 그래서 기준을 축마다 적어 두고 사람의 재량에 맡기지 않는다.
+
 ## 산출물 형태를 고정해 셀 수 있게 만든다
 
 "고려하라"는 권고는 지켜지지 않는다. 켜진 축이 N개면 산출물에 N개 항목이 있어야 한다. 제외도 항목이다.
@@ -47,7 +58,9 @@ axes:
 | i18n | **해당 없음** — 단일 언어 프로젝트 |
 ```
 
-이러면 `check-coverage.sh`가 행 수를 세어 결정적으로 판정한다.
+이러면 `check-coverage.sh`가 결정적으로 판정한다. 두 가지를 갈라서 낸다 — 행이 아예 없으면 `UNADDRESSED`(아무도 안 봤다), 행은 있는데 출처 칸이 비었거나 「해당 없음」에 사유가 없으면 `INCOMPLETE`(근거 없는 판정). 둘 다 차단이다.
+
+스크립트가 검사하는 것은 구조뿐이다 — `closed_when`의 **내용**이 충족됐는지는 사람이 본다. 빈칸을 통과시키지 않는 것만으로도 "고려했다"가 성립하는 가장 흔한 경로가 막힌다.
 
 # 축은 어디서 오나 — 네 출처
 
@@ -75,6 +88,8 @@ axes:
 ```markdown
 | performance | 목록 500건까지 실측, 가상화 불필요 | as-is 실측 |
 ```
+
+**id는 토큰 단위로 매칭된다.** `state`가 `state-lifetime` 행을 자기 행으로 삼으면 축 하나가 다른 축의 행으로 조용히 충족된다 — 접두사가 겹치는 id를 피하려 애쓸 필요는 없지만, 산출물의 행은 id를 **그 자체로** 담아야 한다.
 
 # 도메인별 기본 축 — 원격 저장소
 
@@ -112,6 +127,8 @@ axes:
       "when": "화면에 렌더링되는가",
       "ask": "시각 정의의 출처는 — 목업? 디자인 토큰? 기존 컴포넌트 재사용?",
       "source_hint": "정적 목업, Figma 프레임, as-is 구현의 스타일 레이어",
+      "closed_when": "치수·색·타이포·radius·간격이 값마다 출처와 함께 적혀 있다",
+      "excluded_when": "정본에 이 화면이 없다는 것을 찾아본 뒤 적는다 — 어디를 봤는지와 확인 시점이 함께",
       "added_by": "2026-08 상세 화면 재작업 — 기능 축만 검토되어 스타일이 통째로 누락" }
   ],
   "retired": [
@@ -120,7 +137,7 @@ axes:
 }
 ```
 
-필수는 `schema`·`domain`·`description`·`axes`, 축의 필수는 `id`·`ask`·`added_by`다. 스키마 원본은 store의 `axes/_schema.json`.
+필수는 `schema`·`domain`·`description`·`axes`, 축의 필수는 `id`·`ask`·`added_by`이고 `when`·`source_hint`·`closed_when`·`excluded_when`이 선택이다. 판정 기준 둘은 스키마상 선택이지만 **비워 두면 그 축은 질문만 갖고 이동한다.** 스키마 원본은 store의 `axes/_schema.json`.
 
 **`extends`** 는 한 단계 병합된다. 같은 id가 있으면 자식 것이 부모의 자리를 그대로 차지한다 — 파생 도메인이 공통 축을 베끼지 않고 질문만 바꿀 수 있다.
 
@@ -130,4 +147,4 @@ axes:
 
 **무엇을 올리나.** 같은 종류의 다른 프로젝트에서도 같은 누락을 잡았을 축만 올린다. 이 저장소의 특정 모듈이나 이 팀만의 규칙은 프로젝트 `.claude/<플러그인>.local.md`에 남긴다 — 올리면 다른 프로젝트에서 영구히 "해당 없음"인 행이 된다.
 
-씨앗으로 `frontend`(behavior·style·state·responsive·a11y·i18n·permission·performance·reuse·security·recurring)와 `backend-api`(contract·error-codes·authz·validation·transaction·idempotency·performance·observability·compat)가 들어 있다. 출발점일 뿐 완결된 목록이 아니다 — 위 네 출처로 매번 도출하고 회고로 채운다.
+씨앗으로 `frontend`(behavior·style·state·state-lifetime·contract·entry-path·defaults·responsive·a11y·i18n·permission·performance·reuse·security·recurring·scope)와 `backend-api`(contract·error-codes·authz·validation·transaction·idempotency·performance·observability·compat)가 들어 있다. `scope`는 다른 축 위에 얹히므로 — 다른 축이 정해져야 「이것」이 무엇인지 정해진다 — 목록 마지막에 둔다. 출발점일 뿐 완결된 목록이 아니다 — 위 네 출처로 매번 도출하고 회고로 채운다.
