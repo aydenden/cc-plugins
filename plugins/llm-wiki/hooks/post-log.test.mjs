@@ -48,8 +48,11 @@ sources:                                                # required, always a YAM
 const vaults = [];
 test.after(() => vaults.forEach((v) => fs.rmSync(v, { recursive: true, force: true })));
 
-/** Throwaway vault: healthy by default, one planted broken link when asked. */
-function makeVault({ broken = false } = {}) {
+/**
+ * Throwaway vault: healthy by default, one planted broken link when asked, and
+ * optionally a git repository so the hook's commit step has something to act on.
+ */
+function makeVault({ broken = false, git = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-wiki-hook-'));
   vaults.push(root);
   const write = (rel, body) => {
@@ -64,7 +67,21 @@ function makeVault({ broken = false } = {}) {
       '---\ntype: concept\ntags: [approved]\nsummary: the spoke\ndate: 2026-08-16\n'
       + 'sources:\n  - https://example.com/a\n---\n\n# Spoke\n\nSee [[nowhere]].\n');
   }
+  if (git) {
+    const run = (...args) => spawnSync('git', ['-C', root, ...args], { encoding: 'utf8' });
+    spawnSync('git', ['init', '-b', 'main', root], { stdio: 'ignore' });
+    run('config', 'user.email', 'test@example.com');
+    run('config', 'user.name', 'test');
+    run('add', '-A');
+    run('commit', '-m', 'init');
+  }
   return root;
+}
+
+/** Subject of the vault's most recent commit, or '' when there is none. */
+function lastCommit(vault) {
+  const res = spawnSync('git', ['-C', vault, 'log', '-1', '--format=%s'], { encoding: 'utf8' });
+  return res.status === 0 ? res.stdout.trim() : '';
 }
 
 /** Invoke the hook exactly as Claude Code does: payload on stdin, vault via env. */
@@ -129,4 +146,33 @@ test('on error groups: exits 2 so the summary is fed back to Claude', () => {
   assert.equal(res.stdout, '');
   assert.match(res.stderr, /LINT error=\d+/);
   assert.match(res.stderr, /broken-links/);
+});
+
+test('on a clean git vault: commits the cycle under the log-derived subject', () => {
+  const vault = makeVault({ git: true });
+  fs.appendFileSync(path.join(vault, 'log.md'), '\n## [2026-09-03] ingest | 훅 커밋 검증\n', 'utf8');
+
+  const res = runHook(vault, path.join(vault, 'log.md'));
+  assert.equal(res.status, 0);
+  const payload = JSON.parse(res.stdout);
+  assert.match(payload.systemMessage, /GIT (committed|pushed)/);
+  assert.equal(lastCommit(vault), 'ingest(vault): 훅 커밋 검증');
+  assert.equal(spawnSync('git', ['-C', vault, 'status', '--porcelain'], { encoding: 'utf8' }).stdout.trim(), '');
+});
+
+test('on lint errors: defers the commit instead of recording a broken vault', () => {
+  const vault = makeVault({ broken: true, git: true });
+  fs.appendFileSync(path.join(vault, 'log.md'), '\n## [2026-09-03] ingest | 깨진 링크\n', 'utf8');
+
+  const res = runHook(vault, path.join(vault, 'log.md'));
+  assert.equal(res.status, 2);
+  assert.match(res.stderr, /커밋은 보류/);
+  assert.equal(lastCommit(vault), 'init', 'no new commit was made');
+});
+
+test('without git the maintenance result is still reported', () => {
+  const vault = makeVault();
+  const res = runHook(vault, path.join(vault, 'log.md'));
+  assert.equal(res.status, 0);
+  assert.match(JSON.parse(res.stdout).systemMessage, /GIT not-a-repo/);
 });

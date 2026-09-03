@@ -23,6 +23,8 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 ② `Read $WIKI/index.md` — **전체를 읽는다.** 루트 index는 전수 카탈로그가 아니라 주제군 지도(작게 유지)이므로 항상 전량 읽어 볼트가 쓰는 어휘와 카테고리 구성을 잡는다.
 ③ `Bash: tail -40 "$WIKI/log.md"` — 최근 활동을 파악해 중복 작업을 방지한다.
 
+볼트를 원격과 맞추는 일은 세션 시작 훅(`hooks/session-start.sh`)이 한다 — 깨끗한 브랜치는 자동 fast-forward되고, 워킹트리가 더럽거나 갈라졌으면 경고만 뜬다. `GIT dirty` / `GIT diverged` / `GIT pull-failed` 경고를 봤다면 **볼트에 쓰기 전에 그것부터 해소한다** — 낡은 사본 위에 쓰면 규칙 3의 중복 검사가 원격에 이미 있는 페이지를 못 본다.
+
 **검색은 오리엔테이션이 아니라 규칙 3의 첫 단계다.** index는 Grep 미적중 시의 폴백이자 어휘 공급원이지 1차 검색 경로가 아니다 — 상세는 [references/search-expansion.md](references/search-expansion.md).
 
 오리엔테이션 없이 쓰기 시작하면 중복 페이지 생성, 교차참조 누락, 스키마 위반이 발생한다.
@@ -102,11 +104,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/lint.mjs" --vault "$WIKI" --rotate-log
 
 `log-YYYY.md`(아카이브에 담긴 최신 엔트리의 연도)로 옮기고 헤더와 이전 이력 포인터를 남긴다. 아카이브도 Grep 전수검색 대상이라 과거 이력은 잃지 않는다.
 
-# 규칙 7: 정비 (lint) — 훅이 자동 실행한다
+# 규칙 7: 정비(lint)와 커밋 — 훅이 자동 실행한다
 
-**직접 호출하지 않는다.** 규칙 6의 `log.md` append가 끝나면 `PostToolUse` 훅(`hooks/post-log.mjs`)이 그 쓰기를 감지해 index 재생성(`--write-index`)과 점검을 순서대로 돌린다. 사용자 호출용 커맨드는 없다 — 실행 시점이 log 기록에 고정돼 있어야 빠지지 않는다.
+**직접 호출하지 않는다.** 규칙 6의 `log.md` append가 끝나면 `PostToolUse` 훅(`hooks/post-log.mjs`)이 그 쓰기를 감지해 index 재생성(`--write-index`) → 점검 → **커밋·푸시**를 순서대로 돌린다. 사용자 호출용 커맨드는 없다 — 실행 시점이 log 기록에 고정돼 있어야 빠지지 않는다. `git add`나 `git commit`을 직접 실행하지 않는다.
 
-훅이 돌려주는 것은 그룹별 건수 요약 한 덩어리다.
+훅이 돌려주는 것은 lint 요약 한 덩어리와 `GIT <status> — <detail>` 한 줄이다.
 
 - 요약이 `LINT ok backlog=N`이면 그대로 보고에 옮기고 끝낸다.
 - `LINT error=N …`이면 **그 자리에서 조치**한다. error 그룹은 `broken-links` `frontmatter` `raw-drift` `log-rotation` `contested`이며, 이때만 드릴다운한다:
@@ -117,6 +119,20 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/lint.mjs" --vault "$WIKI" --rotate-log
 
 - backlog 그룹(`source-format` `tags` `orphans` `raw-unabsorbed` `low-confidence-unmarked` `stale-pages` `oversized` `title-dups`)은 볼트 전역 레거시다. 건수만 보고하고 넘어간다. **전체 목록을 대화에 쏟지 않는다.**
 - 훅 출력이 오지 않았으면(훅 미설치, `WIKI_PATH` 미설정, node 부재) 위 요약 명령을 직접 한 번 돌리고, 그마저 안 되면 "정비 미실행"을 보고에 한 줄로 남긴다.
+
+## 커밋·푸시 (`GIT` 줄)
+
+lint가 통과한 사이클만 커밋된다. **error 그룹이 있으면 훅은 커밋을 보류한다** — 깨진 상태를 공유 히스토리에 남기지 않기 위해서다. error를 조치한 뒤 규칙 6대로 `log.md`에 다시 기록하면 그때 이번 사이클 변경까지 함께 커밋된다.
+
+커밋 메시지는 묻지 않는다 — 훅이 `log.md` 마지막 엔트리 헤더를 `{action}(vault): {제목}`으로 옮긴다. 규칙 6의 헤더 형식이 곧 커밋 메시지이므로 제목을 성의 있게 쓴다.
+
+| `GIT` 상태 | 뜻 | 할 일 |
+|---|---|---|
+| `pushed` / `committed` | 커밋(·푸시) 완료 | 보고에 한 줄 옮기고 끝 |
+| `nothing-to-commit` | 변경 없음 | 그대로 보고 |
+| `push-rejected` | 다른 기기가 원격을 먼저 옮겼다 | 커밋은 로컬에 안전하다. `git -C "$WIKI" pull --rebase` 후 push하고, 충돌은 규칙 8(모순 처리)로 다룬다 |
+| `push-failed` / `commit-failed` | 네트워크·인증·잠금 실패 | 원인을 사용자에게 보고한다. 자동 재시도하지 않는다 |
+| `not-a-repo` / `no-upstream` | 볼트가 git으로 공유되지 않는다 | 조치 없음 |
 
 # 규칙 8: 모순 처리 (SCHEMA.md Update Policy)
 
@@ -131,4 +147,4 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/lint.mjs" --vault "$WIKI" --rotate-log
 
 # 규칙 9: 보고
 
-생성·갱신한 모든 파일 목록, 역링크 삽입 위치, lint 요약(error 조치 내역 + backlog 건수)을 사용자에게 보고한다.
+생성·갱신한 모든 파일 목록, 역링크 삽입 위치, lint 요약(error 조치 내역 + backlog 건수), 그리고 커밋·푸시 결과(`GIT` 줄)를 사용자에게 보고한다. 커밋이 보류됐거나 푸시가 거절됐으면 그 사실을 숨기지 않는다 — 다른 기기에서 그만큼 낡은 볼트를 보게 된다.
