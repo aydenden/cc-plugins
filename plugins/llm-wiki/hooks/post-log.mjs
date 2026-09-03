@@ -13,9 +13,16 @@
  * Dependency-free Node ESM: node: builtins only, so it runs on macOS / Linux /
  * Windows 11 with nothing but `node` on PATH.
  *
+ * Maintenance is followed by the git commit and push (ccp-o7m): the same write
+ * that marks the end of a cycle is the only point where "what changed" is exactly
+ * one cycle's worth, so that is where the vault is committed. A vault with lint
+ * errors is not committed — the fix lands in the next cycle's commit instead of
+ * putting a broken state in the shared history.
+ *
  * Output contract (ccp-hht): the summary goes back to the agent verbatim.
- * Clean vault -> systemMessage, exit 0. Error groups present -> stderr, exit 2, so
- * the feedback is fed back to Claude and acted on in place.
+ * Clean vault -> systemMessage, exit 0. Error groups present, or a commit/push
+ * that needs a decision -> stderr, exit 2, so the feedback is fed back to Claude
+ * and acted on in place.
  *
  * The hook never blocks the user's work: any failure of its own (bad stdin, missing
  * vault, lint crash) exits 0 silently.
@@ -25,6 +32,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { commit, format } from '../scripts/vault-git.mjs';
 
 const LINT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'lint.mjs');
 const LINT_TIMEOUT_MS = 60_000;
@@ -87,14 +95,31 @@ function main() {
 
   if (/^LINT error=/.test(summary)) {
     // error groups are "fix now" — exit 2 puts stderr in front of the agent.
+    // The commit is deliberately skipped: it happens on the next cycle, once the
+    // errors are gone, and carries this cycle's changes along with it.
     process.stderr.write(
       `${message}\n볼트 쓰기는 정상 완료됐다. error 그룹을 지금 조치한다 — 상세는 ` +
-        `node "$CLAUDE_PLUGIN_ROOT/scripts/lint.mjs" --vault "$WIKI" --group <id> --json.\n`,
+        `node "$CLAUDE_PLUGIN_ROOT/scripts/lint.mjs" --vault "$WIKI" --group <id> --json.\n` +
+        '커밋은 보류했다 — error를 고치고 log.md에 다시 기록하면 그때 함께 커밋된다.\n',
     );
     process.exit(2);
   }
 
-  process.stdout.write(`${JSON.stringify({ systemMessage: message })}\n`);
+  let git;
+  try {
+    git = commit(vault);
+  } catch (e) {
+    // git missing or unusable is not a reason to disturb the user's work.
+    git = { status: 'skipped', detail: `git unavailable (${e.message})`, exit: 0 };
+  }
+  const full = `${message}\n${format(git)}`;
+
+  if (git.exit !== 0) {
+    process.stderr.write(`${full}\n볼트 정비는 통과했다. 위 git 상태를 지금 조치한다.\n`);
+    process.exit(2);
+  }
+
+  process.stdout.write(`${JSON.stringify({ systemMessage: full })}\n`);
 }
 
 main();

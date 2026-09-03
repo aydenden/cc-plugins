@@ -34,14 +34,14 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 | `/llm-wiki:research <주제>` | Ingest(research) | 서브에이전트 1개가 채널 라우팅·조사·`raw/` 원문 확보 → 메인이 wiki-schema 절차로 적재 |
 | `/llm-wiki:setup-channels` | — | 선택 계층 채널(gh·Reddit·X·YouTube) 진단·설치. **옵트인** — 한 번도 안 돌려도 리서치는 필수 계층으로 완주한다 |
 
-Lint 커맨드는 없다 — 정비는 아래 훅이 log 기록 직후 자동으로 돌린다.
+Lint 커맨드는 없다 — 정비도 커밋도 아래 훅이 log 기록 직후 자동으로 돌린다.
 
 ## 훅
 
 | 훅 | 설명 |
 |----|------|
-| SessionStart | 볼트 도달·초기화 검증(경로, `SCHEMA.md`)만. 세션을 막지 않는다 |
-| PostToolUse (`Write\|Edit`) | 대상이 볼트 `log.md`일 때만 동작 — `--write-index`로 index 재생성 후 점검을 돌려 요약을 에이전트에 되돌린다. error 그룹이 있으면 exit 2로 즉시 조치를 강제하고, 그 외 파일 쓰기에서는 아무것도 하지 않고 즉시 종료 |
+| SessionStart | 볼트 도달·초기화 검증(경로, `SCHEMA.md`) 후 원격과 동기화 — fetch하고 워킹트리가 깨끗하면 fast-forward, 더럽거나 갈라졌으면 경고만. 세션을 막지 않는다 |
+| PostToolUse (`Write\|Edit`) | 대상이 볼트 `log.md`일 때만 동작 — `--write-index`로 index 재생성 → 점검 → 커밋·푸시. 커밋 메시지는 log.md 마지막 엔트리 헤더에서 뽑는다(`{action}(vault): {제목}`). lint error가 있으면 **커밋을 보류**하고 exit 2로 즉시 조치를 강제하며, 그 외 파일 쓰기에서는 아무것도 하지 않고 즉시 종료 |
 
 ## 검색: CC 내장 Grep 전수검색
 
@@ -112,9 +112,10 @@ plugins/llm-wiki/
 ├── commands/                     # capture · recall · research · setup-channels
 ├── skills/                       # wiki-schema(적재 절차) · ingest-book(도서 변환)
 ├── docs/research-channels.md     # 채널 레지스트리 SSoT
-├── hooks/                        # SessionStart(볼트 검증) + PostToolUse(log.md → 자동 정비)
+├── hooks/                        # SessionStart(볼트 검증·pull) + PostToolUse(log.md → 정비·커밋)
 └── scripts/                      # 의존성 0 Node .mjs — 전부 `node` 하나로 돈다
     ├── lint.mjs                  #   볼트 점검 + index 생성
+    ├── vault-git.mjs             #   볼트 원격 동기화 (sync/commit) — 두 훅이 공유
     ├── research-channels.mjs     #   무키 논문 5종 + X 단건
     ├── setup-channels.mjs        #   선택 채널 진단·설치
     └── ingest-book.mjs           #   도서 변환 파이프라인 (설치형 도구 필요)
@@ -126,5 +127,6 @@ plugins/llm-wiki/
 
 ```bash
 node --test scripts/lint.test.mjs scripts/ingest-book.test.mjs \
-  scripts/research-channels.test.mjs scripts/setup-channels.test.mjs hooks/post-log.test.mjs
+  scripts/research-channels.test.mjs scripts/setup-channels.test.mjs \
+  scripts/vault-git.test.mjs hooks/post-log.test.mjs
 ```
