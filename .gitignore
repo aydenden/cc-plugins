@@ -27,3 +27,6 @@ node_modules/
 
 # Environment
 .env
+
+# ingest-book 기본 출력 경로 (도서 변환물)
+book-out/
