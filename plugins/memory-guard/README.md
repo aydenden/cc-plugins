@@ -101,52 +101,24 @@ claude --plugin-dir ./plugins/memory-guard
 >
 > stale 점검(②)의 `asyncRewake`는 비교적 최신 CC hook 기능이다. 미지원 버전에서는 조용히 무시되거나 동기 실행될 수 있다(인덱스 차단 hook ①은 영향 없음).
 
-## OpenCode 지원
-
-`opencode-claude-memory` 플러그인과 같은 CC auto memory 경로(`~/.claude/projects/<encoded>/memory/`)를 공유한다. OpenCode에서 `memory_save` 도구로 memory를 저장할 때 **같은 코어를 통과**하므로 한도가 갈라지지 않는다.
-
-### 구조
+## 구조
 
 ```
 plugins/memory-guard/
 ├── .claude-plugin/plugin.json     # CC 플러그인 메타데이터
 ├── hooks/
 │   ├── hooks.json
-│   ├── index-guard.mjs            # CC: PreToolUse → MEMORY.md write 차단
-│   └── memory-check.mjs           # CC: SessionStart → 하루 1회 점검
+│   ├── index-guard.mjs            # PreToolUse → MEMORY.md write 차단
+│   └── memory-check.mjs           # SessionStart → 하루 1회 점검
 ├── src/
 │   ├── core.mjs                   # 순수 판정 로직 — 상수·한도의 정본
 │   ├── core.test.mjs
-│   ├── fs-adapter.mjs             # 경로 해석·설정 로드·락 (I/O)
-│   └── index.ts                   # OpenCode Plugin 엔트리
-├── package.json                   # OC 플러그인 메타데이터 (비배포)
+│   └── fs-adapter.mjs             # 경로 해석·설정 로드·락 (I/O)
 └── README.md
 ```
 
-| CC hook | OpenCode Plugin API |
-|---|---|
-| `PreToolUse` (Write\|Edit) → `index-guard.mjs` | `tool.execute.before` — `memory_save` 실행 전 가드 |
-| `SessionStart` → `memory-check.mjs` | `experimental.chat.system.transform` — system prompt에 점검 결과 주입 |
-| `${CLAUDE_PLUGIN_ROOT}` | `import.meta.dir` / `worktree` |
-
-### OpenCode 설치
-
-npm 배포는 하지 않는다. `opencode.json`에 GitHub repo 또는 로컬 경로로 직접 지정한다:
-
-```jsonc
-{
-  "plugin": ["opencode-claude-memory", "github:aydenden/cc-plugins"]
-}
-```
-
-> `opencode-claude-memory`가 먼저 로드되어 `memory_save` 도구를 등록해야 한다. memory-guard는 이 도구의 실행을 가로채서 가드한다.
-
-### 경로 계산 (OpenCode)
-
-CC와 동일한 로직으로 memory 경로를 계산한다:
-1. `worktree` → `git rev-parse --git-common-dir` → canonical git root
-2. 경로의 `/`를 `-`로 sanitize
-3. `~/.claude/projects/<sanitized>/memory/`
+판정(`core.mjs`)은 파일시스템을 만지지 않고, I/O 는 `fs-adapter.mjs` 한 곳에 모인다.
+두 hook 은 이 둘만 조합하므로 같은 한도가 두 경로에서 갈라지지 않는다.
 
 `CLAUDE_CONFIG_DIR` 환경변수로 CC config 디렉토리를 오버라이드할 수 있다.
 
@@ -160,4 +132,4 @@ node --test plugins/memory-guard/src/core.test.mjs
 
 ## 의존성
 
-`node`(CC 자체가 node로 돈다). 외부 패키지 없음. OpenCode 쪽은 `@opencode-ai/plugin` SDK와 `git`(경로 계산용)이 추가로 필요하고, Bun이 TypeScript를 직접 실행하므로 빌드 단계가 없다.
+`node` 하나뿐이다(CC 자체가 node 로 돈다). 외부 패키지도 빌드 단계도 없다.

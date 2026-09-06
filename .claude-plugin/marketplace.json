@@ -13,7 +13,7 @@
     {
       "name": "memory-guard",
       "source": "./plugins/memory-guard",
-      "description": "CC auto memory 비대·stale 방지 — MEMORY.md 인덱스를 키우는 write를 하드캡에서 유도한 예산(기본 22.5KB/180줄/항목 175B) 기준으로 차단(정리·동일 크기 방향은 통과)하고, 하루 1회 SessionStart 점검으로 깨진 링크·고아 토픽·노후를 결정적으로 검출해 메인 세션에 리포트(자동 삭제 없음). 인덱스 포맷을 가정하지 않으며 프로젝트 관례는 .memory-guard.json으로 받는다. 메모리 경로(autoMemoryDirectory 포함) 자동 인식. OpenCode(opencode-claude-memory) 호환 — 같은 코어로 memory_save 가드.",
+      "description": "CC auto memory 비대·stale 방지 — MEMORY.md 인덱스를 키우는 write를 하드캡에서 유도한 예산(기본 22.5KB/180줄/항목 175B) 기준으로 차단(정리·동일 크기 방향은 통과)하고, 하루 1회 SessionStart 점검으로 깨진 링크·고아 토픽·노후를 결정적으로 검출해 메인 세션에 리포트(자동 삭제 없음). 인덱스 포맷을 가정하지 않으며 프로젝트 관례는 .memory-guard.json으로 받는다. 메모리 경로(autoMemoryDirectory 포함) 자동 인식.",
       "version": "0.3.0"
     },
     {
