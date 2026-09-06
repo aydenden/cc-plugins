@@ -27,6 +27,3 @@ node_modules/
 
 # Environment
 .env
-
-# Korean Trading Plugin
-plugins/korean-trading/scripts/dart/corp_codes.json
