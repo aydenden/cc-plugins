@@ -1,7 +1,4 @@
 {
   "name": "cc-plugins",
-  "private": true,
-  "workspaces": [
-    "plugins/memory-guard"
-  ]
+  "private": true
 }

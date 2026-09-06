@@ -1,6 +1,6 @@
 /**
  * 메모리 디렉터리에 대한 파일시스템 접근 — 순수 로직(`core.mjs`)이 쓰지 않는 I/O 를 모은다.
- * CC 훅과 OpenCode 진입점이 공유한다.
+ * 두 CC 훅이 공유한다.
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
