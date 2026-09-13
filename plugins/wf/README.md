@@ -24,8 +24,30 @@ wf:retro   재작업·주기 회고 → 원인 단계 → 빠진 축 → 스펙�
 
 그래서 두 장치를 넣는다.
 
-- **축(커버리지)** — 정의 단계에 "무엇을 정의해야 하는지"의 목록을 두고, 켜진 축 수와 산출물 항목 수를 스크립트가 센다. 축은 스킬이 아니라 스펙 파일의 데이터라서 회고로 자란다.
+- **축(커버리지)** — 정의 단계에 "무엇을 정의해야 하는지"의 목록을 두고, 산출물이 축마다 답했는지를 스크립트가 센다. 축은 스킬이 아니라 스펙 파일의 데이터라서 회고로 자란다.
 - **구현 전 프리뷰** — 정의를 정적 HTML로 렌더링해 빈 곳을 눈에 보이게 만든다. 미정의를 그럴듯하게 채우지 않는 것이 규칙이다.
+
+축 하나는 이렇게 생겼다 (`templates/axis-store/frontend.axes.json`의 `style`):
+
+```jsonc
+{
+  "id": "style",
+  "when": "화면에 렌더링되는가",              // 이 조건이 참일 때만 축이 켜진다
+  "ask": "시각 정의의 출처는 — 목업? 디자인 토큰? 기존 컴포넌트 재사용?",
+  "closed_when": "치수·색·타이포·radius·간격이 **값마다 출처와 함께** 적혀 있다"
+}
+```
+
+`check-coverage.sh <축 목록> <정의 문서>`는 켜진 축 하나하나를 정의 문서에서 찾아
+**두 가지를 가른다**:
+
+| 판정 | 뜻 | 결과 |
+|---|---|---|
+| `UNADDRESSED` | 그 축의 행이 아예 없다 — 아무도 안 봤다 | 차단 |
+| `INCOMPLETE` | 행은 있는데 출처 칸이 비었거나, `해당 없음`에 사유가 없다 | 차단 |
+
+행이 있는 것만으로 통과시키지 않는 이유가 두 번째다. 근거 없는 판정은 **검토한 것처럼
+읽히지만 검토가 아니고**, 목록을 형식적으로 훑을 때 누락이 정확히 그 모양을 한다.
 
 ## 구성
 
@@ -70,6 +92,7 @@ plugins/wf/scripts/check-deps.sh
 
 ```bash
 brew install beads                                    # bd
+brew install git                                      # 축 저장소가 refs/wf/axes 에 산다
 /plugin marketplace add anthropics/claude-plugins-official   # → plugin-dev 설치 (create-plugin 인계 대상)
 /plugin marketplace add steveyegge/beads                     # → beads 설치 (SessionStart bd prime 훅)
 ```
@@ -90,23 +113,36 @@ npx skills add vercel-labs/skills@find-skills
 npx skills add vercel-labs/agent-browser@agent-browser
 ```
 
-**위임 대상 스킬** — 사고 절차는 이쪽에 맡긴다. 없으면 그 판단을 대신할 스킬을 `find-skills`로 조사한다.
+**위임 대상 스킬** — 사고 절차는 이쪽에 맡긴다. 13개 전부 같은 레지스트리(`mattpocock/skills`)에 있어 한 줄로 끝난다. 없으면 그 판단을 대신할 스킬을 `find-skills`로 조사한다.
 
 ```bash
-npx skills add mattpocock/skills@grill-with-docs
-npx skills add mattpocock/skills@to-prd
-npx skills add mattpocock/skills@to-issues
-npx skills add mattpocock/skills@implement
-npx skills add mattpocock/skills@tdd
-npx skills add mattpocock/skills@code-review
-npx skills add mattpocock/skills@diagnosing-bugs
-npx skills add mattpocock/skills@triage
-npx skills add mattpocock/skills@handoff
-npx skills add mattpocock/skills@prototype
-npx skills add mattpocock/skills@wayfinder
-npx skills add mattpocock/skills@domain-modeling
-npx skills add mattpocock/skills@research
+for s in grill-with-docs to-prd to-issues implement tdd code-review diagnosing-bugs \
+         triage handoff prototype wayfinder domain-modeling research; do
+  npx skills add "mattpocock/skills@$s"
+done
 ```
+
+<details><summary>어느 판단을 어디에 맡기는가 (정본: <code>references/stage-patterns.md</code>)</summary>
+
+| 판단 | 위임 |
+|---|---|
+| 계획 압박 | `/grill-with-docs` (코드베이스 있음) |
+| PRD | `/to-prd` |
+| 이슈 분해 | `/to-issues` |
+| 구현 | `/implement` · `/tdd` |
+| 리뷰 | `/code-review` |
+| 버그 진단 | `/diagnosing-bugs` |
+| 트리아지 | `/triage` |
+| 대형 작업 지도 | `/wayfinder` |
+| 리서치 | `/research` |
+| 세션 압축 | `/handoff` |
+| 설계 질문 | `/prototype` |
+| 도메인 용어 | `/domain-modeling` |
+
+기존 스킬을 감싸기만 하는 스킬은 만들지 않는다 — 지시문을 한 겹 늘리고 원본의 품질을
+희석한다. "`/tdd`를 실행하라"고만 적힌 스킬은 `/tdd`를 직접 부르는 것보다 나쁘다.
+
+</details>
 
 이 위에 얹히는 것만 `find-skills`로 조사해 사용자와 협의한다.
 
@@ -124,6 +160,17 @@ plugins/wf/scripts/axis-sync.sh push "메시지"      # 커밋·발행
 ```
 
 로컬 store는 `~/.cache/wf/axis-store` (`WF_AXIS_STORE`로 변경). 플러그인 디렉토리에 두지 않는다 — 설치 캐시는 버전마다 새 디렉토리라 버전업 즉시 고아가 된다. 형식과 운영 규칙은 `references/axis-patterns.md`.
+
+## 테스트
+
+```bash
+bash plugins/wf/scripts/check-coverage.test.sh
+```
+
+축 판정만 테스트한다 — 두 차단 검사 중 이쪽만 **문서를 해석해서** 판정하기 때문이다
+(`check-citations.sh`는 경로의 실존 여부라 해석이 없다). `UNADDRESSED`/`INCOMPLETE` 구분,
+`해당 없음`의 사유 유무, 그리고 `state`가 `state-lifetime` 행을 제 것으로 세지 않는
+토큰 경계가 케이스로 있다.
 
 ## 검증 우회
 
