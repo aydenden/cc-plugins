@@ -19,6 +19,12 @@
 /** claude 실행파일에 박힌 하드캡. 넘으면 인덱스가 잘려서 로드된다. */
 export const CAPS = { bytes: 25000, lines: 200 };
 
+/**
+ * CC 리콜이 토픽 파일 하나에서 보여주는 한도(claude 실행파일 상수, 2.1.270 확인).
+ * 넘은 부분은 그 파일을 직접 열지 않는 세션에는 존재하지 않는다.
+ */
+export const RECALL_CAPS = { bytes: 4096, lines: 200 };
+
 export const DEFAULTS = {
   /** 하드캡 대비 예산 비율. 남는 10% 가 "세션 도중 몇 줄 더 써도 캡에 안 닿는" 여유다. */
   headroom: 0.9,
@@ -85,7 +91,13 @@ export function resolveConfig(raw = {}) {
 export function deriveLimits(config = DEFAULTS) {
   const bytes = Math.round(CAPS.bytes * config.headroom);
   const lines = Math.round(CAPS.lines * config.headroom);
-  return { bytes, lines, entryBytes: Math.round((bytes / lines) * config.entrySlack) };
+  return {
+    bytes,
+    lines,
+    entryBytes: Math.round((bytes / lines) * config.entrySlack),
+    topicBytes: Math.round(RECALL_CAPS.bytes * config.headroom),
+    topicLines: Math.round(RECALL_CAPS.lines * config.headroom),
+  };
 }
 
 // --- 제외 규칙 ---
@@ -296,7 +308,7 @@ export function auditIndex(text, opts = {}) {
         );
       } else if (n > config.section.max) {
         findings.push(
-          finding('section-too-big', `${section.topic} ${n}줄 — ${config.section.max}줄 초과. 토픽을 분해한다`, {
+          finding('section-too-big', `${section.topic} ${n}줄 — ${config.section.max}줄 초과. 중복·낡은 항목을 병합·정리하고, 그래도 크면 사실 하나씩 독립 파일로 옮긴다`, {
             line: section.line,
           }),
         );
@@ -318,7 +330,10 @@ export function auditIndex(text, opts = {}) {
 const DATE = /\d{4}-\d{2}-\d{2}/g;
 
 /**
- * 토픽 파일 하나를 감사한다 — 깨진 링크와 본문 최신 날짜 기준 노후.
+ * 토픽 파일 하나를 감사한다 — 깨진 링크, 리콜 한도, description, 본문 최신 날짜 기준 노후.
+ *
+ * 리콜은 파일마다 독립으로 description 만 보고 고르고 앞 4KB 만 보여준다. 그래서 큰 파일을
+ * `-2`·`.1` 로 이어 쪼개면 뒷조각은 거의 안 찾힌다 — 처리 안내가 병합과 독립 파일을 권하는 이유다.
  *
  * @param {string} name 파일명
  * @param {string} text 본문
@@ -327,9 +342,30 @@ const DATE = /\d{4}-\d{2}-\d{2}/g;
  */
 export function auditTopic(name, text, opts = {}) {
   const config = opts.config ?? DEFAULTS;
+  const limits = deriveLimits(config);
   const ctx = { files: new Set(opts.files ?? []), slugs: new Set(opts.slugs ?? []), exists: opts.exists };
   const findings = [];
   const links = extractLinks(text);
+
+  const bytes = bytesOf(text);
+  const lines = splitLines(text).length;
+  if (bytes > RECALL_CAPS.bytes || lines > RECALL_CAPS.lines) {
+    findings.push(
+      finding('topic-cap', `${name} ${bytes}B / ${lines}줄 — 리콜 한도 ${RECALL_CAPS.bytes}B / ${RECALL_CAPS.lines}줄 초과. 넘은 부분은 리콜에 안 보인다`, {
+        file: name,
+      }),
+    );
+  } else if (bytes > limits.topicBytes || lines > limits.topicLines) {
+    findings.push(
+      finding('topic-budget', `${name} ${bytes}B / ${lines}줄 — 예산 ${limits.topicBytes}B / ${limits.topicLines}줄 초과 (리콜 한도 ${RECALL_CAPS.bytes}B)`, {
+        file: name,
+      }),
+    );
+  }
+
+  if (frontmatterDescription(text) === null) {
+    findings.push(finding('missing-description', `${name} — frontmatter description 이 없다. 리콜이 이 파일을 고를 근거가 없다`, { file: name }));
+  }
 
   for (const target of links.md) {
     if (!linkResolves(target, ctx)) {
@@ -360,11 +396,38 @@ export function auditTopic(name, text, opts = {}) {
 
 /** 프론트매터 `name:` slug. wikilink 가 파일명이 아니라 이 값을 가리키는 관례가 있다. */
 export function frontmatterSlug(text) {
-  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(String(text ?? ''));
-  if (!fm) return null;
-  const m = /^name:[ \t]*(\S.*?)[ \t]*$/m.exec(fm[1]);
-  return m ? m[1].replace(/^["']|["']$/g, '') : null;
+  const block = frontmatterBlock(text);
+  if (block === null) return null;
+  const m = /^name:[ \t]*(\S.*?)[ \t]*$/m.exec(block);
+  return m ? unquote(m[1]) : null;
 }
+
+/**
+ * 프론트매터 `description:`. CC 리콜이 파일을 고르는 유일한 신호다.
+ * 인라인 값과 블록 스칼라(`>-`, `|`) 모두 받고, 비었으면 null.
+ */
+export function frontmatterDescription(text) {
+  const block = frontmatterBlock(text);
+  if (block === null) return null;
+  const lines = splitLines(block);
+  const at = lines.findIndex((l) => l.startsWith('description:'));
+  if (at < 0) return null;
+  const inline = lines[at].slice('description:'.length).trim();
+  if (inline !== '' && !/^[|>][+-]?$/.test(inline)) return unquote(inline) || null;
+  const body = [];
+  for (const l of lines.slice(at + 1)) {
+    if (!/^\s+\S/.test(l)) break;
+    body.push(l.trim());
+  }
+  return body.length > 0 ? body.join(' ') : null;
+}
+
+function frontmatterBlock(text) {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(String(text ?? ''));
+  return fm ? fm[1] : null;
+}
+
+const unquote = (s) => s.replace(/^["']|["']$/g, '');
 
 // --- write 가드 ---
 
@@ -479,15 +542,42 @@ export function renderBlock(file, result, indexText = '') {
   return out.join('\n');
 }
 
+/** 파일·줄마다 반복되는 지적. 100건을 그대로 쏟으면 그게 곧 컨텍스트 오염이다. */
+const FOLDED_KINDS = {
+  'entry-too-long': '상세를 토픽 본문으로 내린다',
+  'missing-description': 'frontmatter description 을 단다',
+};
+
+/**
+ * 반복 지적을 kind 당 한 줄로 접는다. 나머지 지적은 원래 객체 그대로 둔다.
+ *
+ * @param {Array<{kind:string,message:string,line?:number,file?:string}>} findings
+ * @param {number} max 한 줄에 나열할 위치 수
+ */
+export function foldFindings(findings, max = 10) {
+  const out = findings.filter((f) => !(f.kind in FOLDED_KINDS));
+  for (const [kind, hint] of Object.entries(FOLDED_KINDS)) {
+    const group = findings.filter((f) => f.kind === kind);
+    if (group.length === 0) continue;
+    const where = group.map((f) => (f.line ? `${f.line}행` : f.file));
+    out.push(finding(kind, `${group.length}건 (${where.slice(0, max).join(', ')}${group.length > max ? ' …' : ''}) — ${hint}`));
+  }
+  return out;
+}
+
 /** SessionStart 점검 결과 메시지. 자동 삭제하지 않는다 — 의미 판단은 에이전트가 한다. */
 export function renderCheck(memoryDir, findings) {
   const out = [`[memory-guard] 메모리 점검에서 손봐야 할 항목을 찾았다 (${memoryDir}):`];
   for (const f of findings) out.push(`  [${f.kind}] ${f.message}`);
   out.push('처리 (자동 삭제 금지):');
   out.push('  - budget/cap-*          : 상세를 토픽 본문으로 내리고 인덱스 줄을 줄인다');
+  out.push('  - topic-cap/budget      : 사실 하나만 남기고 요약한다. 다른 사실은 제 이름의 독립 파일로 (-2·.1 식 이어 쪼개기 금지)');
+  out.push('  - missing-description   : 이 파일이 답하는 질문을 한 줄 description 으로 단다');
+  out.push('  - section-too-big       : 병합·정리가 먼저, 그래도 크면 독립 사실 파일로');
   out.push('  - broken-link/wikilink  : 링크를 고치거나 죽은 참조를 지운다');
-  out.push('  - orphan-topic          : 인덱스에 한 줄로 올리거나 archive/ 로 내린다');
-  out.push('  - stale-date            : 근거를 확인하고 유지 / 갱신 / archive');
-  out.push('  archive/ 로 옮기거나 표시한 뒤 사용자에게 확인한다. 코드·출처 주장은 직접 검증한다.');
+  out.push('  - orphan-topic          : 인덱스에 한 줄로 올리거나, 가치가 없으면 지운다');
+  out.push('  - stale-date            : 근거를 확인하고 유지 / 갱신 / 삭제');
+  out.push('  CC 는 하위 폴더까지 메모리로 읽는다 — archive/ 로 옮겨도 리콜 후보에서 빠지지 않는다.');
+  out.push('  지우기 전에 사용자에게 확인한다. 코드·출처 주장은 직접 검증한다.');
   return out.join('\n');
 }

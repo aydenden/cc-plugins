@@ -7,21 +7,27 @@ import assert from 'node:assert/strict';
 import {
   CAPS,
   DEFAULTS,
+  RECALL_CAPS,
   auditIndex,
   auditTopic,
   deriveLimits,
   extractLinks,
+  foldFindings,
+  frontmatterDescription,
   frontmatterSlug,
   guardWrite,
   isExcluded,
   parseIndex,
   planWrite,
+  renderCheck,
   resolveConfig,
   splitLines,
 } from './core.mjs';
 
 const cfg = (raw) => resolveConfig(raw);
 const kinds = (r) => (r.findings ?? r).map((f) => f.kind).sort();
+/** 리콜이 고를 수 있는 토픽 — description 이 있어 그 검사에 걸리지 않는다. */
+const withDesc = (body) => `---\ndescription: 로그인 흐름\n---\n${body}`;
 
 /** 링크로 토픽을 가리키는 평범한 인덱스. 특정 헤더 관례를 쓰지 않는다. */
 const plainIndex = ['# Memory index', '- [auth](auth.md) — 로그인 흐름', '- [build](build.md) — 빌드 파이프라인'].join('\n');
@@ -35,6 +41,8 @@ test('예산과 항목 상한은 하드캡에서 유도된다', () => {
   assert.equal(limits.bytes, Math.round(CAPS.bytes * 0.9));
   assert.equal(limits.lines, Math.round(CAPS.lines * 0.9));
   assert.equal(limits.entryBytes, Math.round((limits.bytes / limits.lines) * DEFAULTS.entrySlack));
+  assert.equal(limits.topicBytes, Math.round(RECALL_CAPS.bytes * 0.9));
+  assert.equal(limits.topicLines, Math.round(RECALL_CAPS.lines * 0.9));
 });
 
 test('headroom 을 조이면 세 한도가 함께 내려간다', () => {
@@ -78,6 +86,14 @@ test('링크 추출은 내부 md 링크와 wikilink 만 본다', () => {
 test('프론트매터 slug 를 읽는다', () => {
   assert.equal(frontmatterSlug('---\nname: auth-flow\nx: 1\n---\n본문'), 'auth-flow');
   assert.equal(frontmatterSlug('본문만'), null);
+});
+
+test('프론트매터 description 을 인라인·블록 스칼라 모두 읽는다', () => {
+  assert.equal(frontmatterDescription('---\nname: a\ndescription: 로그인 흐름\n---\n본문'), '로그인 흐름');
+  assert.equal(frontmatterDescription('---\ndescription: >-\n  여러 줄\n  설명\nname: a\n---\n'), '여러 줄 설명');
+  assert.equal(frontmatterDescription('---\ndescription: ""\n---\n'), null);
+  assert.equal(frontmatterDescription('---\ndescription:\nname: a\n---\n'), null);
+  assert.equal(frontmatterDescription('본문만'), null);
 });
 
 // --- 인덱스 감사 ---
@@ -165,6 +181,14 @@ test('섹션 크기 검사는 설정이 있을 때만 켜진다', () => {
   assert.deepEqual(kinds(on), ['section-too-big', 'section-too-small']);
 });
 
+test('섹션 과대는 분할이 아니라 병합·정리를 먼저 권한다 — 연속 분할은 리콜에서 안 찾힌다', () => {
+  const text = ['## [b](build.md)', '- 1', '- 2', '- 3', '- 4'].join('\n');
+  const r = auditIndex(text, { files: plainFiles, config: cfg({ section: { min: 1, max: 3 } }) });
+  const big = r.findings.find((f) => f.kind === 'section-too-big');
+  assert.match(big.message, /병합/);
+  assert.doesNotMatch(big.message, /분해/);
+});
+
 test('같은 토픽을 두 섹션이 가리키면 중복이다', () => {
   const text = ['## [a](auth.md)', '- 1', '- 2', '## [a2](auth.md)', '- 3', '- 4'].join('\n');
   const r = auditIndex(text, { files: plainFiles, config: cfg({ section: { min: 1, max: 8 } }) });
@@ -180,20 +204,41 @@ test('build.md 가 인덱스에 없으면 고아로만 잡히고 링크는 멀�
 
 test('노후는 본문 최신 날짜 기준이다', () => {
   const now = Math.floor(Date.parse('2026-08-26T00:00:00Z') / 1000);
-  const old = auditTopic('a.md', '2026-01-01 에 확인', { config: cfg({}), now, files: [] });
+  const old = auditTopic('a.md', withDesc('2026-01-01 에 확인'), { config: cfg({}), now, files: [] });
   assert.deepEqual(kinds(old), ['stale-date']);
 
-  const fresh = auditTopic('a.md', '2026-01-01 에 확인했고 2026-08-01 에 갱신', { config: cfg({}), now, files: [] });
+  const fresh = auditTopic('a.md', withDesc('2026-01-01 에 확인했고 2026-08-01 에 갱신'), { config: cfg({}), now, files: [] });
   assert.deepEqual(kinds(fresh), []);
 });
 
 test('토픽 파일의 깨진 링크도 잡는다', () => {
-  const r = auditTopic('a.md', '자세히는 [b](b.md)', { config: cfg({}), files: ['a.md'], now: 0 });
+  const r = auditTopic('a.md', withDesc('자세히는 [b](b.md)'), { config: cfg({}), files: ['a.md'], now: 0 });
   assert.deepEqual(kinds(r), ['broken-link']);
 });
 
+test('리콜 한도를 넘은 토픽은 cap, 예산만 넘은 토픽은 budget 이다', () => {
+  const opts = { config: cfg({}), files: [], now: 0 };
+  const over = auditTopic('a.md', withDesc('a'.repeat(RECALL_CAPS.bytes)), opts);
+  assert.deepEqual(kinds(over), ['topic-cap']);
+
+  const tallBody = 'x\n'.repeat(RECALL_CAPS.lines + 1);
+  assert.deepEqual(kinds(auditTopic('a.md', withDesc(tallBody), opts)), ['topic-cap']);
+
+  const near = auditTopic('a.md', withDesc('a'.repeat(deriveLimits(cfg({})).topicBytes)), opts);
+  assert.deepEqual(kinds(near), ['topic-budget']);
+
+  assert.deepEqual(kinds(auditTopic('a.md', withDesc('짧은 사실 하나'), opts)), []);
+});
+
+test('description 이 없는 토픽은 리콜이 고를 근거가 없다', () => {
+  const opts = { config: cfg({}), files: [], now: 0 };
+  assert.deepEqual(kinds(auditTopic('a.md', '본문만', opts)), ['missing-description']);
+  assert.deepEqual(kinds(auditTopic('a.md', '---\nname: a\n---\n본문', opts)), ['missing-description']);
+  assert.equal(auditTopic('a.md', '본문만', opts)[0].file, 'a.md');
+});
+
 test('하위 디렉터리 링크는 exists 위임으로 해석된다', () => {
-  const r = auditTopic('a.md', '[old](archive/a.md)', {
+  const r = auditTopic('a.md', withDesc('[old](archive/a.md)'), {
     config: cfg({}),
     files: ['a.md'],
     now: 0,
@@ -255,6 +300,31 @@ test('requireTopicFirst 는 토픽 파일이 없는 인덱스 줄을 막는다',
 
   const ready = guardWrite(w, { config: cfg({ requireTopicFirst: true }), files: ['MEMORY.md', 'new.md'] });
   assert.equal(ready.blocked, false);
+});
+
+// --- 점검 리포트 ---
+
+test('반복되는 지적은 kind 당 한 줄로 접고 나머지는 그대로 둔다', () => {
+  const many = Array.from({ length: 12 }, (_, i) => ({ kind: 'missing-description', message: 'x', file: `f${i}.md` }));
+  const long = [{ kind: 'entry-too-long', message: 'x', line: 7 }];
+  const orphan = { kind: 'orphan-topic', message: 'lonely.md', target: 'lonely.md' };
+  const folded = foldFindings([...many, ...long, orphan]);
+
+  assert.deepEqual(kinds(folded), ['entry-too-long', 'missing-description', 'orphan-topic']);
+  const desc = folded.find((f) => f.kind === 'missing-description');
+  assert.match(desc.message, /12건/);
+  assert.match(desc.message, /f0\.md/);
+  assert.match(desc.message, /…/);
+  assert.match(folded.find((f) => f.kind === 'entry-too-long').message, /7행/);
+  assert.equal(folded.find((f) => f.kind === 'orphan-topic'), orphan);
+});
+
+test('점검 안내는 archive/ 를 숨김 수단으로 권하지 않고 새 지적의 처리법을 준다', () => {
+  const text = renderCheck('/mem', [{ kind: 'topic-cap', message: 'a.md' }]);
+  assert.doesNotMatch(text, /archive\/ 로 내린다/);
+  assert.match(text, /topic-cap/);
+  assert.match(text, /missing-description/);
+  assert.match(text, /하위 폴더/);
 });
 
 test('인덱스가 아닌 도구는 판정 대상이 아니다', () => {
