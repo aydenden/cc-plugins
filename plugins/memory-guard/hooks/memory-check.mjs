@@ -12,7 +12,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { auditIndex, auditTopic, isExcluded, renderCheck, INDEX_BASENAME } from '../src/core.mjs';
+import { auditIndex, auditTopic, foldFindings, isExcluded, renderCheck, INDEX_BASENAME } from '../src/core.mjs';
 import {
   acquireDailyLock,
   collectSlugs,
@@ -66,17 +66,5 @@ for (const name of files) {
 
 if (findings.length === 0) process.exit(0);
 
-// 긴 항목 지적을 100건 쏟으면 그게 곧 컨텍스트 오염이다 — 한 줄로 접는다.
-const tooLong = findings.filter((f) => f.kind === 'entry-too-long');
-const rest = findings.filter((f) => f.kind !== 'entry-too-long');
-if (tooLong.length > 0) {
-  rest.push({
-    kind: 'entry-too-long',
-    message: `${tooLong.length}개 항목이 상한 초과 (${tooLong.map((f) => `${f.line}행`).slice(0, 10).join(', ')}${
-      tooLong.length > 10 ? ' …' : ''
-    }) — 상세를 토픽 본문으로 내린다`,
-  });
-}
-
-console.error(renderCheck(memoryDir, rest));
+console.error(renderCheck(memoryDir, foldFindings(findings)));
 process.exit(2);
