@@ -17,6 +17,23 @@ $WIKI/
 └── summaries/     # Layer 2: 단일 소스 요약
 ```
 
+## 설치
+
+```bash
+/plugin marketplace add aydenden/cc-plugins
+/plugin install llm-wiki
+```
+
+또는 로컬 테스트:
+
+```bash
+claude --plugin-dir ./plugins/llm-wiki
+```
+
+전제 조건은 둘뿐이다 — **볼트 경로 환경변수**(`WIKI_PATH` 또는 `OBSIDIAN_VAULT_PATH`)와
+**그 볼트 루트의 `SCHEMA.md`**. 설치할 패키지는 없다. 둘 중 하나라도 없으면 SessionStart
+훅이 stderr에 한 줄 알리고 지나간다 — 세션을 막지는 않지만 capture·recall·lint가 실패한다.
+
 ## 볼트 경로
 
 ```bash
@@ -55,7 +72,7 @@ Lint 커맨드는 없다 — 정비도 커밋도 아래 훅이 log 기록 직후
 
 ## 런타임 의존성
 
-**없다.** 읽기·검색·페이지 작성은 CC 내장 도구만 쓰고, `scripts/`의 네 파일은 전부 **node:
+**없다.** 읽기·검색·페이지 작성은 CC 내장 도구만 쓰고, `scripts/`의 다섯 파일은 전부 **node:
 내장 모듈만 쓰는 의존성 0 Node `.mjs`** 라 macOS·Linux·Windows 11에서 `node` 하나로 돈다.
 
 설치가 필요한 것은 둘뿐이며 **둘 다 선택**이다 — 도서 변환(`ingest-book`, 환경 가드가 막고
@@ -87,6 +104,13 @@ node scripts/setup-channels.mjs check [--channel id,...] [--json]
 node scripts/setup-channels.mjs install --yes    # 계획을 먼저 출력, 인증은 사람 몫
 ```
 
+**브라우저 우회**는 채널을 늘리는 것이 아니라 이미 고른 소스에 **도달하지 못했을 때** 올라가는
+3계단 사다리다 — WebFetch → `agent-browser`(JS 렌더링·봇 필터·로그인 벽) → `scrapling`(프록시·
+헤더 제어). 한 번에 한 계단만 올라가고, 3계단은 2계단의 상위 집합이 아니라 순서대로 간다(실측).
+세 계단이 다 막히면 그 소스는 포기하고 산출물에 남긴다. 절차는
+[`docs/browser-fallback.md`](docs/browser-fallback.md)가 소유하며, 진단·설치는 선택 계층과 같이
+`/llm-wiki:setup-channels`가 맡는다.
+
 전용 에이전트 파일은 두지 않는다 — 조사 프롬프트는 `/llm-wiki:research` 커맨드가 들고 있고, 적재 절차는 `wiki-schema` 스킬 한 곳에만 있다.
 
 ## 스키마 (볼트 SCHEMA.md가 정의 — 아래는 현재 값 요약)
@@ -107,7 +131,9 @@ plugins/llm-wiki/
 ├── .claude-plugin/plugin.json    # CC 플러그인 메타데이터
 ├── commands/                     # capture · recall · research · setup-channels
 ├── skills/                       # wiki-schema(적재 절차) · ingest-book(도서 변환)
-├── docs/research-channels.md     # 채널 레지스트리 SSoT
+├── docs/
+│   ├── research-channels.md     #   채널 레지스트리 SSoT
+│   └── browser-fallback.md      #   WebFetch가 막혔을 때의 승급 사다리
 ├── hooks/                        # SessionStart(볼트 검증·pull) + PostToolUse(log.md → 정비·커밋)
 └── scripts/                      # 의존성 0 Node .mjs — 전부 `node` 하나로 돈다
     ├── lint.mjs                  #   볼트 점검 + index 생성
