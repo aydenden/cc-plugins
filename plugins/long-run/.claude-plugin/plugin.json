@@ -1,0 +1,18 @@
+{
+  "name": "long-run",
+  "version": "0.1.0",
+  "description": "여러 세션에 걸치는 작업을 끝까지 민다 — 목표를 bd epic(맵)으로 세우고 Stop hook 이 «다음으로 갈까요?» 를 막으며, 컨텍스트 절반에서 새 orca 탭으로 소유권을 넘긴다. 스킬은 세션 경계를 못 넘으므로 계약(bd)·강제(hook)·운반(handoff) 셋으로 사슬을 굴린다.",
+  "author": {
+    "name": "aydenden"
+  },
+  "repository": "https://github.com/aydenden/cc-plugins",
+  "keywords": [
+    "beads",
+    "orca",
+    "handoff",
+    "long-running",
+    "session",
+    "stop-hook",
+    "context-window"
+  ]
+}
