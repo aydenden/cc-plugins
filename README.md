@@ -29,6 +29,26 @@
 
 ---
 
+### [long-run](./plugins/long-run) · v0.1.0
+**여러 세션에 걸치는 작업을 끝까지 민다.** 목표를 맵으로 세우고, 멈추려는 세션을 한 번 되민다.
+
+며칠 걸리는 작업이 실패하는 자리는 대체로 어려움이 아니라 **멈춤**이었다. 한 덩이를 끝내고
+«다음으로 갈까요?»로 돌아오거나, 컨텍스트가 차서 흐지부지되거나, 다음 세션이 어디까지 됐는지
+모르는 채 다시 시작한다.
+
+그래서 스킬 하나로 풀지 않았다. **스킬은 세션 안에서만 살아 경계를 못 넘기 때문**이다. 대신
+세션 밖에 남는 셋으로 사슬을 굴린다 — 계약은 bd epic 본문(DB에 있어 세션이 죽어도 남는다),
+강제는 Stop hook, 운반은 인계 문서다. 훅을 저장소가 아니라 **플러그인**에 단 것이 이 구조의
+핵심이다. 긴 작업이 실제로 도는 곳은 worktree라 프로젝트 훅으로는 닿지 않는다.
+
+되미는 강제에는 안전장치가 둘 있다. 맵을 선언하지 않은 세션은 건드리지 않고, `stop_hook_active`
+면 무조건 통과시킨다 — **두 번째 막음은 세션을 영영 끝나지 않게 만든다.** 넘길 시점의 판정은
+비율이 아니라 창 크기로 한다. 같은 토큰이 표준 창에서는 이미 초과이기 때문이다.
+
+`node` · 전제는 `bd`와 `orca` · 스킬 2 · 훅 1 · 테스트 40
+
+---
+
 ### [memory-guard](./plugins/memory-guard) · v0.4.0
 **세션 메모리가 비대해지고 낡는 것을 막는다.** 인덱스를 키우는 write를 차단하고, 하루 한 번 점검한다.
 
@@ -81,7 +101,7 @@ HTML로 렌더링해 빈 곳을 눈에 보이게 만든다.
 
 ## 구조
 
-세 플러그인이 Claude Code의 서로 다른 확장점에 붙는다.
+네 플러그인이 Claude Code의 서로 다른 확장점에 붙는다.
 
 ```mermaid
 flowchart LR
@@ -98,10 +118,13 @@ flowchart LR
   CMD --> LW
   SKL --> LW
   SKL --> WF
+  SKL --> LR
   HK  --> LW
   HK  --> MG
+  HK  --> LR
 
   LW["<b>llm-wiki</b><br/>조사한 것을 볼트에 쌓는다"]
+  LR["<b>long-run</b><br/>긴 작업이 멈추지 않게 한다"]
   MG["<b>memory-guard</b><br/>메모리가 비대해지지 않게 한다"]
   WF["<b>wf</b><br/>워크플로우를 설계한다"]
 ```
@@ -116,14 +139,14 @@ llm-wiki가 셋을 다 쓰는 이유는 **캡처는 사용자가 부르지만 �
 
 | | |
 |---|---|
-| 플러그인 | 3개 (llm-wiki v0.28.0 · memory-guard v0.4.0 · wf v0.4.0) |
-| 유닛 테스트 | **168개** (`node --test` 154 · bash 14). 검색 품질 평가셋 118문항은 별개다 |
+| 플러그인 | 4개 (llm-wiki v0.28.0 · long-run v0.1.0 · memory-guard v0.4.0 · wf v0.4.0) |
+| 유닛 테스트 | **208개** (`node --test` 194 · bash 14). 검색 품질 평가셋 118문항은 별개다 |
 | 실행 환경 | `node`(CC 자체가 node로 돈다)와 `bash` 뿐 — **설치할 패키지가 없다** |
 | 커밋 | 175개 · 2026-01 ~ 2026-09 |
 | 이슈 관리 | [beads](https://github.com/steveyegge/beads) 43개 (완료 41). 데이터는 `refs/dolt/data` 에 격리 |
 
 ```bash
-node --test plugins/llm-wiki/scripts/ plugins/llm-wiki/hooks/ plugins/memory-guard/src/
+node --test plugins/llm-wiki/scripts/ plugins/llm-wiki/hooks/ plugins/memory-guard/src/ plugins/long-run/scripts/test/
 bash plugins/wf/scripts/check-coverage.test.sh
 ```
 
@@ -147,7 +170,8 @@ claude --plugin-dir ./cc-plugins/plugins/llm-wiki
 ```
 
 각 플러그인의 전제 조건은 서로 다르다. **llm-wiki는 Obsidian 볼트 경로(`WIKI_PATH`)가,
-wf는 `bd`와 `plugin-dev`가 필요하다.** memory-guard는 아무 설정 없이 붙는다.
+wf는 `bd`와 `plugin-dev`가, long-run은 `bd`와 `orca`가 필요하다.** memory-guard는 아무 설정
+없이 붙는다.
 자세한 것은 각 플러그인 README에 있다.
 
 ## 라이선스
