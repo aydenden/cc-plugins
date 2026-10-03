@@ -70,8 +70,9 @@ stages:
 
   - id: done
     kind: seam
-    produces: "게이트 해제 · 이슈 close · 커밋 제안(실행 아님)"
+    produces: "게이트 해제 · 이슈 close · 실행 환경 수거 · 커밋 제안(실행 아님)"
     checks: [execution, invariant]
+    note: "start·verify 가 띄운 워크트리·터미널·브라우저 세션이 남아 있지 않다. handoff 로 넘길 때는 거두지 않는다"
 
   - id: handoff
     kind: seam

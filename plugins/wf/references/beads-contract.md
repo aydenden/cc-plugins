@@ -29,6 +29,8 @@ bd list --format dot                  # DAG 시각화
 
 **`bd status`의 `Ready to Work` 수치는 `bd ready`와 어긋난다.** 게이트로 막힌 것을 ready로 세는 경우가 있다. 실제 착수 대상은 항상 `bd ready`로 판단한다.
 
+**`bd worktree remove`는 push하지 않은 브랜치를 항상 거부한다.** 커밋이 없는 워크트리도, 병합이 끝난 브랜치도 `unpushed commits`로 막히고, upstream에 전부 올라간 경우에만 통과한다. 아래 커밋 정책(push는 명시적 지시가 있을 때만)을 지키면 매번 걸린다. `--force`는 이 검사만이 아니라 미커밋 변경·stash 검사까지 끄고 미커밋 파일을 함께 지운다. 브랜치는 남는다.
+
 ## 게이트
 
 게이트는 `type: gate`인 **독립 이슈**로 만들어져 대상 스텝을 블록한다.
