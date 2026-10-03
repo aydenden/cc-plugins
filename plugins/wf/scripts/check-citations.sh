@@ -6,7 +6,8 @@
 # Exit:  0 all cited paths exist · 1 at least one missing · 2 bad usage
 set -uo pipefail
 
-[ -f .claude/wf-skip-checks ] && { echo "check-citations: skipped (.claude/wf-skip-checks)"; exit 0; }
+# Run, never source: a missing bypass.sh then grants nothing and the check runs.
+bash "$(dirname "$0")/bypass.sh" check-citations && exit 0
 [ $# -ge 1 ] || { echo "usage: check-citations.sh <file> [file...]" >&2; exit 2; }
 
 root="${WF_EVIDENCE_ROOT:-.}"

@@ -5,7 +5,8 @@
 # Exit:  0 always (advisory) unless WF_NEGATION_STRICT=1
 set -uo pipefail
 
-[ -f .claude/wf-skip-checks ] && { echo "check-negation: skipped (.claude/wf-skip-checks)"; exit 0; }
+# Run, never source: a missing bypass.sh then grants nothing and the check runs.
+bash "$(dirname "$0")/bypass.sh" check-negation && exit 0
 [ $# -ge 1 ] || { echo "usage: check-negation.sh <file> [file...]" >&2; exit 2; }
 
 # Claims of absence, Korean and English.
