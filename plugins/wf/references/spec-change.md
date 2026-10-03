@@ -15,6 +15,7 @@
 | `stages[].checks` | 해당 스킬의 증거 절 + hooks.json |
 | `skills.required/recommended` | 위임 대상을 언급한 모든 스킬 본문 |
 | `evidence_store` | 증거 경로를 다루는 스킬 + 검사 스크립트 호출부 |
+| (스펙은 그대로, wf가 올라감) | 생성물 `scripts/`의 검사 스크립트 복사본 |
 
 가장 자주 빠뜨리는 것은 **앞뒤 단계의 연결 문구**다. 단계를 하나 넣으면 그 앞 단계의 "다음은 X" 와 뒤 단계의 "앞서 Y가 끝났으면" 이 둘 다 어긋난다.
 
@@ -29,7 +30,17 @@ grep -A1 '^  - id:' .claude/<플러그인>.local.md | grep -B1 'kind: seam' | gr
 ls plugins/<플러그인>/skills/
 ```
 
-양쪽에 다른 것이 있으면 **어느 쪽이 옳은지 사용자에게 묻는다.** 스펙이 앞서간 것인지(반영 안 됨), 생성물이 앞서간 것인지(스펙 갱신 누락)는 파일만 봐서는 알 수 없다.
+복사된 검사 스크립트도 본다. 생성 시점에 `scripts/`로 복사된 것이라 wf가 올라가도 따라오지 않는다 — 스펙을 한 줄도 안 바꿨어도 생기는 drift다.
+
+```bash
+for f in bypass.sh check-citations.sh check-coverage.sh check-negation.sh; do
+  cmp -s "${CLAUDE_PLUGIN_ROOT}/scripts/$f" "plugins/<플러그인>/scripts/$f" || echo "STALE $f"
+done
+```
+
+`STALE`이 뜨면 아래 2번의 손수정 판별을 거친 뒤 네 파일을 다시 복사한다. `bypass.sh`가 아예 없는 생성물은 이유 없는 마커로도 검사가 꺼지는 옛 스크립트를 쓰고 있다.
+
+스펙과 생성물 사이에 다른 것이 있으면 **어느 쪽이 옳은지 사용자에게 묻는다.** 스펙이 앞서간 것인지(반영 안 됨), 생성물이 앞서간 것인지(스펙 갱신 누락)는 파일만 봐서는 알 수 없다.
 
 ## 2. 손수정을 판별한다
 
