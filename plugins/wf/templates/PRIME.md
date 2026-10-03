@@ -50,6 +50,6 @@ At the end of a unit of work: close the issues, run the relevant quality gates, 
 
 ## Workflow skills
 
-The `wf:` plugin owns the seams between beads, orca, and the engineering skills. Reach for them instead of improvising:
+The `<plugin>:` plugin owns the seams between beads, orca, and the engineering skills. Reach for them instead of improvising:
 
-`wf:sources` (gather grounding before starting) · `wf:slice` (spec → issue DAG) · `wf:start` (ready → claimed → running) · `wf:verify` (browser E2E with evidence) · `wf:done` (gates → close → report) · `wf:handoff` (hand the session to a fresh agent) · `wf:intake` (external reports → triaged issues) · `wf:map` (oversized work → investigation tickets)
+`<plugin>:sources` (gather grounding before starting) · `<plugin>:slice` (spec → issue DAG) · `<plugin>:start` (ready → claimed → running) · `<plugin>:verify` (browser E2E with evidence) · `<plugin>:done` (gates → close → report) · `<plugin>:handoff` (hand the session to a fresh agent) · `<plugin>:intake` (external reports → triaged issues) · `<plugin>:map` (oversized work → investigation tickets)

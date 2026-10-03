@@ -20,4 +20,4 @@ Move an issue with `bd update <id> --status=<status>`.
 
 Pair `ready-for-human` with `bd human <id>` so it also shows up in the human-decision queue.
 
-Triage applies only to issues that arrived from outside — bug reports, feature requests, findings from QA sessions. Issues produced by `to-issues` or `wf:slice` are already agent-ready and must not be re-triaged.
+Triage applies only to issues that arrived from outside — bug reports, feature requests, findings from QA sessions. Issues produced by `to-issues` or `<plugin>:slice` are already agent-ready and must not be re-triaged.

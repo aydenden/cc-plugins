@@ -26,7 +26,7 @@ stages:
     kind: seam
     produces: "beads 초기화(--skip-agents) · .beads/PRIME.md · docs/agents/ 어댑터 3종"
     checks: [existence]
-    note: "templates/PRIME.md, issue-tracker.md, triage-labels.md, domain.md 를 복사한다"
+    note: "templates/PRIME.md, issue-tracker.md, triage-labels.md, domain.md 를 복사하고 <plugin>: 을 플러그인 이름으로 바꾼다"
 
   - id: sources
     kind: seam
