@@ -56,7 +56,7 @@ skills/design/     워크플로우 설계 진입점
 skills/retro/      회고 → 축 추가
 references/
   toolchain.md          고정 의존성 + 겹치는 기능의 채택 결정
-  beads-contract.md     bd 호출 규약 + 실측 제약 (문서와 어긋나는 항목 포함)
+  beads-contract.md     bd 실측 제약과 커밋 정책 (사용법은 beads 스킬 소유)
   stage-patterns.md     흔한 단계와 이음매/위임 판정 기준
   axis-patterns.md      축 문법 · 네 출처 · 원격 축 저장소
   preview-patterns.md   정직한 렌더링 · as-is 파일 대조

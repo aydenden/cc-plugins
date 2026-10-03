@@ -30,13 +30,7 @@
 
 ## 규칙 3 — as-is와 대조한다
 
-as-is 촬영본이 있으면 자동 신호를 얻는다.
-
-```bash
-agent-browser open "file://$(pwd)/preview.html"
-agent-browser screenshot preview.png --full
-agent-browser diff screenshot --baseline <as-is 촬영본>
-```
+as-is 촬영본이 있으면 자동 신호를 얻는다. 프리뷰를 전체 화면으로 촬영해 as-is 촬영본과 시각 diff를 낸다 — 명령은 `agent-browser` 스킬을 따른다.
 
 스타일이 미정의면 diff가 크게 뜬다. 사람이 눈으로 보기 전에 신호가 먼저 온다.
 
