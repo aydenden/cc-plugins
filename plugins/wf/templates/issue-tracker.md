@@ -10,7 +10,7 @@ Skills that create, read, or move issues use these calls:
 |---|---|
 | Create | `bd create --title= --description= --type=task\|bug\|feature --priority=0..4` |
 | Acceptance criteria | `bd create --acceptance="..."` or `bd update <id> --acceptance="..."` |
-| Design decisions | `bd create --design="..."` |
+| Per-ticket design notes | `bd create --design="..."` |
 | Hierarchy | `bd create --parent=<epic-id>` |
 | Dependency | `bd dep add <issue> <blocker>` |
 | List open | `bd list --status=open` |
@@ -30,6 +30,7 @@ Pull requests are not a request surface for this repository. Triage handles issu
 
 ## Notes
 
+- `--design` holds the design notes of that one ticket. Decisions that outlive the ticket go to `docs/adr/`, which is the single source of truth for them (`docs/agents/domain.md`).
 - `bd edit` opens `$EDITOR` and blocks agents. Use `bd update` with field flags.
 - Nothing reaches a remote until `bd dolt push` runs explicitly.
 - Issues produced by `to-issues` are already agent-ready. Do not run them through triage.
