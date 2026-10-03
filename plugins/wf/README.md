@@ -63,6 +63,7 @@ references/
   evidence-patterns.md  검증 6종 × 단계 성격별 선택
   spec-change.md        스펙 변경의 파급 · drift · 손수정 보존
 scripts/
+  bypass.sh             우회 판정과 기록 (세 검사가 부른다)
   check-citations.sh    인용 경로 실존 검사        (차단)
   check-coverage.sh     축마다 행 + 그 행의 근거     (차단)
   check-negation.sh     "없음" 주장에 검색 명령 유무 (경고)
@@ -170,12 +171,10 @@ bash plugins/wf/scripts/check-coverage.test.sh
 축 판정만 테스트한다 — 두 차단 검사 중 이쪽만 **문서를 해석해서** 판정하기 때문이다
 (`check-citations.sh`는 경로의 실존 여부라 해석이 없다). `UNADDRESSED`/`INCOMPLETE` 구분,
 `해당 없음`의 사유 유무, 그리고 `state`가 `state-lifetime` 행을 제 것으로 세지 않는
-토큰 경계가 케이스로 있다.
+토큰 경계가 케이스로 있다. 우회는 이유 유무, 로그 기록, 그리고 `bypass.sh`가 빠졌을 때 검사가 그대로 도는지를 본다.
 
 ## 검증 우회
 
 차단하는 hook에는 우회 경로가 있어야 한다. 없으면 오탐 한 번에 검사 전체가 꺼진다.
 
-```bash
-touch .claude/wf-skip-checks    # 의도적 우회. 끝나면 지운다
-```
+다만 **이유 없는 우회는 받지 않고, 우회한 사실은 스크립트가 워킹트리 밖 로그에 남긴다.** 검사가 꺼지는 지점이 아무 기록도 남기지 않으면 통과한 것과 끈 것이 같은 출력으로 보인다. 형식과 로그 위치는 `references/evidence-patterns.md`.

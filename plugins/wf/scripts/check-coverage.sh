@@ -15,7 +15,8 @@
 # Exit: 0 every axis addressed · 1 at least one missing or incomplete · 2 bad usage
 set -uo pipefail
 
-[ -f .claude/wf-skip-checks ] && { echo "check-coverage: skipped (.claude/wf-skip-checks)"; exit 0; }
+# Run, never source: a missing bypass.sh then grants nothing and the check runs.
+bash "$(dirname "$0")/bypass.sh" check-coverage && exit 0
 [ $# -eq 2 ] || { echo "usage: check-coverage.sh <axes-file> <artifact-file>" >&2; exit 2; }
 
 axes_file="$1"; artifact="$2"

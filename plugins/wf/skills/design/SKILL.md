@@ -117,7 +117,7 @@ npx skills find "<단계 키워드>"
 - **스킬 본문인가 hook인가** — 본문은 권고라 건너뛸 수 있고, hook은 harness가 실행하므로 못 건너뛴다. 인용과 커버리지는 hook으로 간다.
 - **차단인가 경고인가** — 차단하는 hook에는 **반드시 우회 플래그를 둔다**. 우회할 수 없는 검사는 결국 꺼진다.
 
-`${CLAUDE_PLUGIN_ROOT}/scripts/`의 `check-citations.sh`·`check-coverage.sh`·`check-negation.sh`를 생성되는 플러그인의 `scripts/`로 복사하고 hook에서 부르게 한다.
+`${CLAUDE_PLUGIN_ROOT}/scripts/`의 `check-citations.sh`·`check-coverage.sh`·`check-negation.sh`와 이들이 부르는 `bypass.sh`를 생성되는 플러그인의 `scripts/`로 복사하고 hook에서 검사 셋을 부르게 한다. `bypass.sh`가 빠지면 우회가 통하지 않는다.
 
 # 8. 스펙에 기록한다
 
