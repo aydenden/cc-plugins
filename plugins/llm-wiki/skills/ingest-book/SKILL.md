@@ -18,6 +18,12 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/ingest-book.mjs" doctor
 다른 기기에서 반쯤 돌다 실패하는 것보다 시작 전에 거부하는 게 낫다.
 
 - `platform` / `marker-pdf` — 필수. 없으면 실행 불가
+- `llama-server` — 필수. surya OCR 모델이 이 안에서 돈다. `SURYA_INFERENCE_URL`로 상주 서버를
+  쓸 때만 없어도 된다. **출력된 버전을 본다** — 산출물과 속도가 llama.cpp 빌드를 따라 움직이므로,
+  튜닝 실측 때와 버전이 다르면 전권을 태우기 전에 같은 구간을 다시 돌려 대조한다.
+  `queue`는 권마다 이 버전을 `queue.json`의 `llamaCpp`에 남긴다
+- `poppler` — `queue`의 레인 판정(`pdftotext`)과 쪽수(`pdfinfo`)에 쓰인다. `convert` 단독
+  실행은 `warn`이어도 진행한다
 - `docling` — 웹 문서 변환용이라 책 경로에는 쓰이지 않는다. `warn`이어도 진행한다
 - `surya-models` — 미캐시면 최초 변환이 약 3.6GB를 내려받는다. 사용자에게 미리 알린다
 
