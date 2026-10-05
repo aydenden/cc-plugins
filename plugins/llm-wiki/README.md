@@ -74,6 +74,8 @@ Lint 커맨드는 없다 — 정비도 커밋도 아래 훅이 log 기록 직후
 
 **없다.** 읽기·검색·페이지 작성은 CC 내장 도구만 쓰고, `scripts/`의 다섯 파일은 전부 **node:
 내장 모듈만 쓰는 의존성 0 Node `.mjs`** 라 macOS·Linux·Windows 11에서 `node` 하나로 돈다.
+`scripts/surya-guard/sitecustomize.py`만 파이썬인데, 도서 변환 때 marker의 파이썬이 읽는 파일이고
+추가로 설치하는 것은 없다.
 
 설치가 필요한 것은 둘뿐이며 **둘 다 선택**이다 — 도서 변환(`ingest-book`, 환경 가드가 막고
 주력 기기 전용)과 선택 계층 리서치 채널(`/llm-wiki:setup-channels`, 옵트인). 어느 쪽도 없이
@@ -140,7 +142,8 @@ plugins/llm-wiki/
     ├── vault-git.mjs             #   볼트 원격 동기화 (sync/commit) — 두 훅이 공유
     ├── research-channels.mjs     #   무키 논문 5종 + X 단건
     ├── setup-channels.mjs        #   선택 채널 진단·설치
-    └── ingest-book.mjs           #   도서 변환 파이프라인 (설치형 도구 필요)
+    ├── ingest-book.mjs           #   도서 변환 파이프라인 (설치형 도구 필요)
+    └── surya-guard/              #   변환 중 OCR 반복 루프 차단 — marker의 파이썬이 읽는다
 ```
 
 서브에이전트 정의 파일(`agents/`)은 두지 않는다 — 조사 프롬프트는 커맨드가, 적재 절차는 스킬이 소유한다.
@@ -151,4 +154,5 @@ plugins/llm-wiki/
 node --test scripts/lint.test.mjs scripts/ingest-book.test.mjs \
   scripts/research-channels.test.mjs scripts/setup-channels.test.mjs \
   scripts/vault-git.test.mjs hooks/post-log.test.mjs
+bash scripts/surya-guard/sitecustomize.test.sh    # python3 필요
 ```

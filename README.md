@@ -12,7 +12,7 @@
 
 ## 플러그인
 
-### [llm-wiki](./plugins/llm-wiki) · v0.30.0
+### [llm-wiki](./plugins/llm-wiki) · v0.31.0
 **Obsidian 볼트를 지식 베이스로 운영한다.** 조사한 것을 다음에 다시 쓰고, 쌓인 것끼리 이어 붙인다.
 
 기기를 옮겨 다니며 일하는데, 설치가 필요한 순간 그 기기에서는 위키가 열리지 않았다.
@@ -25,7 +25,7 @@
 **MRR 0.955로, 버린 하이브리드 스택(0.868)보다 오히려 높았다**(MRR은 정답이 상위에 오는 정도로, 1에 가까울수록 좋다).
 ([평가 기록](./docs/research/2026-08-17-recall-grep-eval.md) · [버린 설계](./docs/plans/archived/2026-07-25-llm-wiki-search-design.md))
 
-`node`만 있으면 된다 · 커맨드 4 · 스킬 2 · 훅 2 · 테스트 118
+`node`만 있으면 된다 · 커맨드 4 · 스킬 2 · 훅 2 · 테스트 124
 
 ---
 
@@ -138,6 +138,8 @@ llm-wiki가 셋을 다 쓰는 이유는 **캡처는 사용자가 부르지만 �
 ## 테스트
 
 실행 환경은 `node`(CC 자체가 node로 돈다)와 `bash`뿐이다 — **설치할 패키지가 없다.**
+예외는 llm-wiki의 `surya-guard` 테스트 하나로, `python3`가 있어야 한다(가드가 marker의 파이썬
+안에서만 도는 파일이라서다).
 
 ```bash
 node --test "plugins/**/*.test.mjs"
