@@ -135,19 +135,13 @@ llm-wiki가 셋을 다 쓰는 이유는 **캡처는 사용자가 부르지만 �
 
 ---
 
-## 레포 상태
+## 테스트
 
-| | |
-|---|---|
-| 플러그인 | 4개 (llm-wiki v0.28.0 · long-run v0.1.0 · memory-guard v0.4.0 · wf v0.5.0) |
-| 유닛 테스트 | **218개** (`node --test` 194 · bash 24). 검색 품질 평가셋 118문항은 별개다 |
-| 실행 환경 | `node`(CC 자체가 node로 돈다)와 `bash` 뿐 — **설치할 패키지가 없다** |
-| 커밋 | 175개 · 2026-01 ~ 2026-09 |
-| 이슈 관리 | [beads](https://github.com/steveyegge/beads) 43개 (완료 41). 데이터는 `refs/dolt/data` 에 격리 |
+실행 환경은 `node`(CC 자체가 node로 돈다)와 `bash`뿐이다 — **설치할 패키지가 없다.**
 
 ```bash
-node --test plugins/llm-wiki/scripts/ plugins/llm-wiki/hooks/ plugins/memory-guard/src/ plugins/long-run/scripts/test/
-bash plugins/wf/scripts/check-coverage.test.sh
+node --test "plugins/**/*.test.mjs"
+for f in $(find plugins -name '*.test.sh'); do bash "$f"; done
 ```
 
 테스트는 판정 로직에 몰려 있다. 파일시스템과 네트워크를 만지는 부분은 어댑터 한 곳으로 밀어내고,
