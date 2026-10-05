@@ -140,6 +140,7 @@ const SURYA_TUNING = {
 
 const INSTALL_HINT = [
   'uv tool install --python 3.12 marker-pdf',
+  'brew install llama.cpp poppler',
   'uv tool install --python 3.12 docling --with ocrmac   # web ingest only',
 ].join('\n  ');
 
@@ -340,6 +341,43 @@ function which(bin) {
   return res.stdout.split('\n')[0].trim() || null;
 }
 
+/** Same env var surya reads, so the guard inspects the binary marker will actually spawn. */
+function llamaBinary() {
+  return process.env.LLAMA_CPP_BINARY || 'llama-server';
+}
+
+/** The identifying line of `llama-server --version`, or null when it has none. */
+function parseLlamaVersion(text) {
+  const match = /^version:\s*(.+?)\s*$/m.exec(text);
+  return match ? match[1] : null;
+}
+
+/** Build of the llama.cpp binary surya will spawn; null when absent or mute. */
+function llamaVersion() {
+  const res = spawnSync(llamaBinary(), ['--version'], { encoding: 'utf8' });
+  if (res.error) return null;
+  // llama-server reports its version on stderr.
+  return parseLlamaVersion(`${res.stderr || ''}\n${res.stdout || ''}`);
+}
+
+/**
+ * surya's OCR model runs inside llama-server, so without the binary marker
+ * fails on the first page. An external server (SURYA_INFERENCE_URL) replaces
+ * the spawn, which is the one case a missing binary is not fatal.
+ *
+ * The version is part of the report because output and throughput both move
+ * with the llama.cpp build: tuning measured on one build says nothing certain
+ * about the next.
+ */
+function llamaServerCheck({ bin, version, url }) {
+  const where = bin ? `${bin} — ${version || 'version unknown'}` : 'not on PATH';
+  return {
+    id: 'llama-server', required: !url, ok: Boolean(bin),
+    detail: url ? `${where} (external server ${url})` : where,
+    hint: 'brew install llama.cpp   (or set LLAMA_CPP_BINARY / SURYA_INFERENCE_URL)',
+  };
+}
+
 /**
  * Inspect the host. `required` checks decide whether the pipeline may run at
  * all; the rest are reported so the agent can explain a slow first run.
@@ -360,6 +398,17 @@ function inspectEnv() {
     id: 'marker-pdf', required: true, ok: Boolean(marker),
     detail: marker || 'not on PATH',
     hint: `uv tool install --python 3.12 marker-pdf`,
+  });
+  const llama = which(llamaBinary());
+  checks.push(llamaServerCheck({
+    bin: llama, version: llama ? llamaVersion() : null, url: process.env.SURYA_INFERENCE_URL,
+  }));
+  // Not required: only `queue` needs poppler, and it refuses on its own.
+  const poppler = [PDFTOTEXT_BIN, PDFINFO_BIN].filter((bin) => !which(bin));
+  checks.push({
+    id: 'poppler', required: false, ok: poppler.length === 0,
+    detail: poppler.length ? `${poppler.join(', ')} not on PATH (queue cannot pick an OCR lane)` : 'pdftotext, pdfinfo',
+    hint: 'brew install poppler',
   });
   const docling = which(DOCLING_BIN);
   checks.push({
@@ -388,7 +437,8 @@ function requireEnv() {
 }
 
 function doctor(opts) {
-  for (const c of inspectEnv()) {
+  const checks = inspectEnv();
+  for (const c of checks) {
     const mark = c.ok ? 'ok  ' : c.required ? 'MISS' : 'warn';
     console.log(`${mark} ${c.id.padEnd(13)} ${c.detail}`);
   }
@@ -397,7 +447,7 @@ function doctor(opts) {
     console.log(err ? `MISS pdf           ${err}` : `ok   pdf           ${opts.pdf}`);
     if (err) return 2;
   }
-  return inspectEnv().some((c) => c.required && !c.ok) ? 2 : 0;
+  return checks.some((c) => c.required && !c.ok) ? 2 : 0;
 }
 
 // --- convert ---
@@ -1779,7 +1829,12 @@ function queue(opts) {
     ];
     if (opts.disable_images) args.push('--disable_image_extraction');
 
+    // Read per book, not per run: the queue outlives a `brew upgrade`, and each
+    // book spawns its own llama-server from whatever binary is current.
+    const llamaCpp = llamaVersion();
+    const inferenceUrl = process.env.SURYA_INFERENCE_URL;
     note(`queue: [${processed + 1}] ${entry.file} (${entry.pages ?? '?'}p, ${entry.lane})`);
+    note(`queue:   llama.cpp ${llamaCpp ?? 'version unknown'}${inferenceUrl ? ` (external server ${inferenceUrl})` : ''}`);
     const started = Date.now();
     const logFile = path.join(bookDir, 'marker.log');
     const out = fs.openSync(logFile, 'w');
@@ -1788,6 +1843,8 @@ function queue(opts) {
     const secs = (Date.now() - started) / 1000;
 
     entry.secs = Math.round(secs);
+    entry.llamaCpp = llamaCpp;
+    if (inferenceUrl) entry.inferenceUrl = inferenceUrl;
     const produced = res.status === 0 ? findMarkdown(bookDir) : null;
     if (res.status !== 0 || !produced) {
       entry.status = 'failed';
@@ -2019,4 +2076,4 @@ function countFindings(logFile) {
 const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 if (invokedDirectly) process.exit(main(process.argv.slice(2)));
 
-export { pickLane, buildManifest, laneFlagText, readSkipList, trimUrl, probeUrls, checkUrlReachability, normalizeGlossary, glossaryHits, bookAssetId, rewriteAssetLinks, findIsbn, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv };
+export { pickLane, buildManifest, laneFlagText, readSkipList, trimUrl, probeUrls, checkUrlReachability, normalizeGlossary, glossaryHits, bookAssetId, rewriteAssetLinks, findIsbn, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv, parseLlamaVersion, llamaServerCheck };

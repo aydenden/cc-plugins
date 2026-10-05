@@ -19,7 +19,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn, readSkipList, trimUrl, checkUrlReachability, glossaryHits, normalizeGlossary } from './ingest-book.mjs';
+import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn, readSkipList, trimUrl, checkUrlReachability, glossaryHits, normalizeGlossary, parseLlamaVersion, llamaServerCheck } from './ingest-book.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./ingest-book.mjs', import.meta.url));
 const SEP = '-'.repeat(48);
@@ -316,10 +316,84 @@ test('CLI convert: refuses a directory instead of scanning it', () => {
 test('CLI doctor: reports every check and agrees with its own exit code', () => {
   const res = run(['doctor']);
   const out = res.stdout + (res.stderr || '');
-  for (const id of ['platform', 'marker-pdf', 'docling', 'surya-models']) {
+  for (const id of ['platform', 'marker-pdf', 'llama-server', 'poppler', 'docling', 'surya-models']) {
     assert.match(out, new RegExp(id));
   }
   assert.equal(res.code === 0, !/^MISS/m.test(out));
+});
+
+test('parseLlamaVersion: keeps version, build and commit; anything else is unknown', () => {
+  assert.equal(
+    parseLlamaVersion('version: 0.4.1 (build 10964, commit b29c606e2)\nbuilt with AppleClang 21.0.0 for Darwin arm64\n'),
+    '0.4.1 (build 10964, commit b29c606e2)',
+  );
+  assert.equal(parseLlamaVersion('version: 6123 (abc1234)\n'), '6123 (abc1234)');
+  assert.equal(parseLlamaVersion('usage: llama-server [options]'), null);
+  assert.equal(parseLlamaVersion(''), null);
+});
+
+test('llamaServerCheck: required unless an external inference server stands in for it', () => {
+  const missing = llamaServerCheck({ bin: null, version: null, url: undefined });
+  assert.equal(missing.required, true);
+  assert.equal(missing.ok, false);
+
+  const external = llamaServerCheck({ bin: null, version: null, url: 'http://127.0.0.1:8801/v1' });
+  assert.equal(external.required, false);
+  assert.match(external.detail, /127\.0\.0\.1:8801/);
+
+  const present = llamaServerCheck({ bin: '/opt/homebrew/bin/llama-server', version: '0.4.1 (build 10964, commit b29c606e2)', url: undefined });
+  assert.equal(present.ok, true);
+  assert.match(present.detail, /llama-server.*0\.4\.1 \(build 10964/);
+
+  // A binary that will not say what it is still runs; the version is just unknown.
+  const mute = llamaServerCheck({ bin: '/usr/local/bin/llama-server', version: null, url: undefined });
+  assert.equal(mute.ok, true);
+  assert.match(mute.detail, /version unknown/);
+});
+
+test('CLI queue: each converted book records the llama.cpp build that read it', () => {
+  const root = tmpdir('ingest-book-llama-');
+  const books = path.join(root, 'books');
+  fs.mkdirSync(books);
+  fs.writeFileSync(path.join(books, 'book.pdf'), '%PDF-1.4\n');
+
+  const bin = path.join(root, 'bin');
+  fs.mkdirSync(bin);
+  const stub = (name, body) => {
+    fs.writeFileSync(path.join(bin, name), `#!/bin/sh\n${body}\n`, 'utf8');
+    fs.chmodSync(path.join(bin, name), 0o755);
+  };
+  // marker writes <output_dir>/<stem>/<stem>.md; the stub does the same and nothing else.
+  stub('marker_single', [
+    'while [ $# -gt 0 ]; do',
+    '  if [ "$1" = "--output_dir" ]; then out="$2"; fi',
+    '  shift',
+    'done',
+    'mkdir -p "$out/book" && echo "# book" > "$out/book/book.md"',
+  ].join('\n'));
+  stub('llama-server', 'echo "version: 9.9.9 (build 4242, commit deadbeef)" >&2');
+  stub('pdftotext', 'exit 0');
+  stub('pdfinfo', 'echo "Pages:          3"');
+
+  const out = path.join(root, 'out');
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+  delete env.SURYA_INFERENCE_URL;
+  delete env.LLAMA_CPP_BINARY;
+  const res = run(['queue', '--books', books, '--out', out], { env });
+  assert.equal(res.code, 0, res.stderr);
+
+  const [entry] = JSON.parse(fs.readFileSync(path.join(out, 'queue.json'), 'utf8'));
+  assert.equal(entry.status, 'done');
+  assert.equal(entry.llamaCpp, '9.9.9 (build 4242, commit deadbeef)');
+  assert.equal('inferenceUrl' in entry, false);
+  assert.match(fs.readFileSync(path.join(out, 'queue.log'), 'utf8'), /llama\.cpp 9\.9\.9 \(build 4242/);
+
+  // With a resident server the local binary is not necessarily the one serving,
+  // so the URL is recorded beside it rather than passing the version off as fact.
+  fs.rmSync(out, { recursive: true });
+  run(['queue', '--books', books, '--out', out], { env: { ...env, SURYA_INFERENCE_URL: 'http://127.0.0.1:8801/v1' } });
+  const [external] = JSON.parse(fs.readFileSync(path.join(out, 'queue.json'), 'utf8'));
+  assert.equal(external.inferenceUrl, 'http://127.0.0.1:8801/v1');
 });
 
 test('laneFlagText: a known lane names its flags, an unrecorded one says so', () => {
