@@ -66,7 +66,14 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/ingest-book.mjs" queue \
 ```
 
 - **레인을 책마다 자동으로 고른다.** `pdftotext`로 전권을 훑어 글자가 하나도 안 나오면
-  `--mode balanced`(빠르고 헤딩이 `##`로 깔끔), 조금이라도 나오면 `--force_ocr`.
+  `balanced` 레인(`--mode balanced --force_ocr`, 빠르고 헤딩이 `##`로 깔끔), 조금이라도 나오면
+  `force_ocr` 레인(`--force_ocr`).
+- **`balanced` 레인에 `--force_ocr`가 붙는 것은 의도다.** 글자 없는 지면은 풀페이지 OCR이 구조를
+  통째로 다시 만들어 marker의 레이아웃 호출이 버려지는데, 두 플래그를 함께 줘야만 marker가 그
+  호출을 건너뛴다. 쪽당 요청이 2건에서 1건으로 줄고 14~20% 빨라지며 본문은 동일하다(실측).
+  **이 조합을 `force_ocr` 레인으로 옮기지 말 것** — 코드 밀집 구간에서 이득이 확인되지 않았다
+- `queue`는 권마다 실제로 쓴 플래그를 `queue.json`의 `flags`에 남기고, 목차의 변환 줄은 그 기록을
+  따른다. 기록이 없는 옛 항목은 당시 플래그(`--mode balanced` 단독)로 표기된다
   스캔본의 "텍스트 레이어"는 십중팔구 쓰레기(ToUnicode 없는 폰트 인코딩, 스캐너가 구워넣은
   불량 OCR)이고 balanced/fast는 그걸 믿어 **코드블록을 산문으로 뭉갠다**
 - 표본이 아니라 **전권**을 훑는 이유: 일부 지면에만 레이어가 있는 책이 표본을 빠져나가

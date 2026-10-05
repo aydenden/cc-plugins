@@ -84,8 +84,27 @@ const MARKER_BASE_FLAGS = [
  *
  * `--mode fast` is never used. It is the MPS default, and on a textless page it
  * still block-OCRs at 26.4 s/page while emitting worse headings than balanced.
+ *
+ * The balanced lane carries `--force_ocr` as well. A textless page is rebuilt
+ * wholesale from its full-page OCR, so the VLM layout call marker makes first
+ * is thrown away - and marker only skips that call when it is given both flags
+ * (`LayoutBuilder.__call__`). Three 20-page ranges, resident server, llama.cpp
+ * 0.5.0: 147/126/127 s -> 118/107/109 s, requests per page 2 -> 1, and the
+ * markdown identical once image file names are normalised (their block index
+ * shifts). There is nothing for `--force_ocr` to override on this lane: it is
+ * only chosen when the book has no text layer.
+ *
+ * The force_ocr lane stays without `--mode balanced`. One code-dense range ran
+ * 792 s as is and 979 s with it, but surya's temperature retries make a single
+ * run on such pages unrepeatable, so that says nothing either way.
  */
 const LANE_FLAGS = {
+  balanced: ['--mode', 'balanced', '--force_ocr'],
+  force_ocr: ['--force_ocr'],
+};
+
+/** What each lane ran with before the queue started recording flags per book (v0.30.0). */
+const LEGACY_LANE_FLAGS = {
   balanced: ['--mode', 'balanced'],
   force_ocr: ['--force_ocr'],
 };
@@ -94,9 +113,14 @@ const LANE_FLAGS = {
  * How the toc records the flags a book was converted with. `split` only sees
  * the markdown, so the lane has to be passed in; an unrecorded lane says so
  * rather than naming a lane that may not be the one that ran.
+ *
+ * A lane's flags can change between releases, so the queue records the string
+ * each book actually ran with and that wins (`recorded`). A queue entry older
+ * than that record is read against the flags of its day (`legacy`).
  */
-function laneFlagText(lane) {
-  const flags = LANE_FLAGS[lane];
+function laneFlagText(lane, { recorded = null, legacy = false } = {}) {
+  if (recorded) return recorded;
+  const flags = (legacy ? LEGACY_LANE_FLAGS : LANE_FLAGS)[lane];
   if (!flags) return `${MARKER_BASE_FLAGS.join(' ')} (레인 미기록)`;
   return [...flags, ...MARKER_BASE_FLAGS].join(' ');
 }
@@ -812,7 +836,7 @@ function pageRange(ch, pageOffset = null) {
   return `${pdf} · 책 p.${first}-${last}`;
 }
 
-function buildToc({ title, source, chapters, files, pageStart, pageEnd, pageOffset = null, offsetSource = 'none', lane = null }) {
+function buildToc({ title, source, chapters, files, pageStart, pageEnd, pageOffset = null, offsetSource = 'none', lane = null, flagOpts = {} }) {
   const rows = chapters.map((ch, i) => {
     const lines = ch.text.split('\n').length;
     return `| ${String(i + 1).padStart(2, '0')} | [${escapePipes(ch.title)}](${files[i]}) | ${pageRange(ch, pageOffset)} | ${lines} |`;
@@ -825,7 +849,7 @@ function buildToc({ title, source, chapters, files, pageStart, pageEnd, pageOffs
     '## 변환 정보',
     '',
     `- 원본: \`${source}\``,
-    `- 변환: marker-pdf \`${laneFlagText(lane)}\``,
+    `- 변환: marker-pdf \`${laneFlagText(lane, flagOpts)}\``,
     `- 변환일: ${today()}`,
     `- 원본 페이지: PDF p.${pageStart ?? '?'}-${pageEnd ?? '?'} (1-indexed로 환산됨)`,
     pageOffset === null
@@ -902,7 +926,7 @@ function split(opts) {
   const title = typeof opts.title === 'string' ? opts.title : path.basename(opts.md, '.md');
   fs.writeFileSync(
     path.join(outDir, '00-toc.md'),
-    buildToc({ title, source: path.basename(opts.md), chapters, files, pageStart, pageEnd, pageOffset, offsetSource, lane }),
+    buildToc({ title, source: path.basename(opts.md), chapters, files, pageStart, pageEnd, pageOffset, offsetSource, lane, flagOpts: opts.flag_opts }),
     'utf8',
   );
 
@@ -1844,6 +1868,7 @@ function queue(opts) {
 
     entry.secs = Math.round(secs);
     entry.llamaCpp = llamaCpp;
+    entry.flags = laneFlagText(entry.lane);
     if (inferenceUrl) entry.inferenceUrl = inferenceUrl;
     const produced = res.status === 0 ? findMarkdown(bookDir) : null;
     if (res.status !== 0 || !produced) {
@@ -2008,6 +2033,7 @@ function load(opts) {
       const stages = [
         ['split', () => split({
           md, out: chapters, title, lane: entry.lane,
+          flag_opts: { recorded: entry.flags, legacy: !entry.flags },
           section_depth: opts.section_depth, level: opts.level,
           page_offset: opts.page_offset, no_page_offset: opts.no_page_offset,
         })],
