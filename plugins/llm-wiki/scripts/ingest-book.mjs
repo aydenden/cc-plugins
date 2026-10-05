@@ -162,6 +162,61 @@ const SURYA_TUNING = {
   SURYA_GUIDED_LAYOUT: 'false',
 };
 
+/** Where the surya guard lives; see the docstring of `surya-guard/sitecustomize.py`. */
+const SURYA_GUARD_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'surya-guard');
+
+/**
+ * Environment that puts marker under the surya guard: a `sitecustomize.py` that
+ * caps runs of spaces with a grammar and cuts other repetition loops early. On
+ * a code-dense 20-page range it took the run from 441-457s to 145-149s and
+ * removed every block-mode fallback; 60 prose pages came out byte-identical.
+ * Evidence: book-queue/REPORT-retry-waste.md.
+ *
+ * It is the one Python file in this plugin. The loop is fixed where the
+ * request is built, inside marker's interpreter, and marker already is the
+ * Python dependency of this pipeline; no package is added.
+ *
+ * @param {object} env the caller's environment; its settings win
+ * @param {string} guardDir directory holding `sitecustomize.py`
+ * @param {string} statusFile where the guard reports whether it patched surya
+ * @returns {object} variables to add, empty when `SURYA_GUARD=off`
+ */
+function suryaGuardEnv(env, guardDir, statusFile) {
+  if (env.SURYA_GUARD === 'off') return {};
+  return {
+    PYTHONPATH: env.PYTHONPATH ? `${guardDir}${path.delimiter}${env.PYTHONPATH}` : guardDir,
+    SURYA_GUARD_SPACE_CAP: env.SURYA_GUARD_SPACE_CAP ?? '64',
+    SURYA_GUARD_STREAM_ABORT: env.SURYA_GUARD_STREAM_ABORT ?? '400',
+    SURYA_GUARD_STATUS: statusFile,
+  };
+}
+
+/**
+ * The guard hooks two private functions of surya, so a surya upgrade can
+ * disable it without any error. This turns what the guard reported into a
+ * warning for that case; the conversion itself is still valid, only slow.
+ *
+ * @param {object} env the caller's environment
+ * @param {string|null} status contents of the status file, null when it was never written
+ * @returns {string|null} a warning line, or null when the guard ran or was switched off
+ */
+function suryaGuardWarning(env, status) {
+  if (env.SURYA_GUARD === 'off') return null;
+  if (status === null) return 'surya guard never loaded — repetition loops are not being cut (does marker honour PYTHONPATH?)';
+  if (status.startsWith('patched')) return null;
+  return `surya guard inactive — ${status.trim()} (surya changed; update scripts/surya-guard or set SURYA_GUARD=off)`;
+}
+
+/** Runs marker under the guard and returns spawnSync's result plus the guard warning, if any. */
+function runMarker(args, stdio, statusFile) {
+  fs.rmSync(statusFile, { force: true });
+  const env = { ...SURYA_TUNING, ...process.env, ...suryaGuardEnv(process.env, SURYA_GUARD_DIR, statusFile) };
+  const res = spawnSync(MARKER_BIN, args, { stdio, env });
+  const status = fs.existsSync(statusFile) ? fs.readFileSync(statusFile, 'utf8') : null;
+  fs.rmSync(statusFile, { force: true });
+  return { res, guardWarning: suryaGuardWarning(process.env, status) };
+}
+
 const INSTALL_HINT = [
   'uv tool install --python 3.12 marker-pdf',
   'brew install llama.cpp poppler',
@@ -510,15 +565,15 @@ function convert(opts) {
   const args = [opts.pdf, ...LANE_FLAGS[lane], ...MARKER_BASE_FLAGS, '--output_dir', outDir];
   if (typeof opts.pages === 'string') args.push('--page_range', opts.pages);
 
-  const env = { ...SURYA_TUNING, ...process.env };
   console.log(`convert: lane=${lane}`);
   console.log(`convert: ${MARKER_BIN} ${args.join(' ')}`);
   for (const [key, value] of Object.entries(SURYA_TUNING)) {
     if (process.env[key] === undefined) console.log(`convert: ${key}=${value} (default)`);
   }
   console.log('convert: a 462-page book took ~69 min here; the first run also loads models.');
-  const res = spawnSync(MARKER_BIN, args, { stdio: 'inherit', env });
+  const { res, guardWarning } = runMarker(args, 'inherit', path.join(outDir, '.surya-guard-status'));
   if (res.status !== 0) return fail(`convert: ${MARKER_BIN} exited ${res.status}`);
+  if (guardWarning) console.error(`convert: WARNING ${guardWarning}`);
 
   const produced = findMarkdown(outDir);
   if (!produced) return fail(`convert: no markdown found under ${outDir}`);
@@ -1862,8 +1917,9 @@ function queue(opts) {
     const started = Date.now();
     const logFile = path.join(bookDir, 'marker.log');
     const out = fs.openSync(logFile, 'w');
-    const res = spawnSync(MARKER_BIN, args, { stdio: ['ignore', out, out], env: { ...SURYA_TUNING, ...process.env } });
+    const { res, guardWarning } = runMarker(args, ['ignore', out, out], path.join(bookDir, '.surya-guard-status'));
     fs.closeSync(out);
+    if (guardWarning) note(`queue:   WARNING ${guardWarning}`);
     const secs = (Date.now() - started) / 1000;
 
     entry.secs = Math.round(secs);
@@ -2102,4 +2158,4 @@ function countFindings(logFile) {
 const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 if (invokedDirectly) process.exit(main(process.argv.slice(2)));
 
-export { pickLane, buildManifest, laneFlagText, readSkipList, trimUrl, probeUrls, checkUrlReachability, normalizeGlossary, glossaryHits, bookAssetId, rewriteAssetLinks, findIsbn, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv, parseLlamaVersion, llamaServerCheck };
+export { pickLane, buildManifest, laneFlagText, readSkipList, trimUrl, probeUrls, checkUrlReachability, normalizeGlossary, glossaryHits, bookAssetId, rewriteAssetLinks, findIsbn, splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, inspectEnv, parseLlamaVersion, llamaServerCheck, suryaGuardEnv, suryaGuardWarning };

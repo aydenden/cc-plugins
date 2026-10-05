@@ -19,7 +19,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn, readSkipList, trimUrl, checkUrlReachability, glossaryHits, normalizeGlossary, parseLlamaVersion, llamaServerCheck } from './ingest-book.mjs';
+import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFrontmatter, laneFlagText, bookAssetId, rewriteAssetLinks, findIsbn, readSkipList, trimUrl, checkUrlReachability, glossaryHits, normalizeGlossary, parseLlamaVersion, llamaServerCheck, suryaGuardEnv, suryaGuardWarning } from './ingest-book.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./ingest-book.mjs', import.meta.url));
 const SEP = '-'.repeat(48);
@@ -396,6 +396,70 @@ test('CLI queue: each converted book records the llama.cpp build that read it', 
   run(['queue', '--books', books, '--out', out], { env: { ...env, SURYA_INFERENCE_URL: 'http://127.0.0.1:8801/v1' } });
   const [external] = JSON.parse(fs.readFileSync(path.join(out, 'queue.json'), 'utf8'));
   assert.equal(external.inferenceUrl, 'http://127.0.0.1:8801/v1');
+});
+
+test('suryaGuardEnv: the guard directory leads PYTHONPATH and the caller\'s settings win', () => {
+  const plain = suryaGuardEnv({}, '/plugin/surya-guard', '/out/status');
+  assert.deepEqual(plain, {
+    PYTHONPATH: '/plugin/surya-guard',
+    SURYA_GUARD_SPACE_CAP: '64',
+    SURYA_GUARD_STREAM_ABORT: '400',
+    SURYA_GUARD_STATUS: '/out/status',
+  });
+
+  const tuned = suryaGuardEnv({ PYTHONPATH: '/mine', SURYA_GUARD_SPACE_CAP: '96' }, '/plugin/surya-guard', '/out/status');
+  assert.equal(tuned.PYTHONPATH, `/plugin/surya-guard${path.delimiter}/mine`);
+  assert.equal(tuned.SURYA_GUARD_SPACE_CAP, '96');
+
+  assert.deepEqual(suryaGuardEnv({ SURYA_GUARD: 'off' }, '/plugin/surya-guard', '/out/status'), {});
+});
+
+test('suryaGuardWarning: silence only when the guard reported that it patched surya', () => {
+  assert.equal(suryaGuardWarning({}, 'patched space_cap=64 stream_abort=400\n'), null);
+  assert.match(suryaGuardWarning({}, null), /never loaded/);
+  assert.match(suryaGuardWarning({}, 'failed: _should_retry is gone\n'), /_should_retry is gone/);
+  // Switched off on purpose is not a fault.
+  assert.equal(suryaGuardWarning({ SURYA_GUARD: 'off' }, null), null);
+});
+
+test('CLI queue: marker runs under the surya guard and a guard that never loaded is reported', () => {
+  const root = tmpdir('ingest-book-guard-');
+  const books = path.join(root, 'books');
+  fs.mkdirSync(books);
+  fs.writeFileSync(path.join(books, 'book.pdf'), '%PDF-1.4\n');
+  const bin = path.join(root, 'bin');
+  fs.mkdirSync(bin);
+  const stub = (name, body) => {
+    fs.writeFileSync(path.join(bin, name), `#!/bin/sh\n${body}\n`, 'utf8');
+    fs.chmodSync(path.join(bin, name), 0o755);
+  };
+  const marker = (reportStatus) => stub('marker_single', [
+    'while [ $# -gt 0 ]; do',
+    '  if [ "$1" = "--output_dir" ]; then out="$2"; fi',
+    '  shift',
+    'done',
+    `echo "$PYTHONPATH" > "${root}/pythonpath"`,
+    reportStatus ? 'echo "patched space_cap=$SURYA_GUARD_SPACE_CAP" > "$SURYA_GUARD_STATUS"' : ':',
+    'mkdir -p "$out/book" && echo "# book" > "$out/book/book.md"',
+  ].join('\n'));
+  stub('llama-server', 'echo "version: 9.9.9 (build 4242, commit deadbeef)" >&2');
+  stub('pdftotext', 'exit 0');
+  stub('pdfinfo', 'echo "Pages:          3"');
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+  delete env.SURYA_GUARD;
+  delete env.PYTHONPATH;
+
+  marker(true);
+  const out = path.join(root, 'out');
+  assert.equal(run(['queue', '--books', books, '--out', out], { env }).code, 0);
+  const guardDir = fs.readFileSync(path.join(root, 'pythonpath'), 'utf8').trim();
+  assert.ok(fs.existsSync(path.join(guardDir, 'sitecustomize.py')), `no sitecustomize.py under ${guardDir}`);
+  assert.doesNotMatch(fs.readFileSync(path.join(out, 'queue.log'), 'utf8'), /surya guard/);
+
+  marker(false);
+  fs.rmSync(out, { recursive: true });
+  assert.equal(run(['queue', '--books', books, '--out', out], { env }).code, 0);
+  assert.match(fs.readFileSync(path.join(out, 'queue.log'), 'utf8'), /surya guard never loaded/);
 });
 
 test('laneFlagText: a known lane names its flags, an unrecorded one says so', () => {

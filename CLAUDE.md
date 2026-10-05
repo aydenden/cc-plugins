@@ -11,6 +11,9 @@ skills — restating it just creates a copy that drifts.
 builtins, or bash. If something seems to need an npm package, stop and ask. llm-wiki
 discarded a finished search-backend design (Orama · bge-m3 · onnxruntime) over this.
 No `package.json`, no lockfile — that is the correct state.
+One approved exception to the language rule: `llm-wiki/scripts/surya-guard/sitecustomize.py`
+runs inside marker's own Python (the loop it stops can only be fixed where the request
+is built) and adds no package. It is not a precedent — ask before adding another.
 
 **2. A version lives in three places; bump all three.** `plugin.json`,
 `marketplace.json`, and the plugin's card heading in the root `README.md`. Update one
