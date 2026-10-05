@@ -385,6 +385,8 @@ test('CLI queue: each converted book records the llama.cpp build that read it', 
   const [entry] = JSON.parse(fs.readFileSync(path.join(out, 'queue.json'), 'utf8'));
   assert.equal(entry.status, 'done');
   assert.equal(entry.llamaCpp, '9.9.9 (build 4242, commit deadbeef)');
+  // The flags are recorded as run, so a later change to a lane cannot rewrite this book's history.
+  assert.equal(entry.flags, laneFlagText('balanced'));
   assert.equal('inferenceUrl' in entry, false);
   assert.match(fs.readFileSync(path.join(out, 'queue.log'), 'utf8'), /llama\.cpp 9\.9\.9 \(build 4242/);
 
@@ -398,8 +400,14 @@ test('CLI queue: each converted book records the llama.cpp build that read it', 
 
 test('laneFlagText: a known lane names its flags, an unrecorded one says so', () => {
   const base = '--paginate_output --output_format markdown --common_element_threshold 1.1 --max_streak 999999';
-  assert.equal(laneFlagText('balanced'), `--mode balanced ${base}`);
+  // balanced carries --force_ocr too: on a textless page marker throws the
+  // layout pass away, and only this pair of flags makes it skip the pass.
+  assert.equal(laneFlagText('balanced'), `--mode balanced --force_ocr ${base}`);
   assert.equal(laneFlagText('force_ocr'), `--force_ocr ${base}`);
+  // A book converted before flags were recorded keeps the flags it really ran with.
+  assert.equal(laneFlagText('balanced', { legacy: true }), `--mode balanced ${base}`);
+  // A recorded flag string wins over anything derived from the lane name.
+  assert.equal(laneFlagText('balanced', { recorded: '--custom flags' }), '--custom flags');
   // Never silently name a lane that may not be the one that ran.
   assert.match(laneFlagText(null), /레인 미기록/);
   assert.match(laneFlagText('fast'), /레인 미기록/);
@@ -427,6 +435,8 @@ test('convert: the IgnoreTextProcessor kill switch reaches marker itself, not ju
     ['--common_element_threshold', '1.1']);
   assert.deepEqual(argv.slice(argv.indexOf('--max_streak'), argv.indexOf('--max_streak') + 2),
     ['--max_streak', '999999']);
+  // Both flags, or marker still pays for a VLM layout call per page it then discards.
+  assert.deepEqual(argv.slice(argv.indexOf('--mode'), argv.indexOf('--mode') + 3), ['--mode', 'balanced', '--force_ocr']);
 });
 
 test('CLI convert: an unknown lane is refused before marker is invoked', () => {
@@ -528,7 +538,10 @@ test('CLI load: takes a converted book through split -> check -> ingest and reco
   const dest = path.join(vault, 'raw', 'books', 'test-book');
   assert.deepEqual(fs.readdirSync(dest).sort(), ['00-toc.md', '01-1-첫-번째-장.md', '02-2-두-번째-장.md']);
   // The lane the queue recorded has to reach the toc; split cannot infer it.
-  assert.match(fs.readFileSync(path.join(dest, '00-toc.md'), 'utf8'), /--mode balanced/);
+  const toc = fs.readFileSync(path.join(dest, '00-toc.md'), 'utf8');
+  assert.match(toc, /--mode balanced/);
+  // This entry predates flag recording, so it ran without --force_ocr and the toc must not claim otherwise.
+  assert.doesNotMatch(toc, /--force_ocr/);
   // The log.md lines are collected, not left for the operator to retype 184 times.
   assert.match(fs.readFileSync(path.join(q, 'load-log.md'), 'utf8'), /ingest \| Test Book/);
 });
