@@ -7,7 +7,7 @@
 | 층 | 무엇 | 왜 세션을 넘나 |
 |---|---|---|
 | 계약 | bd epic 본문 (맵 헌장) | DB 에 있다. 세션이 죽어도 남는다 |
-| 강제 | Stop hook (`scripts/frontier-guard.mjs`) | 플러그인에 달려 있어 어느 repo·worktree 에서 연 세션에도 붙는다 |
+| 강제 | mod (`hooks/register.mjs`), 대비로 Stop hook (`scripts/frontier-guard.mjs`) | 플러그인에 달려 있어 어느 repo·worktree 에서 연 세션에도 붙는다 |
 | 운반 | `long-run:session-handoff` | 인계 문서 하나로 소유권을 넘긴다 |
 
 ## 스킬
@@ -40,21 +40,37 @@
 이 플러그인의 Stop hook 은 바로 그 정지를 되민다. 라벨도 갈라 둔다(`long-run:map` ↔ `wayfinder:map`) —
 섞이면 `wayfinder` 의 「Work through the map」이 실행 맵을 집어 1티켓 규약으로 굴린다.
 
-## 훅
+## 강제 — mod 와 Stop hook
 
-`Stop` 하나. **맵을 선언하지 않은 세션에는 아무 일도 하지 않는다.**
+**맵을 선언하지 않은 세션에는 아무 일도 하지 않는다.**
 
 선언한 세션에서는 멈춤 시도마다 **한 번만** 되민다 — 프론티어가 남았으면 「곧장 다음 티켓을 claim
 하라」로, 컨텍스트가 창의 50% 를 넘었으면 「이어가지 말고 인계하라」로. 두 번째 멈춤은 무조건
 통과시킨다(그러지 않으면 세션이 영영 안 끝난다). 가드가 터지면 막는 것이 아니라 조용히 통과시킨다.
 
-판정 축과 그 근거는 `scripts/lib/guard-core.mjs` 의 머리말에 있다.
+판정은 둘 중 하나가 한다. 규칙은 같다 — `scripts/lib/guard-core.mjs` 의 `decide()`, 그 축과 근거는
+그 파일 머리말에 있다.
+
+| | mod (`hooks/register.mjs`) | Stop hook (`frontier-guard.mjs --hook`) |
+|---|---|---|
+| 언제 판정하나 | mod 가 뜬 세션 (CC v2.1.287+) | mod 가 안 뜬 세션 — 구버전, 조직 정책, `--safe-mode` |
+| 컨텍스트 | 세션이 잰 값 (`$.session.usage()` — 실제 창 크기) | 트랜스크립트 꼬리의 `usage`, 창은 모델 이름의 `[1m]` 으로 추정 |
+| 상태줄 | `long-run <맵> · 프론티어 N · 컨텍스트 N%` — 턴이 끝날 때마다 갱신, 50% 를 넘으면 `· 인계할 때` | 없음 |
+
+둘이 같은 멈춤을 두 번 판정하지 않도록, mod 는 Stop 이벤트에 `long_run_mod: true` 를 실어 아래로 넘기고
+Stop hook 은 그것을 보면 빠진다(`guard-core.mjs` 의 `MOD_FLAG`). 환경변수가 아니라 이벤트에 싣는 이유는
+환경변수는 mod 가 꺼진 뒤에도 프로세스에 남아 대비까지 입을 다물게 하기 때문이다.
+
+mod 는 마커 경로와 열린 자식을 직접 계산하지 않고 `frontier-guard.mjs status` 를 부른다 — mod 는
+`node:` 모듈을 못 쓰므로 키 계산을 다시 짜면 같은 규칙이 두 벌이 된다. 마커 경로를 한 번 배운 뒤로는
+마커 파일이 없는 동안 `bd` 를 부르지 않는다.
 
 ## 전제
 
 - `bd` (beads) — 맵과 프론티어. PATH 에 있어야 한다
 - `orca` — worktree·터미널. 인계가 새 탭을 띄우는 경로다
 - Node.js 18+ (내장 모듈만 쓴다. 런타임 의존성 0)
+- 상태줄과 mod 판정은 Claude Code v2.1.287 이상. 그보다 낮으면 Stop hook 만으로 동작한다
 - 인계는 이 세션이 Orca 터미널에서 돌고 있을 때 자기 탭을 닫는다(`ORCA_TERMINAL_HANDLE`)
 - `handoff` 스킬 — 인계 문서 본문 합성을 위임한다. 없으면 `/setup-matt-pocock-skills` 로 설치한다.
   `references/handoff-doc.md` 만으로도 문서는 쓸 수 있지만, 그때는 대화 압축·비밀 삭제 판단이 빠진다
@@ -93,10 +109,13 @@ node scripts/handoff.mjs send --doc <절대경로> --close-self [--bd <epic>]
 
 ```bash
 node --test "scripts/test/*.test.mjs"
+claude plugin validate .
 ```
 
-순수 로직만 테스트한다 — 판정(`lib/guard-core.mjs`), 문서 메타 대조(`lib/doc-meta.mjs`), 경로·키
-계산(`lib/handoff-path.mjs`). orca·bd 호출은 실측 대상이라 테스트하지 않는다.
+순수 로직만 테스트한다 — 판정(`lib/guard-core.mjs`), mod 의 입력 조립과 상태줄 문구(`lib/mod-view.mjs`),
+문서 메타 대조(`lib/doc-meta.mjs`), 경로·키 계산(`lib/handoff-path.mjs`). orca·bd 호출은 실측 대상이라
+테스트하지 않는다. `hooks/register.mjs` 는 배선뿐이라 `claude plugin validate` 가 읽어 내는 hooks·calls
+목록으로 확인한다.
 
 ## orca 계약에 기대는 지점
 
@@ -115,7 +134,7 @@ node --test "scripts/test/*.test.mjs"
 ## 알려진 한계
 
 - **`bd` 가 잠깐 죽으면 가드가 마커를 지운다** — `bd list` 실패를 빈 프론티어와 구분하지 못한다.
-  세션이 갑자기 안 막히면 `status` 부터 본다
+  mod 가 뜬 세션에서는 상태줄이 사라지는 것으로 드러난다. 아니면 `status` 부터 본다
 - **같은 worktree 에서 세션 둘을 동시에 굴리면** 둘 다 같은 맵으로 판정된다. 인계가 마커를 지우지
   않는 설계의 대가다
 - **구 orca 호스트에서는 제출을 증명할 수 없다**(`observation: old-host`). 그때는 증명 없이 통과시키고
