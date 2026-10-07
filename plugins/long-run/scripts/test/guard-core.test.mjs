@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { HANDOFF_RATIO, contextLimitOf, contextTokensOf, decide, readTranscriptTail } from '../lib/guard-core.mjs';
+import { HANDOFF_RATIO, MOD_FLAG, contextLimitOf, contextTokensOf, decide, isDelegatedToMod, readTranscriptTail } from '../lib/guard-core.mjs';
 
 const marker = { epic: 'map-abcd' };
 const open = [{ id: 'map-abcd.9' }, { id: 'map-abcd.11' }];
@@ -105,4 +105,18 @@ test('🚨 Stop 이 아닌 이벤트에서는 입을 다문다 — PostToolUse �
   assert.equal(decide({ ...base, isStopEvent: false }).block, false);
   // 기본값은 Stop 이다 — 훅 입력에 이름이 없어도 판정은 돌아야 한다.
   assert.equal(decide(base).block, true);
+});
+
+// --- mod 위임 ---
+
+// mod 가 판정한 Stop 에서 node 훅까지 판정하면 같은 멈춤을 두 번 되민다.
+test('mod 가 표지를 붙인 Stop 은 mod 가 판정했다', () => {
+  assert.equal(isDelegatedToMod({ hook_event_name: 'Stop', [MOD_FLAG]: true }), true);
+});
+
+// 표지가 없으면 mod 가 안 뜬 환경이다 — 그때 node 훅이 판정을 놓으면 가드가 사라진다.
+test('표지가 없거나 참이 아니면 node 훅이 판정한다', () => {
+  assert.equal(isDelegatedToMod({ hook_event_name: 'Stop' }), false);
+  assert.equal(isDelegatedToMod({ [MOD_FLAG]: 'true' }), false);
+  assert.equal(isDelegatedToMod(null), false);
 });
