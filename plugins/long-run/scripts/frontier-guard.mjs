@@ -17,7 +17,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { contextLimitOf, contextTokensOf, decide, readTranscriptTail } from './lib/guard-core.mjs';
+import { contextLimitOf, contextTokensOf, decide, isDelegatedToMod, readTranscriptTail } from './lib/guard-core.mjs';
 import { currentRepoKey, repoRootOf, stateRoot } from './lib/state-root.mjs';
 
 const REPO_ROOT = repoRootOf();
@@ -97,6 +97,8 @@ if (command === 'claim') {
 } else if (command === '--hook') {
   try {
     const input = JSON.parse((await readStdin()) || '{}');
+    // mod 가 이 Stop 을 이미 판정했다 — 여기서 또 판정하면 같은 멈춤을 두 번 되민다.
+    if (isDelegatedToMod(input)) process.exit(0);
     const marker = readMarker();
     const { contextTokens, contextLimit } = measure(input.transcript_path);
     const verdict = decide({

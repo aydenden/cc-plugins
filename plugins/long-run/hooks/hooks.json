@@ -1,5 +1,6 @@
 {
-  "description": "long-run 의 Stop hook. 저장소가 아니라 플러그인에 달려 있어 어느 repo·worktree 에서 연 세션에도 따라온다 — 긴 작업이 실제로 도는 곳이 worktree 이므로 프로젝트 훅으로는 닿지 않는다. 맵을 선언하지 않은 세션에는 아무 일도 하지 않는다.",
+  "description": "long-run 의 mod(상태줄·Stop 판정)와 Stop hook. 저장소가 아니라 플러그인에 달려 있어 어느 repo·worktree 에서 연 세션에도 따라온다 — 긴 작업이 실제로 도는 곳이 worktree 이므로 프로젝트 훅으로는 닿지 않는다. mod 가 뜨면 Stop 훅은 mod 의 표지를 보고 빠지고, mod 가 안 뜨는 환경에서는 Stop 훅이 혼자 판정한다. 맵을 선언하지 않은 세션에는 아무 일도 하지 않는다.",
+  "modules": ["./register.mjs"],
   "hooks": {
     "Stop": [
       {

@@ -24,6 +24,16 @@ export const HANDOFF_RATIO = 0.5;
 /** 인계를 지시할 때 부를 스킬. 문구를 여기 한 곳에 둬서 스킬 이름이 바뀔 때 갈라지지 않게 한다. */
 export const HANDOFF_SKILL = '/long-run:session-handoff';
 
+/**
+ * mod 가 판정을 맡은 Stop 에 붙이는 필드. mod 는 `next({ ...e, [MOD_FLAG]: true })` 로 넘기고, 그 아래에서
+ * 도는 node 훅은 stdin 에서 이 필드를 보고 빠진다. 환경변수가 아니라 이벤트에 싣는 이유: 환경변수는
+ * mod 가 꺼진 뒤에도 프로세스에 남아 node 훅까지 입을 다물게 만든다.
+ */
+export const MOD_FLAG = 'long_run_mod';
+
+/** 이 Stop 을 mod 가 이미 판정했는가. 표지가 없으면 mod 가 안 뜬 환경이므로 node 훅이 판정한다. */
+export const isDelegatedToMod = (input) => input?.[MOD_FLAG] === true;
+
 /** 「멈춰도 되는 자리」 중 승인이 필요한 바깥 쓰기의 예시. */
 const EXTERNAL_WRITES = '이슈 트래커·문서·push·외부 시스템';
 
