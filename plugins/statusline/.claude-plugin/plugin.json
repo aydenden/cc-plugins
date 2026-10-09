@@ -1,0 +1,17 @@
+{
+  "name": "statusline",
+  "version": "0.1.0",
+  "description": "mod 로 그리는 상태줄 — 외부 도구 없이 프롬프트 아래에 모델·git·컨텍스트·사용량을 띄운다. 줄과 항목 단위로 켜고 끄며 JSON 설정(~/.claude/statusline/settings.json)이나 /sl 명령으로 배치를 바꾼다. ccstatusline 의 위젯 86종과 그 설정 가져오기를 지원한다. 런타임 의존성 0.",
+  "author": {
+    "name": "aydenden"
+  },
+  "repository": "https://github.com/aydenden/cc-plugins",
+  "keywords": [
+    "statusline",
+    "mod",
+    "powerline",
+    "context-window",
+    "rate-limit",
+    "git"
+  ]
+}

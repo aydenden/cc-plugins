@@ -1,0 +1,4 @@
+{
+  "description": "statusline 의 mod. 프롬프트 아래 힌트 줄(PromptHint) 밑에 상태줄을 그리고 /sl 명령을 받는다. 설정에서 켜진 위젯이 요구하는 값만 모은다.",
+  "modules": ["./register.mjs"]
+}
