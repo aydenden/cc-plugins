@@ -23,6 +23,12 @@
       "version": "0.4.0"
     },
     {
+      "name": "statusline",
+      "source": "./plugins/statusline",
+      "description": "mod 로 그리는 상태줄 — 외부 도구 없이 프롬프트 아래에 모델·git·컨텍스트·사용량을 띄운다. 줄과 항목 단위로 켜고 끄며 JSON 설정(~/.claude/statusline/settings.json)이나 /sl 명령으로 배치를 바꾼다. ccstatusline 의 위젯 86종과 그 설정 가져오기를 지원한다. 런타임 의존성 0.",
+      "version": "0.1.0"
+    },
+    {
       "name": "wf",
       "source": "./plugins/wf",
       "description": "워크플로우 생성기 — 작업 흐름을 설명하면 그에 맞는 워크플로우 플러그인을 설계한다. 단계 분해·이음매 판정, 필요한 스킬 조사와 협의, 정의 단계의 검토 축과 구현 전 프리뷰, 단계별 증거 검사를 설계하고 plugin-dev:create-plugin에 인계한다. 회고로 축이 자라 워크플로우가 시간이 지나며 좋아진다.",
