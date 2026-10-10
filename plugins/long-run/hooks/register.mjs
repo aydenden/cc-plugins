@@ -2,7 +2,7 @@
  * long-run mod — 맵을 미는 세션의 상태줄과 Stop 판정.
  *
  * 판정 규칙은 `scripts/lib/guard-core.mjs`, 입력 조립과 문구는 `scripts/lib/mod-view.mjs` 가 소유한다.
- * 여기는 배선뿐이다: 마커·열린 자식은 `frontier-guard.mjs status` 로 묻고(키 계산을 두 벌로 만들지 않는다),
+ * 여기는 배선뿐이다: 마커·프론티어는 `frontier-guard.mjs status` 로 묻고(키 계산을 두 벌로 만들지 않는다),
  * 컨텍스트는 세션이 잰 값을 쓴다.
  *
  * mod 가 안 뜨는 환경(구버전, 조직 정책, `--safe-mode`)에서는 `hooks.json` 의 node Stop 훅이 혼자

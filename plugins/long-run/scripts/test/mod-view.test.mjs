@@ -4,14 +4,18 @@ import assert from 'node:assert/strict';
 import { HANDOFF_SKILL } from '../lib/guard-core.mjs';
 import { parseStatus, statusLine, stopVerdict } from '../lib/mod-view.mjs';
 
-// `frontier-guard.mjs status` 가 내는 꼴 그대로다 — 열린 자식은 id 만 실린다.
+// `frontier-guard.mjs status` 가 내는 꼴 그대로다 — 프론티어는 분류된 id 로 실린다.
 const claimed = {
   markerPath: '/home/u/.claude/long-run/frontier-guard/repo-1234abcd.json',
   worktree: '/repo',
   marker: { epic: 'map-abcd' },
-  open: ['map-abcd.9', 'map-abcd.11'],
+  frontier: { pushable: ['map-abcd.9', 'map-abcd.11'], questions: [], blocked: [] },
+  epicOpen: true,
 };
-const unclaimed = { ...claimed, marker: null, open: [] };
+const unclaimed = { ...claimed, marker: null, frontier: null };
+const empty = { pushable: [], questions: [], blocked: [] };
+// 되미는 문구의 「멈춰도 되는 자리」도 스킬 이름을 싣는다 — 인계 지시는 이 구절로 가른다.
+const HANDING_OFF = new RegExp(`${HANDOFF_SKILL} 로 넘긴다`);
 const usageAt = (tokens, window = 1_000_000) => ({ context: { tokens, window, percent: Math.round((tokens / window) * 100) } });
 
 // --- parseStatus ---
@@ -54,19 +58,32 @@ test('프론티어가 남고 컨텍스트가 여유면 다음 티켓으로 되�
   const v = stopVerdict({ status: claimed, usage: usageAt(100_000), stopHookActive: false });
   assert.equal(v.block, true);
   assert.match(v.reason, /map-abcd\.9, map-abcd\.11/);
-  assert.doesNotMatch(v.reason, new RegExp(HANDOFF_SKILL));
+  assert.doesNotMatch(v.reason, HANDING_OFF);
 });
 
 // 창 크기를 모델 이름에서 추측하지 않는다 — 세션이 실제 창을 알려준다.
 test('창 크기는 세션이 준 값을 쓴다', () => {
   const v = stopVerdict({ status: claimed, usage: usageAt(150_000, 200_000), stopHookActive: false });
-  assert.match(v.reason, new RegExp(HANDOFF_SKILL));
+  assert.match(v.reason, HANDING_OFF);
 });
 
-test('프론티어가 비면 통과시키고 선언을 지우라고 한다', () => {
-  const v = stopVerdict({ status: { ...claimed, open: [] }, usage: usageAt(100_000), stopHookActive: false });
+test('프론티어가 비고 맵이 닫혔으면 통과시키고 선언을 지우라고 한다', () => {
+  const v = stopVerdict({ status: { ...claimed, frontier: empty, epicOpen: false }, usage: usageAt(100_000), stopHookActive: false });
   assert.equal(v.block, false);
   assert.equal(v.clear, true);
+});
+
+test('프론티어가 비었어도 맵이 열려 있으면 선언을 지우지 않는다', () => {
+  const v = stopVerdict({ status: { ...claimed, frontier: empty }, usage: usageAt(100_000), stopHookActive: false });
+  assert.equal(v.block, true);
+  assert.notEqual(v.clear, true);
+});
+
+// status 가 bd 를 못 읽으면 frontier 를 null 로 싣는다 — 빈 프론티어로 읽으면 선언이 사라진다.
+test('🚨 프론티어를 모르면 통과시키되 선언은 지우지 않는다', () => {
+  const v = stopVerdict({ status: { ...claimed, frontier: null }, usage: usageAt(100_000), stopHookActive: false });
+  assert.equal(v.block, false);
+  assert.notEqual(v.clear, true);
 });
 
 test('두 번째 멈춤은 무조건 통과시킨다', () => {
@@ -82,5 +99,18 @@ test('선언하지 않았거나 status 를 못 읽었으면 통과시킨다', ()
 test('컨텍스트를 모르면 인계가 아니라 다음 티켓으로 되민다', () => {
   const v = stopVerdict({ status: claimed, usage: null, stopHookActive: false });
   assert.equal(v.block, true);
-  assert.doesNotMatch(v.reason, new RegExp(HANDOFF_SKILL));
+  assert.doesNotMatch(v.reason, HANDING_OFF);
+});
+
+// --- 대기 ---
+
+const parked = { ...claimed, frontier: { pushable: ['map-abcd.9'], questions: ['map-abcd.3'], blocked: ['map-abcd.4'] } };
+
+// 주차한 질문은 되미는 자리에서 한 번 보고될 뿐이라, 그 사이에 사람 눈에 띄는 곳은 상태줄뿐이다.
+test('답을 기다리는 질문이 있으면 상태줄이 그 수를 말한다', () => {
+  assert.equal(statusLine(parked, usageAt(420_000)), 'long-run map-abcd · 프론티어 1 · 질문 대기 1 · 컨텍스트 42%');
+});
+
+test('bd 를 못 읽었으면 프론티어를 0 이 아니라 모름으로 그린다', () => {
+  assert.equal(statusLine({ ...claimed, frontier: null }, usageAt(420_000)), 'long-run map-abcd · 프론티어 모름 · 컨텍스트 42%');
 });
