@@ -9,6 +9,7 @@
 | 실행 | orca (`orca`) | 워크트리·터미널·에이전트 스폰 |
 | 브라우저 | `agent-browser` | 모든 웹 자동화 |
 | 지식 | CC auto-memory | 세션 간 기억 |
+| 세션 경계 | `long-run` 플러그인 | 여러 세션에 걸친 실행·세션 이관 |
 
 ## 겹치는 기능의 채택 결정
 
@@ -21,6 +22,8 @@
 | 병렬 대상 계산 | `bd ready` | DAG를 풀어 지금 착수 가능한 것만 준다 |
 | 워커 실행 | `orca terminal` / `orca orchestration` | beads에 대응물이 없다 |
 | 브라우저 | `agent-browser` | orca 내장 브라우저에는 다운로드·인증 볼트·diff·병렬 세션·인젝션 방어가 없다 |
+| 세션 이관 | `long-run:session-handoff` | 인계 문서의 저장 위치·번호 사슬과 새 탭 기동·제출 증명을 이미 소유한다. 생성되는 플러그인에 같은 이음매 스킬을 또 만들면 인계 규약이 두 벌이 된다. 본문 압축은 그쪽이 `/handoff` 에 위임한다 |
+| 여러 세션에 걸친 실행 | `long-run:map-run` | 분해 단계가 낸 이슈 DAG 를 완료조건까지 민다. Stop 가드가 「다음으로 갈까요?」로 서는 것을 막고, 맵을 닫기 전에 완료 조건을 검증시킨다. `/wayfinder` 는 그 앞의 **결정**을 푸는 맵이라 겹치지 않는다 |
 | 영속 메모리 | CC auto-memory | `bd remember`는 쓰지 않는다. `.beads/PRIME.md`가 이 정책을 매 세션 주입한다 |
 | ADR·도메인 용어 | `CONTEXT.md` + `docs/adr/` | `bd decision`과 겹치므로 문서 쪽을 SSoT로 둔다 |
 
@@ -38,6 +41,7 @@
 | 트리아지 판정 | `/triage` |
 | 대형 작업 지도 | `/wayfinder` |
 | 리서치 | `/research`, `llm-wiki:research` |
-| 세션 압축 | `/handoff` |
+| 세션 이관 | `long-run:session-handoff` (본문 압축은 그쪽이 `/handoff` 에 위임) |
+| 여러 세션에 걸친 실행 | `long-run:map-run` |
 
 mattpocock 스킬군은 `docs/agents/issue-tracker.md`를 읽어 트래커를 결정한다. 그 파일이 없으면 GitHub Issues를 가정하고 `gh issue create`를 부른다. 생성되는 워크플로우의 부트스트랩 단계가 `${CLAUDE_PLUGIN_ROOT}/templates/issue-tracker.md`를 배치해 beads를 고정해야, 이들을 그냥 호출해도 beads로 흘러간다.

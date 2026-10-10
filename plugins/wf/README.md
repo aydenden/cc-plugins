@@ -96,6 +96,7 @@ brew install beads                                    # bd
 brew install git                                      # 축 저장소가 refs/wf/axes 에 산다
 /plugin marketplace add anthropics/claude-plugins-official   # → plugin-dev 설치 (create-plugin 인계 대상)
 /plugin marketplace add steveyegge/beads                     # → beads 설치 (SessionStart bd prime 훅)
+/plugin install long-run@<이 마켓플레이스>                    # 세션 이관·여러 세션 실행 (같은 마켓플레이스에 있다)
 ```
 
 **조건부** — 없으면 해당 단계를 설계에서 뺀다.
@@ -136,7 +137,8 @@ done
 | 트리아지 | `/triage` |
 | 대형 작업 지도 | `/wayfinder` |
 | 리서치 | `/research` |
-| 세션 압축 | `/handoff` |
+| 세션 이관 | `long-run:session-handoff` |
+| 여러 세션에 걸친 실행 | `long-run:map-run` |
 | 설계 질문 | `/prototype` |
 | 도메인 용어 | `/domain-modeling` |
 
@@ -166,12 +168,14 @@ plugins/wf/scripts/axis-sync.sh push "메시지"      # 커밋·발행
 
 ```bash
 bash plugins/wf/scripts/check-coverage.test.sh
+bash plugins/wf/scripts/check-deps.test.sh
 ```
 
-축 판정만 테스트한다 — 두 차단 검사 중 이쪽만 **문서를 해석해서** 판정하기 때문이다
+검사 중에는 축 판정만 테스트한다 — 두 차단 검사 중 이쪽만 **문서를 해석해서** 판정하기 때문이다
 (`check-citations.sh`는 경로의 실존 여부라 해석이 없다). `UNADDRESSED`/`INCOMPLETE` 구분,
 `해당 없음`의 사유 유무, 그리고 `state`가 `state-lifetime` 행을 제 것으로 세지 않는
 토큰 경계가 케이스로 있다. 우회는 이유 유무, 로그 기록, 그리고 `bypass.sh`가 빠졌을 때 검사가 그대로 도는지를 본다.
+`check-deps.test.sh`는 `HOME`을 임시 디렉터리로 돌려 필수 플러그인(long-run)의 유무가 종료 코드로 갈리는지 본다.
 
 ## 검증 우회
 
