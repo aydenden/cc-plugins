@@ -75,10 +75,9 @@ stages:
     note: "start·verify 가 띄운 워크트리·터미널·브라우저 세션이 남아 있지 않다. handoff 로 넘길 때는 거두지 않는다"
 
   - id: handoff
-    kind: seam
-    produces: "인수인계 티켓 + 새 세션"
-    checks: [existence]
-    note: "단계가 아니라 어느 지점에서든 부를 수 있는 횡단 관심사"
+    kind: delegate
+    delegate_to: /long-run:session-handoff
+    note: "단계가 아니라 어느 지점에서든 부를 수 있는 횡단 관심사. 새 탭을 띄우므로 orca 가 없으면 이 단계를 뺀다. 분해한 DAG 가 한 세션에 안 들어가면 /long-run:map-run 으로 민다"
 
   - id: intake
     kind: seam

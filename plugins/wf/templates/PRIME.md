@@ -52,4 +52,4 @@ At the end of a unit of work: close the issues, run the relevant quality gates, 
 
 The `<plugin>:` plugin owns the seams between beads, orca, and the engineering skills. Reach for them instead of improvising:
 
-`<plugin>:sources` (gather grounding before starting) · `<plugin>:slice` (spec → issue DAG) · `<plugin>:start` (ready → claimed → running) · `<plugin>:verify` (browser E2E with evidence) · `<plugin>:done` (gates → close → report) · `<plugin>:handoff` (hand the session to a fresh agent) · `<plugin>:intake` (external reports → triaged issues) · `<plugin>:map` (oversized work → investigation tickets)
+`<plugin>:sources` (gather grounding before starting) · `<plugin>:slice` (spec → issue DAG) · `<plugin>:start` (ready → claimed → running) · `<plugin>:verify` (browser E2E with evidence) · `<plugin>:done` (gates → close → report) · `long-run:session-handoff` (hand the session to a fresh agent) · `<plugin>:intake` (external reports → triaged issues) · `<plugin>:map` (oversized work → investigation tickets)
