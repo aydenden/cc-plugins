@@ -17,7 +17,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { contextLimitOf, contextTokensOf, decide, isDelegatedToMod, readTranscriptTail } from './lib/guard-core.mjs';
+import { classifyFrontier, contextLimitOf, contextTokensOf, decide, isDelegatedToMod, readTranscriptTail } from './lib/guard-core.mjs';
 import { currentRepoKey, repoRootOf, stateRoot } from './lib/state-root.mjs';
 
 const REPO_ROOT = repoRootOf();
@@ -31,14 +31,30 @@ const readMarker = () => {
   }
 };
 
-/** 열린 자식 티켓. bd 가 없거나 느리면 «모름»(빈 배열)으로 떨어뜨려 가드를 통과시킨다. */
-function openChildrenOf(epic) {
+const bdJson = (args) => JSON.parse(execFileSync('bd', [...args, '--json'], { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] }));
+
+/**
+ * 맵의 프론티어와 맵이 아직 열려 있는지.
+ *
+ * 🚨 bd 가 없거나 느리거나 맵을 못 찾으면 **빈 프론티어가 아니라 «모름»**(`frontier: null`)이다. 둘을
+ * 같게 읽으면 bd 가 잠깐 죽은 것만으로 가드가 선언을 지운다. `bd list --parent` 는 없는 맵에도 빈
+ * 배열을 exit 0 으로 내므로(실측), 맵이 있는지는 `bd show` 가 먼저 가른다.
+ *
+ * @returns {{frontier: ReturnType<typeof classifyFrontier> | null, epicOpen: boolean}}
+ */
+function readFrontier(epic) {
   try {
-    const out = execFileSync('bd', ['list', '--parent', epic, '--json'], { encoding: 'utf8', timeout: 10_000 });
-    const rows = JSON.parse(out);
-    return Array.isArray(rows) ? rows.filter((r) => r.status === 'open' || r.status === 'in_progress') : [];
+    const [map] = [bdJson(['show', epic])].flat();
+    if (!map?.status) return { frontier: null, epicOpen: true };
+    // 기본 목록은 닫힌 티켓을 빼고 50건에서 자른다 — 잘린 프론티어는 틀린 프론티어다.
+    const children = bdJson(['list', '--parent', epic, '--limit', '0']);
+    const ready = bdJson(['ready', '--parent', epic, '--limit', '0']);
+    return {
+      frontier: classifyFrontier({ children, readyIds: ready.map((row) => row.id) }),
+      epicOpen: map.status !== 'closed',
+    };
   } catch {
-    return [];
+    return { frontier: null, epicOpen: true };
   }
 }
 
@@ -82,7 +98,7 @@ if (command === 'claim') {
     MARKER,
     `${JSON.stringify({ epic: argument, worktree: REPO_ROOT, claimedAt: new Date().toISOString() }, null, 2)}\n`
   );
-  console.log(`[frontier-guard] ${argument} 를 미는 세션으로 선언했다. 프론티어가 빌 때까지 멈춤을 막는다.`);
+  console.log(`[frontier-guard] ${argument} 를 미는 세션으로 선언했다. 맵이 닫힐 때까지 멈춤을 막는다.`);
   console.log(`[frontier-guard] 마커: ${MARKER}`);
 } else if (command === 'clear') {
   if (existsSync(MARKER)) rmSync(MARKER);
@@ -90,10 +106,10 @@ if (command === 'claim') {
 } else if (command === 'status') {
   // 트랜스크립트를 주면 훅과 **같은 판정**을 돌려준다 — 훅 모드는 stdin 을 먹어 손으로 못 돌린다.
   const marker = readMarker();
-  const open = marker?.epic ? openChildrenOf(marker.epic) : [];
+  const read = marker?.epic ? readFrontier(marker.epic) : { frontier: null, epicOpen: true };
   const measured = argument ? measure(argument) : { contextTokens: 0, contextLimit: contextLimitOf(null) };
-  const verdict = decide({ marker, ...measured, openChildren: open, stopHookActive: false });
-  console.log(JSON.stringify({ markerPath: MARKER, worktree: REPO_ROOT, marker, open: open.map((c) => c.id), ...measured, verdict }, null, 2));
+  const verdict = decide({ marker, ...measured, ...read, stopHookActive: false });
+  console.log(JSON.stringify({ markerPath: MARKER, worktree: REPO_ROOT, marker, ...read, ...measured, verdict }, null, 2));
 } else if (command === '--hook') {
   try {
     const input = JSON.parse((await readStdin()) || '{}');
@@ -105,7 +121,7 @@ if (command === 'claim') {
       marker,
       contextTokens,
       contextLimit,
-      openChildren: marker?.epic ? openChildrenOf(marker.epic) : [],
+      ...(marker?.epic ? readFrontier(marker.epic) : { frontier: null }),
       stopHookActive: input.stop_hook_active === true,
       isStopEvent: isStopEvent(input),
     });
