@@ -190,6 +190,12 @@ test('a stage with a document check must declare the artifact the hooks look for
   }
 });
 
+test('🚨 a stage with a preview must declare the artifact — the close gate reaches the preview through the document', () => {
+  const spec = validSpec();
+  spec.stages.push({ id: 'mock', kind: 'seam', preview: 'docs/previews/<ticket>/index.html' });
+  assert.match(problemsOf(spec), /stages\[\d+\]\.artifact: required/);
+});
+
 test('artifact needs a type and at least one folder, and a type belongs to one stage', () => {
   const noDirs = validSpec();
   noDirs.stages[0].artifact.dirs = [];

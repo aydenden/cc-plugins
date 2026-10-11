@@ -177,7 +177,9 @@ function validateStage(stage, at, spec, seen, problems) {
 
   if (stage.preview !== undefined && !isText(stage.preview)) problems.push(`${at}.preview: must be a path string`);
 
-  const needsArtifact = listed.some((check) => DOCUMENT_CHECKS.includes(check)) || (stage.invariants?.length ?? 0) > 0;
+  // The close gate reaches a preview and the invariants through the stage's document.
+  const needsArtifact =
+    listed.some((check) => DOCUMENT_CHECKS.includes(check)) || (stage.invariants?.length ?? 0) > 0 || stage.preview !== undefined;
   if (stage.artifact === undefined) {
     if (needsArtifact) {
       problems.push(`${at}.artifact: required — the hooks find this stage's document by artifact.type and artifact.dirs`);
