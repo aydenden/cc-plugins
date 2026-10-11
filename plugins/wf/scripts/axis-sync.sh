@@ -30,7 +30,7 @@ usage: axis-sync.sh <command> [args]
   list                  list the domains the store holds
   show <domain>         print one domain file as stored
   resolve <domain>      print the domain with `extends` merged in (child wins on id)
-  ids <domain>          print resolved axis ids, one per line (feeds check-coverage.sh)
+  ids <domain>          print resolved axis ids, one per line
   retired <domain>      print retired axis ids and why they were dropped
   push "<message>"      commit local store changes and publish them to the ref
   init                  seed the store and create the ref (first time only)

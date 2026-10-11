@@ -33,7 +33,7 @@
           "id": {
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9-]*$",
-            "description": "Stable identifier, lowercase ASCII. check-coverage.sh greps the artifact for this exact string, so the artifact's row must carry the id itself."
+            "description": "Stable identifier, lowercase ASCII. The coverage check accepts only a table row whose first cell is this exact string, so the artifact's row must carry the id itself."
           },
           "when": {
             "type": "string",
