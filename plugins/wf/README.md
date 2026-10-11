@@ -76,7 +76,7 @@ templates/
   PRIME.md                   bd prime 오버라이드 (메모리 정책 반전)
   issue-tracker.md           mattpocock 스킬군에 beads 고정
   triage-labels.md           트리아지 상태 정의
-  domain.md                  CONTEXT.md · ADR 레이아웃
+  domain.md                  GLOSSARY.md · ADR 레이아웃
 ```
 
 ## 설치
@@ -118,7 +118,7 @@ npx skills add vercel-labs/agent-browser@agent-browser
 **위임 대상 스킬** — 사고 절차는 이쪽에 맡긴다. 13개 전부 같은 레지스트리(`mattpocock/skills`)에 있어 한 줄로 끝난다. 없으면 그 판단을 대신할 스킬을 `find-skills`로 조사한다.
 
 ```bash
-for s in grill-with-docs to-prd to-issues implement tdd code-review diagnosing-bugs \
+for s in grill-with-docs to-spec to-tickets implement tdd code-review diagnosing-bugs \
          triage handoff prototype wayfinder domain-modeling research; do
   npx skills add "mattpocock/skills@$s"
 done
@@ -129,8 +129,8 @@ done
 | 판단 | 위임 |
 |---|---|
 | 계획 압박 | `/grill-with-docs` (코드베이스 있음) |
-| PRD | `/to-prd` |
-| 이슈 분해 | `/to-issues` |
+| 스펙 | `/to-spec` |
+| 이슈 분해 | `/to-tickets` |
 | 구현 | `/implement` · `/tdd` |
 | 리뷰 | `/code-review` |
 | 버그 진단 | `/diagnosing-bugs` |

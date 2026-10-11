@@ -25,7 +25,7 @@
 | 세션 이관 | `long-run:session-handoff` | 인계 문서의 저장 위치·번호 사슬과 새 탭 기동·제출 증명을 이미 소유한다. 생성되는 플러그인에 같은 이음매 스킬을 또 만들면 인계 규약이 두 벌이 된다. 본문 압축은 그쪽이 `/handoff` 에 위임한다 |
 | 여러 세션에 걸친 실행 | `long-run:map-run` | 분해 단계가 낸 이슈 DAG 를 완료조건까지 민다. Stop 가드가 「다음으로 갈까요?」로 서는 것을 막고, 맵을 닫기 전에 완료 조건을 검증시킨다. `/wayfinder` 는 그 앞의 **결정**을 푸는 맵이라 겹치지 않는다 |
 | 영속 메모리 | CC auto-memory | `bd remember`는 쓰지 않는다. `.beads/PRIME.md`가 이 정책을 매 세션 주입한다 |
-| ADR·도메인 용어 | `CONTEXT.md` + `docs/adr/` | `bd decision`과 겹치므로 문서 쪽을 SSoT로 둔다 |
+| ADR·도메인 용어 | `GLOSSARY.md` + `docs/adr/` | `bd decision`과 겹치므로 문서 쪽을 SSoT로 둔다 |
 
 ## 사고 절차는 위임한다
 
@@ -34,7 +34,7 @@
 | 필요한 판단 | 호출할 스킬 |
 |---|---|
 | 계획 압박·정제 | `/grill-with-docs` (코드베이스 있음) / `/grill-me` |
-| PRD 작성 | `/to-prd` |
+| 스펙 작성 | `/to-spec` |
 | 구현 | `/implement`, `/tdd` |
 | 리뷰 | `/code-review` |
 | 버그 진단 | `/diagnosing-bugs` |

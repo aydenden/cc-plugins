@@ -55,7 +55,7 @@ done
 
 echo
 echo "위임 대상 스킬 — 없으면 그 판단을 대신할 스킬을 조사해야 한다"
-for s in grill-with-docs to-prd to-issues implement tdd code-review \
+for s in grill-with-docs to-spec to-tickets implement tdd code-review \
          diagnosing-bugs triage handoff prototype wayfinder domain-modeling research; do
   if have_skill "$s"; then printf '  ✓ %s\n' "$s"
   else printf '  · %s — 없음 → npx skills add mattpocock/skills@%s\n' "$s" "$s"; fi
