@@ -10,6 +10,9 @@
 | 브라우저 | `agent-browser` | 모든 웹 자동화 |
 | 지식 | CC auto-memory | 세션 간 기억 |
 | 세션 경계 | `long-run` 플러그인 | 여러 세션에 걸친 실행·세션 이관 |
+| 검사 런타임 | `node` | 생성되는 플러그인의 두 hook (`evidence-patterns.md`) |
+
+스펙의 `toolchain` 키(`tracker`·`thinking`·`runner`·`browser`)는 이 조합을 프로젝트에 기록해 두는 자리다. 검사는 이 키를 읽지 않는다.
 
 ## 겹치는 기능의 채택 결정
 
@@ -31,6 +34,8 @@
 
 생성되는 스킬은 이음매만 소유한다. 판단 자체는 이미 존재하는 스킬을 호출한다 — 감싸면 지시문만 한 겹 늘고 원본의 품질이 희석된다.
 
+위임 대상의 정본은 `stage-patterns.md` 의 「위임 대상 후보」 표다. 아래는 그중 툴체인 결정에 닿는 것을 옮긴 것이고, 모델이 부를 수 없는 스킬의 표시(†)도 그쪽에 있다.
+
 | 필요한 판단 | 호출할 스킬 |
 |---|---|
 | 계획 압박·정제 | `/grill-with-docs` (코드베이스 있음) / `/grill-me` |
@@ -44,4 +49,4 @@
 | 세션 이관 | `long-run:session-handoff` (본문 압축은 그쪽이 `/handoff` 에 위임) |
 | 여러 세션에 걸친 실행 | `long-run:map-run` |
 
-mattpocock 스킬군은 `docs/agents/issue-tracker.md`를 읽어 트래커를 결정한다. 그 파일이 없으면 GitHub Issues를 가정하고 `gh issue create`를 부른다. 생성되는 워크플로우의 부트스트랩 단계가 `${CLAUDE_PLUGIN_ROOT}/templates/issue-tracker.md`를 배치해 beads를 고정해야, 이들을 그냥 호출해도 beads로 흘러간다.
+mattpocock 스킬군은 `docs/agents/issue-tracker.md`를 읽어 트래커를 결정한다. 그 파일이 없으면 GitHub Issues를 가정하고 `gh issue create`를 부른다. 생성되는 워크플로우의 부트스트랩 단계가 `templates/issue-tracker.md`(플러그인 루트 기준)를 배치해 beads를 고정해야, 이들을 그냥 호출해도 beads로 흘러간다.

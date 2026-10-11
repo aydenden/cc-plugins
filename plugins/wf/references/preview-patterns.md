@@ -63,4 +63,14 @@ to-be:  behavior ✓   data ✓   test ✓   style ✗   ← 미매칭
                    └─ 여기서 발견. 구현 전
 ```
 
-프리뷰 단계의 통과 조건은 "예쁘다"가 아니라 **"미정의 표시가 모두 의도된 것인가"**다. 의도치 않은 미정의가 하나라도 있으면 정의 단계로 돌아간다.
+스펙에서는 독립 단계가 아니라 **정의 단계의 `preview` 키**로 적는다.
+
+```jsonc
+{ "id": "define", "kind": "seam", "checks": ["coverage", "citation"], "axes": "define",
+  "artifact": { "type": "definition", "dirs": ["docs/issues"] },
+  "preview": "docs/previews/<ticket>/index.html" }
+```
+
+`<ticket>` 은 닫으려는 티켓 ID 로 바뀐다. 닫기 게이트는 그 파일이 **있는지**만 본다 — 정의 문서가 선언한 티켓을 닫을 때 프리뷰가 없으면 닫기가 막힌다(`evidence-patterns.md`). 정직하게 렌더링했는지는 스크립트가 볼 수 없고 사람이 본다.
+
+프리뷰의 통과 조건은 "예쁘다"가 아니라 **"미정의 표시가 모두 의도된 것인가"**다. 의도치 않은 미정의가 하나라도 있으면 정의 단계로 돌아간다.

@@ -30,7 +30,7 @@ axes/<domain>.json       one domain's axis set
 axis-sync.sh pull                  # create or fast-forward the local store
 axis-sync.sh list                  # which domains exist
 axis-sync.sh resolve frontend-vue  # one domain with `extends` merged in
-axis-sync.sh ids frontend          # axis ids, one per line (feeds check-coverage.sh)
+axis-sync.sh ids frontend          # axis ids of the resolved domain, one per line
 axis-sync.sh retired frontend      # what was dropped and why
 axis-sync.sh push "add a11y axis"  # commit and publish
 ```
@@ -39,7 +39,7 @@ axis-sync.sh push "add a11y axis"  # commit and publish
 
 A domain-general axis: one that would have caught the same omission in another project of the
 same kind. A project-specific axis — this repository's module, this team's rule — stays in that
-project's `.claude/<plugin>.local.md`. Put it here and it becomes a row that is permanently
+project's `.claude/<plugin>.spec.jsonc`. Put it here and it becomes a row that is permanently
 "not applicable" everywhere else.
 
 An axis carries its bar, not only its question. `closed_when` says what the artifact's row must
