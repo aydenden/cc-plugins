@@ -204,8 +204,8 @@ bash plugins/wf/scripts/check-deps.test.sh
 넣고 판정을 본다. 케이스로 고정한 것: 스펙 리더(주석·후행 쉼표·필수 키·예약 id), 커버리지의
 `UNADDRESSED`/`INCOMPLETE` 구분과 첫 칸 일치(표 밖 언급, `state` 대 `state-lifetime`,
 `unlisted`), 문서 기준 상대 인용의 통과와 없는 파일의 `MISSING`, 편집한 줄에만 내는 부정 경고,
-대상 단위 우회와 로그 기록, 그리고 두 hook 진입점에 payload 를 넣었을 때의 종료 코드(축이 빠진
-문서의 티켓을 닫으면 exit 2).
+대상 단위 우회와 로그 기록, 닫기로 읽는 명령의 형태, 그리고 두 hook 진입점에 payload 를 넣었을
+때의 종료 코드(축이 빠진 문서의 티켓을 닫으면 exit 2, 스펙이 깨져 있어도 exit 2).
 `check-deps.test.sh`는 `HOME`을 임시 디렉터리로 돌려 필수 플러그인의 유무가, `PATH`를 좁혀 node 의 유무가 종료 코드로 갈리는지 본다.
 
 ## 검증 우회

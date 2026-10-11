@@ -136,7 +136,7 @@ HTML로 렌더링해 빈 곳을 눈에 보이게 만든다.
 여러 세션에 걸친 실행도 같은 이유로 `long-run`에 맡긴다 — 생성되는 플러그인마다 인계 규약을 다시
 만들지 않는다.
 
-`node`와 `bash` · 전제는 `bd`와 plugin-dev·beads·long-run 플러그인 · 스킬 2 · 생성물용 훅 2 · 테스트 160
+`node`와 `bash` · 전제는 `bd`와 plugin-dev·beads·long-run 플러그인 · 스킬 2 · 생성물용 훅 2 · 테스트 168
 
 ---
 
