@@ -7,7 +7,6 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { postEdit, preClose } from '../lib/hooks.mjs';
-import { SpecError } from '../lib/spec.mjs';
 
 const SCRIPTS = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PLUGIN_ROOT = join(SCRIPTS, '..');
@@ -122,18 +121,65 @@ test('🚨 a bypass in the marker passes the axis it names, is recorded, and lea
   assert.doesNotMatch(partial.stderr, /^UNADDRESSED style$/m);
 
   writeFileSync(join(root, '.claude/wf-skip-checks'), 'style: 목업 미수령, abc-1\nbehavior: 기획 확정 전, abc-1\n');
-  assert.equal(preClose(closing('bd close abc-1'), context).exitCode, 0);
+  const passed = preClose(closing('bd close abc-1'), context);
+  assert.equal(passed.exitCode, 0);
+  // A close that passed because of a bypass must not look like a close that passed its checks.
+  const told = JSON.parse(passed.stdout).hookSpecificOutput;
+  assert.equal(told.hookEventName, 'PreToolUse');
+  assert.match(told.additionalContext, /check-coverage: bypass: style: 목업 미수령, abc-1/);
+  assert.match(told.additionalContext, /check-coverage: bypass: behavior: 기획 확정 전, abc-1/);
   const log = readFileSync(env.WF_BYPASS_LOG, 'utf8').trim().split('\n');
   assert.equal(log.length, 2);
   assert.match(log[0], /^\d{4}-\d\d-\d\d check-coverage: style: 목업 미수령, abc-1$/);
 });
 
-test('🚨 a spec that cannot be read stops the close instead of switching the checks off', (t) => {
+test('🚨 a spec that cannot be read blocks the close and says why, instead of switching the checks off', (t) => {
   const { context } = project(t, { '.claude/wf.spec.jsonc': '{ "schema": 1, }' });
-  assert.throws(() => preClose(closing('bd close abc-1'), context), SpecError);
+  const result = preClose(closing('bd close abc-1'), context);
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /\.claude\/wf\.spec\.jsonc/);
+  assert.match(result.stderr, /trailing comma/);
+});
+
+test('a broken spec does not block bd commands that close nothing', (t) => {
+  const { context } = project(t, { '.claude/wf.spec.jsonc': '{ "schema": 1, }' });
+  for (const command of ['bd show abc-1', 'bd ready', 'git status']) {
+    assert.equal(preClose(closing(command), context).exitCode, 0, command);
+  }
+});
+
+test('a pass with no bypass prints nothing', (t) => {
+  const { context } = project(t, {
+    'docs/issues/t1-login.md': definition('abc-1', ['behavior', 'style', 'unlisted']),
+    'docs/previews/abc-1/index.html': '<html>',
+  });
+  assert.deepEqual(preClose(closing('bd close abc-1'), context), { exitCode: 0, stdout: '', stderr: '' });
 });
 
 // --- postEdit ---
+
+test('🚨 an edit whose missing citations are all bypassed passes and says what was bypassed', (t) => {
+  const body = '근거는 `docs/ghost.md` 에 있다.';
+  const { root, context } = project(t, {
+    'docs/issues/t1-login.md': definition('abc-1', ['behavior'], body),
+    '.claude/wf-skip-checks': 'docs/ghost.md: 다음 티켓에서 쓴다, abc-1\n',
+  });
+  const result = postEdit(writing(root, 'docs/issues/t1-login.md', definition('abc-1', ['behavior'], body)), context);
+  assert.equal(result.exitCode, 0);
+  const told = JSON.parse(result.stdout).hookSpecificOutput;
+  assert.equal(told.hookEventName, 'PostToolUse');
+  assert.match(told.additionalContext, /check-citations: bypass: docs\/ghost\.md: 다음 티켓에서 쓴다, abc-1/);
+});
+
+test('🚨 a spec that cannot be read is reported after an edit to a watched document', (t) => {
+  const { root, context } = project(t, {
+    '.claude/wf.spec.jsonc': '{ "schema": 1, }',
+    'docs/issues/t1-login.md': definition('abc-1', ['behavior']),
+  });
+  const result = postEdit(writing(root, 'docs/issues/t1-login.md', 'x'), context);
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /trailing comma/);
+});
 
 test('🚨 an existing file cited relative to the document is not MISSING; a file that does not exist is', (t) => {
   const { root, context } = project(t, { 'docs/issues/research/findings.md': '# findings' });
@@ -179,7 +225,9 @@ test('an Edit payload is judged by its replacement text', (t) => {
 
 test('saving a broken spec reports the defect', (t) => {
   const { root, context } = project(t, { '.claude/wf.spec.jsonc': '{ "schema": 2 }' });
-  assert.throws(() => postEdit(writing(root, '.claude/wf.spec.jsonc', '{ "schema": 2 }'), context), /wf\.spec\.jsonc: invalid spec/);
+  const result = postEdit(writing(root, '.claude/wf.spec.jsonc', '{ "schema": 2 }'), context);
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /wf\.spec\.jsonc: invalid spec/);
 });
 
 // --- entry points and the hooks.json template ---

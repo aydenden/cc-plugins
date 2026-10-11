@@ -14,9 +14,10 @@ import { relativeTo } from './artifact.mjs';
 import { bypassFailing } from './bypass-file.mjs';
 import { MARKER_PATH } from './bypass.mjs';
 import { repositoryLookup } from './citations-file.mjs';
-import { closeGate } from './close-gate.mjs';
+import { closeGate, closedTickets } from './close-gate.mjs';
 import { editGate } from './edit-gate.mjs';
 import { loadSpec } from './spec-file.mjs';
+import { SpecError } from './spec.mjs';
 
 const BYPASS_HINT = `To bypass one target, say why: echo '<target>: <why>, <ticket>' >> ${MARKER_PATH} (remove the line when done).`;
 
@@ -25,6 +26,28 @@ function workflow(pluginRoot, projectRoot) {
   const { name } = JSON.parse(readFileSync(resolve(pluginRoot, '.claude-plugin', 'plugin.json'), 'utf8'));
   const specRelative = `.claude/${name}.spec.jsonc`;
   return { name, specRelative, specPath: resolve(projectRoot, specRelative) };
+}
+
+/**
+ * The spec, or the exit-2 result that reports why it cannot be read. A hook that died on a broken
+ * spec would exit 1, which the harness treats as a non-blocking error: the close would go through
+ * and the model would never see the reason.
+ */
+function readSpec(name, specPath) {
+  try {
+    return { spec: loadSpec(specPath) };
+  } catch (error) {
+    if (!(error instanceof SpecError)) throw error;
+    const stderr = `${name}: the workflow spec cannot be read, so no check can run. Fix it first.\n${error.message}\n`;
+    return { broken: { exitCode: 2, stdout: '', stderr } };
+  }
+}
+
+/** An exit-0 result that hands `lines` to the model. Plain stdout and stderr are not shown on exit 0. */
+function passWith(hookEventName, lines) {
+  if (lines.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
+  const additionalContext = lines.join('\n');
+  return { exitCode: 0, stdout: `${JSON.stringify({ hookSpecificOutput: { hookEventName, additionalContext } })}\n`, stderr: '' };
 }
 
 /** Markdown files under the given folders, root-relative, sorted. A missing folder is empty. */
@@ -48,7 +71,7 @@ function markdownIn(projectRoot, dirs) {
  * @param {object} payload the hook payload (`tool_name`, `tool_input.file_path`, and `content` or `new_string`)
  * @param {{pluginRoot: string, env: Record<string, string|undefined>}} context
  * @returns {{exitCode: 0|2, stdout: string, stderr: string}} exit 2 hands stderr back to the model;
- *   the write itself has already happened
+ *   the write itself has already happened. A pass that owes something to a bypass says so.
  */
 export function postEdit(payload, { pluginRoot, env }) {
   const pass = { exitCode: 0, stdout: '', stderr: '' };
@@ -60,8 +83,9 @@ export function postEdit(payload, { pluginRoot, env }) {
   if (docPath === null || !existsSync(specPath)) return pass;
   if (docPath !== specRelative && !docPath.toLowerCase().endsWith('.md')) return pass;
 
-  // Throws on a broken spec, on purpose: a spec that cannot be read is every check switched off.
-  const spec = loadSpec(specPath);
+  // A spec that cannot be read is every check switched off, so it is reported, not skipped.
+  const { spec, broken } = readSpec(name, specPath);
+  if (broken) return broken;
   const absolute = resolve(projectRoot, docPath);
   if (!existsSync(absolute)) return pass;
 
@@ -80,9 +104,8 @@ export function postEdit(payload, { pluginRoot, env }) {
     const hint = `Fix the cited path, or if the token is not a file citation add it to citations.ignore_patterns in ${specRelative}.`;
     return { exitCode: 2, stdout: '', stderr: `${[...result.lines, hint, BYPASS_HINT].join('\n')}\n` };
   }
-  if (result.warnings.length === 0) return pass;
-  const additionalContext = [`${name}: warnings (not blocking).`, ...result.warnings].join('\n');
-  return { exitCode: 0, stdout: `${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext } })}\n`, stderr: '' };
+  const warnings = result.warnings.length > 0 ? [`${name}: warnings (not blocking).`, ...result.warnings] : [];
+  return passWith('PostToolUse', [...result.lines, ...warnings]);
 }
 
 /**
@@ -90,7 +113,8 @@ export function postEdit(payload, { pluginRoot, env }) {
  *
  * @param {object} payload the hook payload (`tool_input.command`)
  * @param {{pluginRoot: string, env: Record<string, string|undefined>}} context
- * @returns {{exitCode: 0|2, stdout: string, stderr: string}} exit 2 blocks the command
+ * @returns {{exitCode: 0|2, stdout: string, stderr: string}} exit 2 blocks the command. A close
+ *   that passes because of a bypass says what was bypassed.
  */
 export function preClose(payload, { pluginRoot, env }) {
   const pass = { exitCode: 0, stdout: '', stderr: '' };
@@ -100,10 +124,14 @@ export function preClose(payload, { pluginRoot, env }) {
   if (!projectRoot || !command || !/\bbd\b/.test(command)) return pass;
   const { name, specPath } = workflow(pluginRoot, projectRoot);
   if (!existsSync(specPath)) return pass;
+  // This hook sees every Bash call; a broken spec must not stand in the way of ones that close nothing.
+  if (closedTickets(command).length === 0) return pass;
+  const { spec, broken } = readSpec(name, specPath);
+  if (broken) return broken;
 
   const result = closeGate({
     command,
-    spec: loadSpec(specPath),
+    spec,
     io: {
       markdownIn: (dirs) => markdownIn(projectRoot, dirs),
       read: (path) => readFileSync(resolve(projectRoot, path), 'utf8'),
@@ -122,7 +150,7 @@ export function preClose(payload, { pluginRoot, env }) {
       bypass: (request) => bypassFailing({ ...request, cwd: projectRoot, env }),
     },
   });
-  if (!result.blocked) return pass;
+  if (!result.blocked) return passWith('PreToolUse', result.lines);
   const head = `${name}: bd close blocked — a document that declares the ticket does not pass its checks.`;
   return { exitCode: 2, stdout: '', stderr: `${[head, ...result.lines, 'Fix the document, then close again.', BYPASS_HINT].join('\n')}\n` };
 }
