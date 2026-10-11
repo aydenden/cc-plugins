@@ -28,6 +28,8 @@ row() { # status label install-hint
 echo "필수 도구"
 have_cmd bd  && row ok "bd (beads)"  || row req "bd (beads)"  "brew install beads"
 have_cmd git && row ok "git"         || row req "git"         "brew install git"
+# The hooks of every generated plugin are node scripts; without node no check runs.
+have_cmd node && row ok "node (생성물의 검사 hook 런타임)" || row req "node" "brew install node"
 
 echo
 echo "필수 플러그인"
