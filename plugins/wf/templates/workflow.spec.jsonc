@@ -1,0 +1,97 @@
+// 워크플로우 스펙 — .claude/<플러그인명>.spec.jsonc 에 둔다
+// wf:design 이 협의 결과를 여기 기록하고, 생성된 플러그인의 검사가 실행 시점에 읽는다.
+// 스킬 본문이 아니라 데이터로 두는 이유: 축과 규약은 재생성 없이 자라야 한다.
+//
+// 형식은 주석(// 와 /* */)을 허용하는 JSON 이다. 후행 쉼표는 허용하지 않는다.
+// 스펙에 담기지 않는 사정은 옆의 .claude/<플러그인명>.notes.md 에 쓴다 — 스크립트는 그 파일을 읽지 않는다.
+{
+  "schema": 1,
+  "workflow": "my-workflow",
+  // 출발점으로 삼은 축 저장소 도메인. 없으면 null
+  "domain": "frontend",
+
+  // --- 증거 저장소 ---
+  // kind: folder | beads | custom. custom 이면 절차를 .notes.md 에 서술한다
+  "evidence_store": { "kind": "folder", "root": "docs/issues" },
+
+  // --- 도구 ---
+  "toolchain": { "tracker": "bd", "thinking": "mattpocock", "runner": "orca", "browser": "agent-browser" },
+
+  "skills": {
+    // 없으면 워크플로우가 성립하지 않음
+    "required": ["tdd", "code-review"],
+    // 있으면 품질이 오름
+    "recommended": ["diagnosing-bugs"],
+    // 조사됐으나 미설치. 설치 명령을 남긴다
+    "not_installed": [
+      { "id": "some-owner/repo@skill", "install": "npx skills add some-owner/repo@skill", "why": "..." }
+    ],
+    "excluded": [{ "id": "other@skill", "why": "이미 설치된 X와 겹침" }]
+  },
+
+  // --- 단계 ---
+  // kind: seam(스킬로 만듦) | delegate(기존 스킬 호출)
+  // 검사가 도는 시점과 차단 여부는 스펙이 아니라 검사 종류가 정한다.
+  "stages": [
+    {
+      "id": "define",
+      "kind": "seam",
+      "produces": "정의 표 (축 × 정의 × 출처)",
+      "checks": ["coverage", "citation"],
+      // 아래 axes 의 키
+      "axes": "define",
+      // 검사는 frontmatter 의 type 이 이 값이고 ticket 이 닫으려는 ID 인 문서를 dirs 에서 찾는다.
+      // dirs 는 편집 hook 이 감시하는 범위이기도 하다
+      "artifact": { "type": "definition", "dirs": ["docs/issues"] },
+      // 있으면 닫기 게이트가 이 파일의 존재를 확인한다
+      "preview": "docs/previews/<ticket>/index.html"
+      // 프로젝트 고유 검사가 있으면 여기 단다. run 은 인자 배열(플러그인 루트 기준)이고
+      // 문서 경로를 마지막 인자로 받는다. 0 이 아닌 종료 코드는 닫기를 막는다
+      // "invariants": [{ "name": "…", "run": ["node", "scripts/check-….mjs"] }]
+    },
+    { "id": "implement", "kind": "delegate", "delegate_to": "/implement", "checks": ["execution"] }
+  ],
+
+  // --- 축 ---
+  // 정의·설계 성격의 단계에만 필요하다.
+  // 검사는 when 을 평가하지 않는다 — 모든 축에 행을 요구하고, 안 켜진 축은 "해당 없음 — 사유" 행으로 남는다.
+  // 판단한 적 없는 것과 판단해서 뺀 것은 다르다.
+  // 축을 추가할 때는 added_by 에 계기를 적는다. 실제 사고에서 나온 축과 그냥 넣어본 축이
+  // 구분되지 않으면 목록 전체가 형식적 통과 의례가 된다.
+  "axes": {
+    "define": [
+      { "id": "behavior", "ask": "무엇을 하는가 — 입력, 출력, 상태 전이" },
+      {
+        "id": "style",
+        "when": "화면에 렌더링되는가",
+        "ask": "시각 정의의 출처는 — 목업? 디자인 토큰? 기존 컴포넌트?",
+        "source_hint": "Figma 프레임, 정적 목업, as-is 스타일 레이어",
+        "closed_when": "치수·색·타이포가 값마다 출처와 함께 적혀 있다",
+        "excluded_when": "정본에 이 화면이 없다는 것을 찾아본 뒤 적는다",
+        "added_by": "<언제 어떤 재작업 때문에 추가됐는지>"
+      }
+    ]
+  },
+  // design 이 뺀 축과 이유. 검사는 읽지 않고 retro 가 읽는다
+  "axes_excluded": { "define": [{ "id": "contract", "why": "<왜 이 워크플로우에서 뺐는지>" }] },
+
+  // --- 인용 ---
+  // 백틱 토큰은 file_extensions 로 끝나거나 path_roots 로 시작할 때만 인용으로 본다.
+  // 찾는 순서: 저장소 루트 → 인용한 문서의 폴더 → search_roots → index_roots 안에서 경로 끝이 일치하는 파일
+  "citations": {
+    "file_extensions": ["md", "ts"],
+    "path_roots": ["docs", "src"],
+    "search_roots": ["docs"],
+    "index_roots": ["docs"],
+    "ignore_patterns": [{ "pattern": "^@", "why": "npm 패키지" }]
+  },
+
+  // --- 부정 ---
+  // claim 은 "찾아봤는데 없었다"는 주장만 잡도록 좁힌다. proof 는 그 줄 근처에 있어야 하는 검색의 흔적이다.
+  // 부정 검사를 건 단계가 없으면 이 키는 읽히지 않는다
+  "negation": {
+    "claim": "0건|찾지 못|못 찾|미발견|검색되지 않|확인되지 않",
+    "proof": "검색|조회|쿼리|키워드|grep|rg |search",
+    "why": "'없다'·'없음' 같은 넓은 패턴은 일반 산문에 걸린다"
+  }
+}
