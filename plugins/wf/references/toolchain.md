@@ -10,7 +10,7 @@
 | 브라우저 | `agent-browser` | 모든 웹 자동화 |
 | 지식 | CC auto-memory | 세션 간 기억 |
 | 세션 경계 | `long-run` 플러그인 | 여러 세션에 걸친 실행·세션 이관 |
-| 검사 런타임 | `node` | 생성되는 플러그인의 두 hook (`evidence-patterns.md`) |
+| 검사 런타임 | `node` | 생성되는 플러그인의 두 hook (`evidence-patterns.md`). 필수 — `check-deps.sh` 가 본다 |
 
 스펙의 `toolchain` 키(`tracker`·`thinking`·`runner`·`browser`)는 이 조합을 프로젝트에 기록해 두는 자리다. 검사는 이 키를 읽지 않는다.
 

@@ -22,10 +22,19 @@ home_with() { # <name> <installed-plugin-key...>
 }
 PD=plugin-dev@claude-plugins-official BD=beads@beads-marketplace LR=long-run@aydenden-plugins
 
-# run <name> <home> <expected-exit> <expected-substring>
+# A PATH holding only what the script itself needs plus the given commands, so a case can take one
+# tool away without depending on what the machine has installed.
+path_with() { # <name> <command...>
+  local bin="$TMP/bin-$1" cmd; shift
+  mkdir -p "$bin"
+  for cmd in bash grep "$@"; do ln -s "$(command -v "$cmd")" "$bin/$cmd"; done
+  printf '%s' "$bin"
+}
+
+# run <name> <home> <expected-exit> <expected-substring> [PATH]
 run() {
   local name="$1" home="$2" want_code="$3" want_out="$4" out code
-  out="$(HOME="$home" "$SCRIPT" 2>&1)"; code=$?
+  out="$(HOME="$home" PATH="${5:-$PATH}" "$SCRIPT" 2>&1)"; code=$?
   if [ "$code" != "$want_code" ]; then
     echo "FAIL $name — exit $code, want $want_code"; echo "$out" | sed 's/^/      /'; fail=$((fail+1)); return
   fi
@@ -48,6 +57,10 @@ run "beads plugin installed is ok"    "$(home_with bd-has "$PD" "$BD" "$LR")"   
 run "beads plugin missing is required" "$(home_with bd-lacks "$PD" "$LR")"                 1 "✗ beads"
 # The marketplace directories exist in every case above; with no install record nothing is installed.
 run "marketplace alone is not installed" "$(home_with market-only)"                         1 "필수 항목 3개가 없다"
+
+# The hooks of every generated plugin run on node; without it the workflow's checks cannot run.
+run "node present is ok"              "$(home_with node-has "$PD" "$BD" "$LR")"            0 "✓ node" "$(path_with node-has bd git node)"
+run "node missing is required"        "$(home_with node-lacks "$PD" "$BD" "$LR")"          1 "✗ node" "$(path_with node-lacks bd git)"
 
 echo "check-deps.test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

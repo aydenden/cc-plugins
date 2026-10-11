@@ -117,6 +117,7 @@ plugins/wf/scripts/check-deps.sh
 ```bash
 brew install beads                                    # bd
 brew install git                                      # 축 저장소가 refs/wf/axes 에 산다
+brew install node                                     # 생성된 플러그인의 검사 hook 이 node 로 돈다
 /plugin marketplace add anthropics/claude-plugins-official   # → plugin-dev 설치 (create-plugin 인계 대상)
 /plugin marketplace add steveyegge/beads                     # → beads 설치 (SessionStart bd prime 훅)
 /plugin install long-run@<이 마켓플레이스>                    # 세션 이관·여러 세션 실행 (같은 마켓플레이스에 있다)
@@ -127,9 +128,10 @@ brew install git                                      # 축 저장소가 refs/wf
 ```bash
 brew install --cask orca      # 세션 스폰·워크트리
 brew install agent-browser    # 웹 검증
-brew install node             # npx skills — 스킬 레지스트리 조사
-brew install jq               # 축 저장소 조회 (axis-sync.sh ids/resolve)
+brew install jq               # 축 저장소 조회 (axis-sync.sh resolve/ids/retired)
 ```
+
+스킬 레지스트리 조사에 쓰는 `npx` 는 필수인 node 에 딸려 온다.
 
 **조사·조작 스킬** — 설계 4단계의 스킬 조사와 브라우저 검증이 여기 기댄다. 소유자가 다르므로 주의.
 
@@ -202,7 +204,7 @@ bash plugins/wf/scripts/check-deps.test.sh
 `unlisted`), 문서 기준 상대 인용의 통과와 없는 파일의 `MISSING`, 편집한 줄에만 내는 부정 경고,
 대상 단위 우회와 로그 기록, 그리고 두 hook 진입점에 payload 를 넣었을 때의 종료 코드(축이 빠진
 문서의 티켓을 닫으면 exit 2).
-`check-deps.test.sh`는 `HOME`을 임시 디렉터리로 돌려 필수 플러그인(long-run)의 유무가 종료 코드로 갈리는지 본다.
+`check-deps.test.sh`는 `HOME`을 임시 디렉터리로 돌려 필수 플러그인의 유무가, `PATH`를 좁혀 node 의 유무가 종료 코드로 갈리는지 본다.
 
 ## 검증 우회
 
