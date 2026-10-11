@@ -24,7 +24,7 @@
 | 정제 | 계획 압박 | ✗ `/grill-*`에 위임 | — |
 | 정의·설계 | 무엇을 만들지 확정 | ✓ **축 커버리지** | 커버리지, 인용 |
 | 정의 프리뷰 | 구현 전 누락 노출 | ✓ 프로젝트 고유 | 존재, 커버리지 |
-| 명세 | PRD 산출 | ✗ `/to-prd`에 위임 | — |
+| 명세 | 스펙 산출 | ✗ `/to-spec`에 위임 | — |
 | 분해·적재 | 착수 단위로 쪼개 트래커에 | ✓ 트래커 규약 | 존재, 불변식 |
 | 착수 | 고르기·claim·실행 환경 | ✓ 트래커↔실행 이음매 | 존재 |
 | 구현 | 코드 작성 | ✗ `/implement`·`/tdd`에 위임 | 실행 |
@@ -39,16 +39,18 @@
 
 설치돼 있으면 그대로 부른다. 없으면 `find-skills`로 조사한다.
 
+† 는 upstream 이 `disable-model-invocation: true` 로 둔 스킬이다(`mattpocock/skills` main, 2026-10-11 실측). 모델이 Skill 도구로 부를 수 없고 사용자가 직접 쳐야 한다.
+
 | 판단 | 스킬 |
 |---|---|
-| 계획 압박 | `/grill-with-docs`(코드베이스 있음), `/grill-me` |
-| PRD | `/to-prd` |
-| 이슈 분해 | `/to-issues` |
-| 구현 | `/implement`, `/tdd` |
+| 계획 압박 | `/grill-with-docs`†(코드베이스 있음), `/grill-me`† |
+| 스펙 | `/to-spec`† |
+| 이슈 분해 | `/to-tickets`† |
+| 구현 | `/implement`†, `/tdd` |
 | 리뷰 | `/code-review` |
 | 버그 진단 | `/diagnosing-bugs` |
-| 트리아지 | `/triage` |
-| 대형 작업 지도 | `/wayfinder` |
+| 트리아지 | `/triage`† |
+| 대형 작업 지도 | `/wayfinder`† |
 | 리서치 | `/research` |
 | 세션 이관 | `long-run:session-handoff` |
 | 여러 세션에 걸친 실행 | `long-run:map-run` |

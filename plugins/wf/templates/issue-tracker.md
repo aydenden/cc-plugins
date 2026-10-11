@@ -33,4 +33,4 @@ Pull requests are not a request surface for this repository. Triage handles issu
 - `--design` holds the design notes of that one ticket. Decisions that outlive the ticket go to `docs/adr/`, which is the single source of truth for them (`docs/agents/domain.md`).
 - `bd edit` opens `$EDITOR` and blocks agents. Use `bd update` with field flags.
 - Nothing reaches a remote until `bd dolt push` runs explicitly.
-- Issues produced by `to-issues` are already agent-ready. Do not run them through triage.
+- Issues produced by `to-tickets` are already agent-ready. Do not run them through triage.

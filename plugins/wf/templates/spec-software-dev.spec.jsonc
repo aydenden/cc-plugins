@@ -17,7 +17,7 @@
   "toolchain": { "tracker": "bd", "thinking": "mattpocock", "runner": "orca", "browser": "agent-browser" },
 
   "skills": {
-    "required": ["tdd", "code-review", "implement", "grill-with-docs", "to-prd"],
+    "required": ["tdd", "code-review", "implement", "grill-with-docs", "to-spec"],
     "recommended": ["diagnosing-bugs", "triage", "wayfinder", "research", "prototype", "handoff", "domain-modeling"],
     "not_installed": [],
     "excluded": []
@@ -38,10 +38,10 @@
       "produces": "근거 표 — 확정 / 미정 / 상충, 각각 출처와 시점",
       "checks": ["citation", "negation"],
       "artifact": { "type": "sources", "dirs": ["docs/issues"] },
-      "note": "beads · ADR · CONTEXT.md · git log · 볼트 다섯 곳. 안 찾은 것과 찾았는데 없는 것을 구분한다"
+      "note": "beads · ADR · GLOSSARY.md · git log · 볼트 다섯 곳. 안 찾은 것과 찾았는데 없는 것을 구분한다"
     },
     { "id": "shape", "kind": "delegate", "delegate_to": "/grill-with-docs" },
-    { "id": "spec", "kind": "delegate", "delegate_to": "/to-prd" },
+    { "id": "spec", "kind": "delegate", "delegate_to": "/to-spec" },
     {
       "id": "slice",
       "kind": "seam",
