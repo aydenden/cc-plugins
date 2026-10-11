@@ -60,6 +60,7 @@
 | 여러 세션에 걸친 실행 | `long-run:map-run` |
 | 설계 질문 | `/prototype` |
 | 도메인 용어 | `/domain-modeling` |
+| 세션 회고 (에이전트 환경) | `/retro`† — 사용자가 직접 실행한다. 워크플로우의 재작업·누락은 `wf:retro` |
 | 브라우저 조작 | `agent-browser` |
 
 ## 단계 사이의 계약

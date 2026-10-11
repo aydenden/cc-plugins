@@ -12,8 +12,11 @@ wf:design  워크플로우 설명
              → .claude/<name>.spec.jsonc 스펙 기록
              → create-plugin Phase 4~8 로 인계
 
-wf:retro   재작업·주기 회고 → 원인 단계 → 빠진 축 → 스펙에 추가
+wf:retro   워크플로우의 재작업·누락 → 산출물·우회 로그·세션 기록
+             → 검사가 실제로 돌았나 → 원인 단계
+             → 기계적 위반이면 검사(invariants), 판단이면 축 → 스펙에 추가
              → 축이면 재생성 불필요 (실행 시점에 읽힘)
+             → 주기 회고면 매번 「해당 없음」인 축을 은퇴 후보로
              → 단계·위임 스킬·증거 저장소 변경이면
                drift 확인 → 영향 파일 제시 → 컨펌 → 생성물 반영
 ```
@@ -71,7 +74,7 @@ wf:retro   재작업·주기 회고 → 원인 단계 → 빠진 축 → 스펙�
 
 ```
 skills/design/     워크플로우 설계 진입점
-skills/retro/      회고 → 축 추가
+skills/retro/      워크플로우의 재작업·누락 → 검사 또는 축
 references/
   toolchain.md          고정 의존성 + 겹치는 기능의 채택 결정
   beads-contract.md     bd 실측 제약과 커밋 정책 (사용법은 beads 스킬 소유)
