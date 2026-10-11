@@ -7,15 +7,14 @@
 set -uo pipefail
 
 SKILL_DIRS=("$HOME/.agents/skills" "$HOME/.claude/skills")
-MARKET_DIR="$HOME/.claude/plugins/marketplaces"
 INSTALLED="$HOME/.claude/plugins/installed_plugins.json"
 missing_required=0
 
 have_cmd()   { command -v "$1" >/dev/null 2>&1; }
 have_skill() { for d in "${SKILL_DIRS[@]}"; do [ -e "$d/$1" ] && return 0; done; return 1; }
-have_market(){ [ -d "$MARKET_DIR/$1" ]; }
 # Keyed "<plugin>@<marketplace>". The marketplace name is the installer's choice, so only the plugin
 # name is matched; grep rather than jq because jq is itself one of the optional dependencies below.
+# A marketplace directory is not evidence: adding a marketplace installs nothing.
 have_plugin(){ grep -q "\"$1@" "$INSTALLED" 2>/dev/null; }
 
 row() { # status label install-hint
@@ -32,9 +31,9 @@ have_cmd git && row ok "git"         || row req "git"         "brew install git"
 
 echo
 echo "필수 플러그인"
-have_market claude-plugins-official && row ok "plugin-dev (create-plugin 인계 대상)" \
+have_plugin plugin-dev && row ok "plugin-dev (create-plugin 인계 대상)" \
   || row req "plugin-dev" "/plugin marketplace add anthropics/claude-plugins-official → plugin-dev 설치"
-have_market beads-marketplace && row ok "beads 플러그인 (SessionStart bd prime 훅)" \
+have_plugin beads && row ok "beads 플러그인 (SessionStart bd prime 훅)" \
   || row req "beads 플러그인" "/plugin marketplace add steveyegge/beads → beads 설치"
 have_plugin long-run && row ok "long-run (여러 세션 실행·세션 이관)" \
   || row req "long-run" "/plugin install long-run@<wf 를 설치한 마켓플레이스>"
@@ -64,7 +63,7 @@ done
 
 echo
 if [ "$missing_required" -gt 0 ]; then
-  echo "필수 항목 $missing_required개가 없다. 설계를 진행하면 생성된 워크플로우가 실행되지 않는다."
+  echo "필수 항목 ${missing_required}개가 없다. 설계를 진행하면 생성된 워크플로우가 실행되지 않는다."
   exit 1
 fi
 echo "필수 항목 충족. 조건부 항목의 유무는 어떤 단계를 넣을 수 있는지를 바꾼다."
