@@ -43,6 +43,8 @@
 
 설치돼 있으면 그대로 부른다. 없으면 `find-skills`로 조사한다.
 
+`scripts/check-deps.sh` 가 설치 여부를 보는 것은 이 중 기본 스펙이 쓰는 mattpocock 스킬 13개와 `find-skills`·`agent-browser` 다. 표의 나머지 — `/grill-me`(코드베이스가 없을 때의 대안), `/retro` — 는 그 판단을 워크플로우에 넣기로 했을 때 design 4단계에서 설치 여부를 본다.
+
 † 는 upstream 이 `disable-model-invocation: true` 로 둔 스킬이다(`mattpocock/skills` main, 2026-10-11 실측). 모델이 Skill 도구로 부를 수 없고 사용자가 직접 쳐야 한다.
 
 | 판단 | 스킬 |

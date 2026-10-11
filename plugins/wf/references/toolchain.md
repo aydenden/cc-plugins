@@ -45,7 +45,7 @@
 | 버그 진단 | `/diagnosing-bugs` |
 | 트리아지 판정 | `/triage` |
 | 대형 작업 지도 | `/wayfinder` |
-| 리서치 | `/research`, `llm-wiki:research` |
+| 리서치 | `/research`. 조사 결과를 볼트에 쌓는 프로젝트면 `llm-wiki:research`(같은 마켓플레이스의 llm-wiki 플러그인 — 고정 의존성이 아니고 `check-deps.sh` 가 보지 않는다) |
 | 세션 이관 | `long-run:session-handoff` (본문 압축은 그쪽이 `/handoff` 에 위임) |
 | 여러 세션에 걸친 실행 | `long-run:map-run` |
 
