@@ -118,7 +118,7 @@ description: 워크플로우를 설명하면 그에 맞는 워크플로우 플�
 
 정직한 렌더링 규칙과 as-is 파일 대조 절차는 `references/preview-patterns.md`에 있다. 프리뷰가 그럴듯하게 나오면 실패라는 점이 핵심이다.
 
-넣기로 했으면 스펙에서는 독립 단계가 아니라 정의 단계의 `preview` 키로 적는다. 그 파일이 없으면 티켓 닫기가 막힌다.
+넣기로 했으면 스펙에서는 독립 단계가 아니라 정의 단계의 `preview` 키로 적는다. 그 파일이 없으면 티켓 닫기가 막힌다. `preview` 를 단 단계에는 `artifact` 가 있어야 한다 — 게이트는 그 단계의 문서를 통해 프리뷰에 닿는다.
 
 # 7. 단계마다 검증을 설계한다
 
@@ -146,7 +146,7 @@ description: 워크플로우를 설명하면 그에 맞는 워크플로우 플�
 
 협의 결과를 프로젝트의 `.claude/<플러그인명>.spec.jsonc`에 쓴다. 파일 이름의 `<플러그인명>` 은 생성되는 플러그인의 `plugin.json` 의 `name` 과 같아야 한다 — hook 이 그 이름으로 스펙을 찾는다. 형식은 `${CLAUDE_PLUGIN_ROOT}/templates/workflow.spec.jsonc`, 소프트웨어 개발 기본형은 `spec-software-dev.spec.jsonc`. 주석(`//`, `/* */`)을 허용하는 JSON 이고 후행 쉼표는 안 된다. 스펙에 담기지 않는 사정은 옆의 `.claude/<플러그인명>.notes.md`(`templates/workflow.notes.md`)에 쓴다 — 스크립트는 그 파일을 읽지 않는다.
 
-쓴 뒤 스펙 리더로 읽어 본다. 깨진 스펙은 hook 을 오류로 끝내므로 인계 전에 여기서 잡는다.
+쓴 뒤 스펙 리더로 읽어 본다. 깨진 스펙은 모든 티켓 닫기를 막으므로 인계 전에 여기서 잡는다.
 
 ```bash
 node --input-type=module -e 'import { loadSpec } from "${CLAUDE_PLUGIN_ROOT}/scripts/lib/spec-file.mjs"; loadSpec(process.argv[1]); console.log("spec ok")' .claude/<플러그인명>.spec.jsonc

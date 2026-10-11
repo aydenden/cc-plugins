@@ -32,7 +32,7 @@ node --input-type=module -e 'import { loadSpec } from "./scripts/lib/spec-file.m
 ls skills/
 ```
 
-스펙이 깨져 있으면 이 명령이 어디가 틀렸는지와 함께 실패한다. 그 상태에서는 hook 도 오류로 끝나고 있으므로 스펙부터 고친다.
+스펙이 깨져 있으면 이 명령이 어디가 틀렸는지와 함께 실패한다. 그 상태에서는 hook 이 모든 티켓 닫기를 막고 있으므로 스펙부터 고친다.
 
 복사된 검사 스크립트도 본다. 생성 시점에 `scripts/`로 복사된 것이라 wf가 올라가도 따라오지 않는다 — 스펙을 한 줄도 안 바꿨어도 생기는 drift다.
 
