@@ -35,6 +35,25 @@ test('a command that does not close anything has no tickets', () => {
   }
 });
 
+test('🚨 an environment assignment in front of bd does not hide the close', () => {
+  assert.deepEqual(closedTickets('BEADS_ACTOR=me bd close abc-1'), ['abc-1']);
+  assert.deepEqual(closedTickets('cd x && A=1 B="two words" bd close abc-1'), ['abc-1']);
+  assert.deepEqual(closedTickets('A=1 echo bd close abc-1'), []);
+});
+
+test('🚨 bd update that sets the status to closed is a close', () => {
+  assert.deepEqual(closedTickets('bd update abc-1 --status closed'), ['abc-1']);
+  assert.deepEqual(closedTickets('bd update abc-1 abc-2 -s closed'), ['abc-1', 'abc-2']);
+  assert.deepEqual(closedTickets('bd update --status=closed abc-1'), ['abc-1']);
+  assert.deepEqual(closedTickets('bd update -s closed abc-1 --force'), ['abc-1']);
+});
+
+test('bd update to another status, or with no status, closes nothing', () => {
+  for (const command of ['bd update abc-1 --status open', 'bd update abc-1 --claim', 'bd update abc-1 --title closed', 'bd update abc-1 --if-status closed --assignee me']) {
+    assert.deepEqual(closedTickets(command), [], command);
+  }
+});
+
 test('a ticket closed twice is listed once', () => {
   assert.deepEqual(closedTickets('bd close abc-1 && bd close abc-1 abc-2'), ['abc-1', 'abc-2']);
 });

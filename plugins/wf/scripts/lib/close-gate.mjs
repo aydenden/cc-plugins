@@ -14,6 +14,17 @@ import { axisIds } from './spec.mjs';
 /** Flags of `bd` and `bd close` that consume the next word. */
 const VALUE_FLAGS = new Set(['-r', '--reason', '--reason-file', '--session', '--actor', '--database', '--db', '-C', '--directory', '--dolt-auto-commit']);
 
+/** Flags of `bd update` that consume the next word, besides the global ones above. */
+const UPDATE_VALUE_FLAGS = new Set([
+  ...VALUE_FLAGS, '--acceptance', '--add-label', '--append-notes', '-a', '--assignee', '--await-id', '--body-file', '--defer',
+  '-d', '--description', '--design', '--design-file', '--due', '-e', '--estimate', '--external-ref', '--if-assignee',
+  '--if-status', '--metadata', '--notes', '--parent', '-p', '--priority', '--remove-label', '--set-labels',
+  '--set-metadata', '--spec-id', '--title', '-t', '--type', '--unset-metadata', '--mem-profile',
+]);
+
+/** A leading `NAME=value` word: an environment assignment in front of a command. */
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
 const SEPARATOR = Symbol('separator');
 
 /** Shell words of a command line, with `;`, `&`, `|`, parentheses and newlines as separators. */
@@ -49,8 +60,24 @@ function shellWords(command) {
   return words;
 }
 
+/** Ids of a `bd update` that sets the status to closed; empty for any other update. */
+function updateClosing(words, from) {
+  const ids = [];
+  let status = null;
+  for (let i = from; i < words.length && words[i] !== SEPARATOR; i += 1) {
+    const word = words[i];
+    if (word === '-s' || word === '--status') status = words[(i += 1)];
+    else if (word.startsWith('--status=') || word.startsWith('-s=')) status = word.slice(word.indexOf('=') + 1);
+    else if (word.startsWith('-')) {
+      if (UPDATE_VALUE_FLAGS.has(word)) i += 1;
+    } else ids.push(word);
+  }
+  return status === 'closed' ? ids : [];
+}
+
 /**
- * Ticket ids a command line closes: the positional arguments of every `bd close` in it.
+ * Ticket ids a command line closes: the positional arguments of every `bd close` (or `bd done`)
+ * in it, and of every `bd update` that sets the status to closed.
  * Text inside a `--reason` is not an id, and neither is a `bd close` that is only quoted.
  *
  * @param {string} command a shell command line
@@ -59,8 +86,10 @@ function shellWords(command) {
 export function closedTickets(command) {
   const tickets = new Set();
   const words = shellWords(String(command ?? ''));
-  for (let start = 0; start < words.length; start += 1) {
-    if (start > 0 && words[start - 1] !== SEPARATOR) continue;
+  for (let first = 0; first < words.length; first += 1) {
+    if (first > 0 && words[first - 1] !== SEPARATOR) continue;
+    let start = first;
+    while (typeof words[start] === 'string' && ASSIGNMENT.test(words[start])) start += 1;
     if (words[start] !== 'bd') continue;
     let closing = false;
     for (let i = start + 1; i < words.length && words[i] !== SEPARATOR; i += 1) {
@@ -68,6 +97,7 @@ export function closedTickets(command) {
       if (word.startsWith('-')) {
         if (VALUE_FLAGS.has(word)) i += 1;
       } else if (!closing) {
+        if (word === 'update') updateClosing(words, i + 1).forEach((id) => tickets.add(id));
         if (word !== 'close' && word !== 'done') break;
         closing = true;
       } else {
