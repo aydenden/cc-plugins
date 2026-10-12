@@ -10,7 +10,7 @@
 | 브라우저 | `agent-browser` | 모든 웹 자동화 |
 | 지식 | CC auto-memory | 세션 간 기억 |
 | 세션 경계 | `long-run` 플러그인 | 여러 세션에 걸친 실행·세션 이관 |
-| 검사 런타임 | `node` | 생성되는 플러그인의 두 hook (`evidence-patterns.md`). 필수 — `check-deps.sh` 가 본다 |
+| 검사 런타임 | `node` | 생성되는 플러그인의 두 hook (`evidence-patterns.md`). 필수 — `check-deps.mjs` 가 본다 |
 
 스펙의 `toolchain` 키(`tracker`·`thinking`·`runner`·`browser`)는 이 조합을 프로젝트에 기록해 두는 자리다. 검사는 이 키를 읽지 않는다.
 
@@ -45,7 +45,7 @@
 | 버그 진단 | `/diagnosing-bugs` |
 | 트리아지 판정 | `/triage` |
 | 대형 작업 지도 | `/wayfinder` |
-| 리서치 | `/research`. 조사 결과를 볼트에 쌓는 프로젝트면 `llm-wiki:research`(같은 마켓플레이스의 llm-wiki 플러그인 — 고정 의존성이 아니고 `check-deps.sh` 가 보지 않는다) |
+| 리서치 | `/research`. 조사 결과를 볼트에 쌓는 프로젝트면 `llm-wiki:research`(같은 마켓플레이스의 llm-wiki 플러그인 — 고정 의존성이 아니고 `check-deps.mjs` 가 보지 않는다) |
 | 세션 이관 | `long-run:session-handoff` (본문 압축은 그쪽이 `/handoff` 에 위임) |
 | 여러 세션에 걸친 실행 | `long-run:map-run` |
 

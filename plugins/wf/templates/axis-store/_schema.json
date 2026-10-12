@@ -14,7 +14,7 @@
     },
     "description": {
       "type": "string",
-      "description": "What kind of work this set applies to. Shown by `axis-sync.sh list`."
+      "description": "What kind of work this set applies to. Shown by `axis-sync.mjs list`."
     },
     "extends": {
       "type": "array",
