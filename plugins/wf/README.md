@@ -89,9 +89,10 @@ scripts/
   hook-post-edit.mjs    편집 직후 hook — 인용(차단) · 부정(경고)
   hook-pre-close.mjs    bd close 직전 hook — 커버리지 · 프리뷰 · 불변식(차단)
   lib/                  판정(순수 함수)과 파일·git 어댑터. 생성물로 그대로 복사된다
+  check-deps.mjs        의존성 유무 + 설치법 (design 0단계)
+  axis-sync.mjs         도메인 축 저장소 pull/push (refs/wf/axes)
+  design/               위 둘의 판정과 어댑터. 설계 시점 전용 — 생성물로 복사하지 않는다
   test/                 node --test
-  check-deps.sh         의존성 유무 + 설치법 (design 0단계)
-  axis-sync.sh          도메인 축 저장소 pull/push (refs/wf/axes)
 templates/
   axis-store/                축 저장소 씨앗 (스키마 + frontend·backend-api)
   workflow.spec.jsonc        스펙 형식
@@ -111,7 +112,7 @@ templates/
 무엇이 있는지 먼저 확인한다. `wf:design`도 0단계에서 이걸 돌린다.
 
 ```bash
-plugins/wf/scripts/check-deps.sh
+node plugins/wf/scripts/check-deps.mjs
 ```
 
 **필수** — 없으면 생성된 워크플로우가 실행되지 않는다.
@@ -130,7 +131,6 @@ brew install node                                     # 생성된 플러그인�
 ```bash
 brew install --cask orca      # 세션 스폰·워크트리
 brew install agent-browser    # 웹 검증
-brew install jq               # 축 저장소 조회 (axis-sync.sh resolve/ids/retired)
 ```
 
 스킬 레지스트리 조사에 쓰는 `npx` 는 필수인 node 에 딸려 온다.
@@ -183,12 +183,12 @@ done
 도메인별 기본 축은 문서가 아니라 데이터다. 저장소의 커스텀 ref `refs/wf/axes`에 도메인당 JSON 하나로 살고, `main`과는 만나지 않는다 — 브랜치도 태그도 아니라 웹 브랜치 목록에 안 뜨고 기본 clone이 안 가져온다.
 
 ```bash
-plugins/wf/scripts/axis-sync.sh init            # 최초 1회 — 씨앗 생성 (push 는 안 함)
-plugins/wf/scripts/axis-sync.sh pull            # 생성 또는 fast-forward
-plugins/wf/scripts/axis-sync.sh list            # 도메인 목록
-plugins/wf/scripts/axis-sync.sh resolve <도메인>  # extends 병합
-plugins/wf/scripts/axis-sync.sh retired <도메인>  # 뺀 축과 뺀 이유
-plugins/wf/scripts/axis-sync.sh push "메시지"      # 커밋·발행
+node plugins/wf/scripts/axis-sync.mjs init            # 최초 1회 — 씨앗 생성 (push 는 안 함)
+node plugins/wf/scripts/axis-sync.mjs pull            # 생성 또는 fast-forward
+node plugins/wf/scripts/axis-sync.mjs list            # 도메인 목록
+node plugins/wf/scripts/axis-sync.mjs resolve <도메인>  # extends 병합
+node plugins/wf/scripts/axis-sync.mjs retired <도메인>  # 뺀 축과 뺀 이유
+node plugins/wf/scripts/axis-sync.mjs push "메시지"      # 커밋·발행
 ```
 
 전체 명령은 `references/axis-patterns.md`. 저장소는 `wf:design` 이 축을 꺼내는 출발점이고, 검사가 읽는 정본은 프로젝트 스펙이다.
@@ -199,7 +199,6 @@ plugins/wf/scripts/axis-sync.sh push "메시지"      # 커밋·발행
 
 ```bash
 node --test "plugins/wf/scripts/test/*.test.mjs"
-bash plugins/wf/scripts/check-deps.test.sh
 ```
 
 판정은 순수 함수이고 파일·git·프로세스는 어댑터 뒤에 있어서, 테스트는 문서 텍스트와 스펙 값을
@@ -208,7 +207,7 @@ bash plugins/wf/scripts/check-deps.test.sh
 `unlisted`), 문서 기준 상대 인용의 통과와 없는 파일의 `MISSING`, 편집한 줄에만 내는 부정 경고,
 대상 단위 우회와 로그 기록, 닫기로 읽는 명령의 형태, 그리고 두 hook 진입점에 payload 를 넣었을
 때의 종료 코드(축이 빠진 문서의 티켓을 닫으면 exit 2, 스펙이 깨져 있어도 exit 2).
-`check-deps.test.sh`는 `HOME`을 임시 디렉터리로 돌려 필수 플러그인의 유무가, `PATH`를 좁혀 node 의 유무가 종료 코드로 갈리는지 본다.
+`deps.test.mjs` 는 `HOME` 과 `PATH` 를 임시 디렉터리로 돌려 필수 플러그인과 node 의 유무가 `check-deps.mjs` 의 종료 코드로 갈리는지 보고, `axis-sync.test.mjs` 는 로컬 bare 저장소를 원격 삼아 init → push → 다른 store 의 pull 과 `extends` 병합을 본다.
 
 ## 검증 우회
 

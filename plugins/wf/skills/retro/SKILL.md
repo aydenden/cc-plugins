@@ -138,10 +138,10 @@ grep -F "check-coverage: <축 id>:" "${WF_BYPASS_LOG:-$(git rev-parse --git-comm
 **스펙에서 저장소로 복사한다 — 옮기지 않는다.** 검사가 읽는 것은 프로젝트 스펙이고 저장소는 `wf:design` 의 출발점일 뿐이라, 저장소에만 올리면 이 프로젝트에서는 아무것도 강제되지 않는다. 도메인은 스펙의 `domain` 값이다(`null` 이면 출발점 도메인이 없던 것이므로 어느 도메인에 넣을지 사용자와 정한다).
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" pull
-"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" retired <도메인>   # 전에 뺀 축인가부터 본다
-# $(axis-sync.sh path)/axes/<도메인>.json 의 axes 배열에 스펙의 그 항목을 복사 (added_by 그대로)
-"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" push "add <axis-id> to <도메인>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.mjs" pull
+node "${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.mjs" retired <도메인>   # 전에 뺀 축인가부터 본다
+# $(axis-sync.mjs path)/axes/<도메인>.json 의 axes 배열에 스펙의 그 항목을 복사 (added_by 그대로)
+node "${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.mjs" push "add <axis-id> to <도메인>"
 ```
 
 저장소 파일은 순수 JSON 이다. 스펙에서 가져올 때 주석을 떼고 온다. `push` 는 원격에 쓰므로 실행 전에 사용자 승인을 받는다.

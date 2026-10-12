@@ -134,24 +134,24 @@
 명령은 wf 플러그인 루트 기준이다(루트 경로는 부른 스킬이 알려 준다).
 
 ```bash
-scripts/axis-sync.sh init              # 최초 1회 — 씨앗으로 store 생성 (push 는 안 함)
-scripts/axis-sync.sh path              # 로컬 store 경로
-scripts/axis-sync.sh pull              # 생성 또는 fast-forward
-scripts/axis-sync.sh list              # 어떤 도메인이 있나
-scripts/axis-sync.sh show frontend     # 저장된 그대로
-scripts/axis-sync.sh resolve frontend  # extends 병합된 도메인
-scripts/axis-sync.sh ids frontend      # 병합된 축 id만, 한 줄에 하나
-scripts/axis-sync.sh retired frontend  # 뺀 축과 뺀 이유
-scripts/axis-sync.sh push "메시지"       # 커밋·발행
+node scripts/axis-sync.mjs init              # 최초 1회 — 씨앗으로 store 생성 (push 는 안 함)
+node scripts/axis-sync.mjs path              # 로컬 store 경로
+node scripts/axis-sync.mjs pull              # 생성 또는 fast-forward
+node scripts/axis-sync.mjs list              # 어떤 도메인이 있나
+node scripts/axis-sync.mjs show frontend     # 저장된 그대로
+node scripts/axis-sync.mjs resolve frontend  # extends 병합된 도메인
+node scripts/axis-sync.mjs ids frontend      # 병합된 축 id만, 한 줄에 하나
+node scripts/axis-sync.mjs retired frontend  # 뺀 축과 뺀 이유
+node scripts/axis-sync.mjs push "메시지"       # 커밋·발행
 ```
 
 **왜 커스텀 ref인가.** `refs/heads`·`refs/tags` 밖이라 브랜치도 태그도 아니다 — 웹 브랜치 목록에 안 뜨고, `ls-remote --heads`에 안 잡히고, 기본 clone/fetch가 안 가져온다(GitHub 실측). `main`은 마켓플레이스가 읽는 배포 브랜치이고 축은 그와 무관한 주기로 자라는 데이터라, 둘이 만나지 않는 것이 맞다. 로컬 store는 워킹트리가 있는 평범한 저장소라 손편집은 그대로 된다 — 숨는 건 원격 쪽뿐이다.
 
-대가는 분명하다: **웹 UI에서 보거나 고칠 수 없고**, 기본 refspec을 쓰는 미러는 이 데이터를 안 따라온다. 접근 경로는 `axis-sync.sh` 하나다.
+대가는 분명하다: **웹 UI에서 보거나 고칠 수 없고**, 기본 refspec을 쓰는 미러는 이 데이터를 안 따라온다. 접근 경로는 `axis-sync.mjs` 하나다.
 
 **저장 위치.** `~/.cache/wf/axis-store` (`WF_AXIS_STORE`로 변경). 플러그인 디렉토리에 두지 않는다 — 설치 캐시는 버전마다 새 디렉토리라 버전업 즉시 축이 고아가 된다.
 
-**최초 1회.** ref가 아직 없으면 `axis-sync.sh init`이 씨앗 도메인으로 store를 만든다. **push는 하지 않는다** — 원격 쓰기는 명령이 따로다.
+**최초 1회.** ref가 아직 없으면 `axis-sync.mjs init`이 씨앗 도메인으로 store를 만든다. **push는 하지 않는다** — 원격 쓰기는 명령이 따로다.
 
 ## 파일 형식
 

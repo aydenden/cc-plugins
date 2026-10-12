@@ -21,7 +21,7 @@ description: 워크플로우를 설명하면 그에 맞는 워크플로우 플�
 무엇이 설치돼 있는지가 **워크플로우에 무엇을 넣을 수 있는지를 바꾼다.** 없는 도구를 전제로 설계하면 생성된 워크플로우가 실행 시점에 멈춘다.
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/check-deps.sh"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/check-deps.mjs"
 ```
 
 - **필수가 빠졌으면** — `bd`, `git`, `node`, plugin-dev 플러그인, beads 플러그인, long-run 플러그인. 설치 명령을 안내하고 **여기서 멈춘다.** node 가 없으면 생성되는 플러그인의 검사 hook 이 하나도 돌지 않고, plugin-dev가 없으면 9단계에서 인계할 대상이 없고, beads 플러그인이 없으면 생성된 워크플로우가 세션마다 컨텍스트를 잃고, long-run이 없으면 세션 이관과 여러 세션에 걸친 실행을 맡길 곳이 없다.
@@ -32,7 +32,6 @@ description: 워크플로우를 설명하면 그에 맞는 워크플로우 플�
   | `orca` | 세션 스폰 단계와 **세션 이관 단계**. long-run 은 필수지만 `long-run:session-handoff` 는 새 orca 탭을 띄우며 폴백이 없다 — 플러그인이 설치돼 있어도 orca 없이는 그 단계가 돌지 않는다 |
   | `agent-browser` | 브라우저 검증 단계 |
   | `npx` | 4단계의 스킬 레지스트리 조사(`find-skills`)와 위임 대상 스킬 설치. 설치된 스킬만으로 설계하고, 조사하지 못했다는 사실을 스펙에 남긴다 |
-  | `jq` | 5단계의 `axis-sync.sh resolve`·`ids`·`retired`. `pull`·`list`·`show` 는 된다 — 상속(`extends`)이 있는 도메인은 병합된 축을 볼 수 없으므로 `show` 로 부모와 자식을 따로 읽는다 |
 - **위임 대상 스킬이 빠졌으면** — 그 판단을 대신할 스킬을 4단계에서 조사한다. 없는 스킬을 부르라는 지시가 생성물에 남는 것이 최악이다.
 
 결과를 사용자에게 요약하고, 조건부 항목을 지금 설치할지 아니면 그 단계를 빼고 갈지 확인한다.
@@ -94,11 +93,11 @@ description: 워크플로우를 설명하면 그에 맞는 워크플로우 플�
 **먼저 축 저장소를 당긴다.** 같은 도메인을 이미 한 번 겪었다면 그때의 회고가 여기 쌓여 있다.
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" pull
-"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" list
+node "${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.mjs" pull
+node "${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.mjs" list
 ```
 
-매칭되는 도메인이 있으면 `resolve <도메인>`으로 꺼내(`extends`가 병합된 형태다) **출발점으로 제시한다.** 없으면 새 도메인이므로 아래 네 출처로 도출한다 — 저장소에 새 도메인으로 올릴지는 8단계에서 정한다(기본은 올리지 않는 것이다). 저장소가 아직 없으면(`pull`이 "does not exist"로 실패) 그 사실만 알리고 계속 간다 — 축 도출이 막히지는 않는다. 최초 1회는 `axis-sync.sh init`이 씨앗을 만든다.
+매칭되는 도메인이 있으면 `resolve <도메인>`으로 꺼내(`extends`가 병합된 형태다) **출발점으로 제시한다.** 없으면 새 도메인이므로 아래 네 출처로 도출한다 — 저장소에 새 도메인으로 올릴지는 8단계에서 정한다(기본은 올리지 않는 것이다). 저장소가 아직 없으면(`pull`이 "does not exist"로 실패) 그 사실만 알리고 계속 간다 — 축 도출이 막히지는 않는다. 최초 1회는 `axis-sync.mjs init`이 씨앗을 만든다.
 
 저장소에서 꺼낸 축도 **그대로 쓰지 않는다.** 이 프로젝트에 해당하지 않는 축은 빼고, 왜 뺐는지 사용자에게 확인받는다. 남의 프로젝트 축을 다 켜면 "해당 없음" 행만 늘어난다. 뺀 축은 버리지 않고 스펙의 `axes_excluded` 에 이유와 함께 적는다 — 검사는 읽지 않지만, 나중에 그 축이 필요했다고 드러났을 때 retro 가 「몰랐다」와 「알고 뺐다」를 가를 근거다.
 
@@ -165,9 +164,9 @@ node --input-type=module -e 'import { loadSpec } from "${CLAUDE_PLUGIN_ROOT}/scr
 올리기로 했으면 기존 도메인을 상속할 수 있는지부터 본다. `frontend`가 있는데 Vue 프로젝트라면 새 도메인이 아니라 `extends`다 — 공통 축을 베끼면 한쪽만 고쳐지고 갈라진다.
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" pull
-"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" list   # 상속할 부모가 있나
-cat > "$("${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" path)/axes/<도메인>.json" <<'JSON'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.mjs" pull
+node "${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.mjs" list   # 상속할 부모가 있나
+cat > "$(node "${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.mjs" path)/axes/<도메인>.json" <<'JSON'
 { "schema": 1, "domain": "<도메인>", "description": "<어떤 작업에 켜지나>",
   "extends": ["<부모 도메인>"],
   "axes": [ { "id": "<영문-소문자>", "when": "", "ask": "...", "source_hint": "...",
@@ -175,8 +174,8 @@ cat > "$("${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" path)/axes/<도메인>.jso
               "excluded_when": "<무엇을 찾아본 뒤라야 「해당 없음」이라 쓸 수 있나>",
               "added_by": "<이 축이 어디서 나왔나 — 관찰이면 무엇을 관찰했는지>" } ] }
 JSON
-"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" ids <도메인>          # 병합 결과 확인
-"${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.sh" push "add <도메인> domain"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.mjs" ids <도메인>          # 병합 결과 확인
+node "${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.mjs" push "add <도메인> domain"
 ```
 
 `added_by`는 여기서도 비우지 않는다. 설계 단계의 축은 재작업이 아니라 관찰에서 나오므로 **무엇을 관찰했는지**를 쓴다 — "as-is의 `LegacyDetail.vue` 스타일 레이어가 별도로 존재", "기존 엔드포인트 12개 전부 멱등 키를 다룸" 같은 것. "일반적으로 필요"는 근거가 아니다.
