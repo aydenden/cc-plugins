@@ -109,7 +109,7 @@ export function postEdit(payload, { pluginRoot, env }) {
 }
 
 /**
- * PreToolUse(Bash).
+ * PreToolUse(Bash|PowerShell).
  *
  * @param {object} payload the hook payload (`tool_input.command`)
  * @param {{pluginRoot: string, env: Record<string, string|undefined>}} context

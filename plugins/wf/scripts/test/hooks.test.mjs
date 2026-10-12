@@ -255,7 +255,8 @@ test('the hooks.json template calls scripts that exist, through node and the plu
   ]);
   for (const script of ['hook-post-edit.mjs', 'hook-pre-close.mjs']) assert.ok(existsSync(join(SCRIPTS, script)), script);
   assert.equal(template.hooks.PostToolUse[0].matcher, 'Write|Edit');
-  assert.equal(template.hooks.PreToolUse[0].matcher, 'Bash');
+  // PowerShell is the primary shell tool on Windows; a matcher of Bash alone never fires for it.
+  assert.equal(template.hooks.PreToolUse[0].matcher, 'Bash|PowerShell');
 });
 
 test('🚨 the bash checks are gone — the hooks are the only way a check runs', () => {
