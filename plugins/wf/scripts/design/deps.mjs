@@ -18,7 +18,7 @@ const REQUIRED_PLUGINS = [
 ];
 
 const OPTIONAL_TOOLS = [
-  { command: 'orca', present: 'orca (세션 스폰·워크트리)', absent: 'orca', install: 'brew install --cask orca' },
+  { command: 'orca', present: 'orca (세션 스폰·워크트리)', absent: 'orca', install: 'brew install --cask stablyai/orca/orca' },
   { command: 'agent-browser', present: 'agent-browser (웹 검증)', absent: 'agent-browser', install: 'brew install agent-browser' },
   { command: 'npx', present: 'npx (스킬 레지스트리 조사)', absent: 'npx', install: 'brew install node' },
 ];
