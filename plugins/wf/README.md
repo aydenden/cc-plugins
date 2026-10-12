@@ -129,7 +129,7 @@ brew install node                                     # 생성된 플러그인�
 **조건부** — 없으면 해당 단계를 설계에서 뺀다.
 
 ```bash
-brew install --cask orca      # 세션 스폰·워크트리
+brew install --cask stablyai/orca/orca      # 세션 스폰·워크트리
 brew install agent-browser    # 웹 검증
 ```
 
