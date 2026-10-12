@@ -30,7 +30,8 @@
   },
 
   // --- 단계 ---
-  // kind: seam(스킬로 만듦) | delegate(기존 스킬 호출)
+  // kind: seam(스킬로 만듦) | delegate(기존 스킬에 맡김)
+  // delegate_to 가 모델이 부를 수 없는 스킬이면 그 단계는 사용자가 친다 (stage-patterns.md 「위임 단계의 문구」)
   // 검사가 도는 시점과 차단 여부는 스펙이 아니라 검사 종류가 정한다.
   "stages": [
     {

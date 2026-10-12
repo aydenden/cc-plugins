@@ -153,6 +153,8 @@ done
 
 <details><summary>어느 판단을 어디에 맡기는가 (정본: <code>references/stage-patterns.md</code>)</summary>
 
+일부는 사용자만 부를 수 있는 스킬이다(정본의 † 표시). 생성된 워크플로우는 그 단계에서 사용자에게 실행을 요청하고 턴을 넘긴다.
+
 | 판단 | 위임 |
 |---|---|
 | 계획 압박 | `/grill-with-docs` (코드베이스 있음) |

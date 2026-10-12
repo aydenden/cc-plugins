@@ -16,6 +16,7 @@
 | `stages[].kind` seam↔delegate | 스킬 신규/제거 + 위임 문구 |
 | `stages[].checks` | 해당 스킬의 증거 절. hooks.json 은 그대로 — 시점과 차단 여부는 검사 종류가 정한다 |
 | `skills.required/recommended` | 위임 대상을 언급한 모든 스킬 본문 |
+| (스펙은 그대로, 위임 대상 스킬의 `disable-model-invocation` 이 바뀜) | 그 단계로 넘기는 앞 스킬의 문구와 `PRIME.md` 의 단계 순서 (`stage-patterns.md` 「위임 단계의 문구」) |
 | `evidence_store` | 증거 경로를 다루는 스킬. 검사가 걸린 단계의 `artifact.dirs` 도 함께 |
 | (스펙은 그대로, wf가 올라감) | 생성물 `scripts/`의 검사 스크립트 복사본과 `hooks/hooks.json` |
 
@@ -96,6 +97,7 @@ git status --short plugins/<플러그인>/
 - 스킬 본문과 hooks.json 이 플러그인 루트 기준으로 가리키는 경로가 전부 실재하는가
 - 스펙이 읽히는가 (위 1번의 스펙 리더 명령이 오류 없이 끝난다)
 - 제거된 스킬을 가리키는 문구가 남아 있지 않은가 (`grep -rn "<제거된 id>"`)
+- 사용자만 부를 수 있는 스킬을 Skill 도구로 부르라는 문구가 없는가 (설치본 `SKILL.md` 의 `disable-model-invocation`)
 - hooks.json이 유효한가
 
 제거된 스킬을 가리키는 문구가 특히 잘 남는다. 스킬을 지웠는데 다른 스킬 본문이 여전히 그것을 가리키면, 없는 스킬을 부르라는 지시가 남는다.

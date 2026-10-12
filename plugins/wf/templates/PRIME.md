@@ -53,3 +53,11 @@ At the end of a unit of work: close the issues, run the relevant quality gates, 
 The `<plugin>:` plugin owns the seams between beads, orca, and the engineering skills. Reach for them instead of improvising:
 
 `<plugin>:sources` (gather grounding before starting) · `<plugin>:slice` (spec → issue DAG) · `<plugin>:start` (ready → claimed → running) · `<plugin>:verify` (browser E2E with evidence) · `<plugin>:done` (gates → close → report) · `long-run:session-handoff` (hand the session to a fresh agent) · `<plugin>:intake` (external reports → triaged issues) · `<plugin>:map` (oversized work → investigation tickets)
+
+## Stage order
+
+`<plugin>:sources` → `/grill-with-docs` ⌨ → `/to-spec` ⌨ → `<plugin>:slice` → `<plugin>:start` → `/implement` ⌨ → `<plugin>:verify` → `code-review` → `<plugin>:done`
+
+⌨ marks a skill only the user can run. Do not call it with the Skill tool — the call is refused. Ask the user to type it, say what to pass (ticket ID, document path) and which skill comes after, then end the turn. The workflow resumes in the next seam skill, which starts by checking the previous stage's evidence.
+
+Call every other skill with the Skill tool, by name.
