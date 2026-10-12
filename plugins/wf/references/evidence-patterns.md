@@ -39,7 +39,7 @@ hook 은 둘이고, **무엇이 언제 도는지와 차단인지 경고인지는
 | 문서를 쓴 직후 | `PostToolUse` (`Write\|Edit`) → `scripts/hook-post-edit.mjs` | 인용 | 차단 |
 | | | 부정 | 경고 |
 | | | frontmatter 선언 유무 (새 문서) | 경고 |
-| `bd close` 직전 | `PreToolUse` (`Bash`) → `scripts/hook-pre-close.mjs` | 커버리지 | 차단 |
+| `bd close` 직전 | `PreToolUse` (`Bash\|PowerShell`) → `scripts/hook-pre-close.mjs` | 커버리지 | 차단 |
 | | | 프리뷰 존재 (`preview` 를 단 단계) | 차단 |
 | | | 프로젝트 불변식 (`invariants` 를 단 단계) | 차단 |
 

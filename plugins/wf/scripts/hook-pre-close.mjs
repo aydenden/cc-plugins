@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * PreToolUse(Bash): before `bd close`, verify the documents that declare each ticket being
+ * PreToolUse(Bash|PowerShell): before `bd close`, verify the documents that declare each ticket being
  * closed — axis coverage, the preview's existence, and the project's invariants.
  * A ticket no document declares passes.
  * Stdin: the hook payload. Exit: 0 pass · 2 a check failed, the close is blocked.
