@@ -15,7 +15,7 @@ Under the custom ref `refs/wf/axes` on the plugin repository — outside `refs/h
 read by every install; this ref is data that grows on its own schedule, and the two never meet.
 
 The tradeoff is deliberate: nothing here can be browsed or fixed from the web UI, and a mirror
-that uses the default refspec will not carry it. `axis-sync.sh` is the way in.
+that uses the default refspec will not carry it. `axis-sync.mjs` is the way in.
 
 ## Layout
 
@@ -27,19 +27,19 @@ axes/<domain>.json       one domain's axis set
 ## Working with it
 
 ```bash
-axis-sync.sh pull                  # create or fast-forward the local store
-axis-sync.sh list                  # which domains exist
-axis-sync.sh resolve frontend-vue  # one domain with `extends` merged in
-axis-sync.sh ids frontend          # axis ids, one per line (feeds check-coverage.sh)
-axis-sync.sh retired frontend      # what was dropped and why
-axis-sync.sh push "add a11y axis"  # commit and publish
+node axis-sync.mjs pull                  # create or fast-forward the local store
+node axis-sync.mjs list                  # which domains exist
+node axis-sync.mjs resolve frontend-vue  # one domain with `extends` merged in
+node axis-sync.mjs ids frontend          # axis ids of the resolved domain, one per line
+node axis-sync.mjs retired frontend      # what was dropped and why
+node axis-sync.mjs push "add a11y axis"  # commit and publish
 ```
 
 ## What belongs here
 
 A domain-general axis: one that would have caught the same omission in another project of the
 same kind. A project-specific axis — this repository's module, this team's rule — stays in that
-project's `.claude/<plugin>.local.md`. Put it here and it becomes a row that is permanently
+project's `.claude/<plugin>.spec.jsonc`. Put it here and it becomes a row that is permanently
 "not applicable" everywhere else.
 
 An axis carries its bar, not only its question. `closed_when` says what the artifact's row must
