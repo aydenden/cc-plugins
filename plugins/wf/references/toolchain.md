@@ -50,3 +50,24 @@
 | 여러 세션에 걸친 실행 | `long-run:map-run` |
 
 mattpocock 스킬군은 `docs/agents/issue-tracker.md`를 읽어 트래커를 결정한다. 그 파일이 없으면 GitHub Issues를 가정하고 `gh issue create`를 부른다. 생성되는 워크플로우의 부트스트랩 단계가 `templates/issue-tracker.md`(플러그인 루트 기준)를 배치해 beads를 고정해야, 이들을 그냥 호출해도 beads로 흘러간다.
+
+## 어디서 돌려 봤나
+
+실제로 돌려 본 것은 macOS 하나다. 아래 표의 나머지는 각 도구의 공식 문서를 읽은 것이고(2026-10-12), 그 환경에서 돌려 보지 않았다 — 문서와 실제가 어긋나면 실제를 믿고 이 절을 고친다.
+
+| 무엇 | macOS | Linux | Windows |
+|---|---|---|---|
+| 두 hook 이 불리고 막는다 | 실측 (Claude Code 2.1.296) | 돌려 보지 않음 | 돌려 보지 않음 |
+| `bd` | 실측 | 설치 안내 있음 (`brew install beads`, 설치 스크립트, `npm install -g @beads/bd`) | 설치 안내 있음 (`install.ps1`) |
+| `orca` | 실측 | 배포본 있음 (AppImage, AUR `stably-orca-bin`) | 배포본 있음 (`.exe`). CLI 등록 절차는 확인하지 못함 |
+| `agent-browser` | 실측 | 바이너리 있음 (`npm install -g agent-browser`) | 바이너리 있음 (x64) |
+| `check-deps.mjs` 의 설치 안내 | 맞음 | **맞지 않음** — 안내가 전부 `brew` 다 | **맞지 않음** |
+
+Windows 에서 닫기 게이트에 걸리는 것 (Claude Code 문서 `hooks`, `tools-reference`):
+
+- 셸 명령은 `Bash` 가 아니라 `PowerShell` 도구로도 나간다. Git Bash 가 없으면 `Bash` 도구는 아예 등록되지 않고, 있어도 `PowerShell` 이 주 셸이다. 그래서 닫기 hook 의 매처는 `Bash|PowerShell` 이다 — `Bash` 만 걸면 그 `bd close` 는 hook 을 지나지 않는다. 두 도구 모두 명령을 `tool_input.command` 로 준다.
+- 닫기로 읽는 명령의 형태는 bash 꼴로만 고정돼 있다. `bd.exe close <id>` 와 `if (...) { bd close <id> }` 는 닫기로 읽히지 않는다(2026-10-12, 파서에 직접 넣어 봄).
+- hook 의 `command` 는 Git Bash 가 없으면 PowerShell 로 실행된다. 명령 안의 플러그인 루트 변수는 Claude Code 가 치환한다. `node "<경로>"` 가 PowerShell 에서 그대로 도는지는 돌려 보지 않았다.
+- 편집 hook 에 오는 경로는 `\` 로 구분된다. `scripts/lib/artifact.mjs` 가 payload 의 경로 꼴을 보고 가른다(테스트로 고정).
+
+Linux·macOS·WSL 에서 `PowerShell` 도구는 사용자가 켰을 때만 있다.
