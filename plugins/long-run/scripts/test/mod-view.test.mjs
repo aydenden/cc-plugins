@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { HANDOFF_SKILL } from '../lib/guard-core.mjs';
-import { parseStatus, statusLine, stopVerdict } from '../lib/mod-view.mjs';
+import { compactNote, parseStatus, statusLine, stopVerdict } from '../lib/mod-view.mjs';
 
 // `frontier-guard.mjs status` 가 내는 꼴 그대로다 — 프론티어는 분류된 id 로 실린다.
 const claimed = {
@@ -120,6 +120,28 @@ const parked = { ...claimed, frontier: { pushable: ['map-abcd.9'], questions: ['
 // 주차한 질문은 되미는 자리에서 한 번 보고될 뿐이라, 그 사이에 사람 눈에 띄는 곳은 상태줄뿐이다.
 test('답을 기다리는 질문이 있으면 상태줄이 그 수를 말한다', () => {
   assert.equal(statusLine(parked, usageAt(420_000)), 'long-run map-abcd · 프론티어 1 · 질문 대기 1 · 컨텍스트 42%');
+});
+
+// --- 압축 ---
+
+// 압축된 세션은 맵의 운영 규약을 잃는다. 압축을 막으면 창이 넘칠 때 막다른 길이 되므로, 요약과 압축
+// 뒤 대화에 인계 지시만 남긴다.
+test('맵을 미는 세션이 압축되면 새 티켓을 잡지 말고 인계하라는 지시가 남는다', () => {
+  const note = compactNote(claimed);
+  assert.match(note, /map-abcd/);
+  assert.match(note, /새 티켓을 잡지 않는다/);
+  assert.match(note, new RegExp(`${HANDOFF_SKILL} --bd map-abcd`));
+});
+
+test('맵을 선언하지 않았거나 다른 세션이 주인이면 압축에 아무것도 덧붙이지 않는다', () => {
+  assert.equal(compactNote(unclaimed), undefined);
+  assert.equal(compactNote(null), undefined);
+  assert.equal(compactNote({ ...claimed, owner: false }), undefined);
+});
+
+// claim 한 턴 직후에 압축되면 아직 주인이 적히기 전이다 — 그 세션의 맵을 잃게 두지 않는다.
+test('주인이 아직 정해지지 않은 맵도 지시를 남긴다', () => {
+  assert.match(compactNote({ ...claimed, owner: null }), /map-abcd/);
 });
 
 // --- 주인 ---

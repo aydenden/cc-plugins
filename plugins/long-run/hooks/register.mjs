@@ -1,5 +1,5 @@
 /**
- * long-run mod — 맵을 미는 세션의 상태줄과 Stop 판정.
+ * long-run mod — 맵을 미는 세션의 상태줄과 Stop 판정, 그리고 압축될 때 남기는 인계 지시.
  *
  * 판정 규칙은 `scripts/lib/guard-core.mjs`, 입력 조립과 문구는 `scripts/lib/mod-view.mjs` 가 소유한다.
  * 여기는 배선뿐이다: 마커·프론티어는 `frontier-guard.mjs status` 로 묻고(키 계산을 두 벌로 만들지 않는다),
@@ -16,7 +16,7 @@
  */
 
 import { MOD_FLAG } from '../scripts/lib/guard-core.mjs';
-import { parseStatus, statusLine, stopVerdict } from '../scripts/lib/mod-view.mjs';
+import { compactNote, parseStatus, statusLine, stopVerdict } from '../scripts/lib/mod-view.mjs';
 
 /** 이 worktree 의 마커 경로. 첫 status 에서 배운다 — 마커가 없는 동안은 bd 를 부르지 않고 파일만 본다. */
 let markerPath = null;
@@ -65,6 +65,19 @@ export function register(on) {
   on('session.measure', async ($, e, next) => {
     await refreshStatusLine($, e);
     return next(e);
+  });
+
+  // 압축은 막지 않는다 — 창이 넘칠 때 건너뛰면 막다른 길이 된다. 요약과 압축 뒤 대화에 인계 지시만 남긴다.
+  // `.catch` 를 달지 않는다 — `next` 뒤에 터지면 `.catch` 가 `next` 를 다시 불러 압축이 두 번 돈다.
+  // `next` 앞의 조회(`mayBeClaimed`·`readStatus`)는 실패를 스스로 삼킨다.
+  on('session.compact', async ($, e, next) => {
+    if (e.agentId !== undefined || e.trigger === 'precompute') return next(e);
+    const note = (await mayBeClaimed($)) ? compactNote(await readStatus($)) : undefined;
+    if (note === undefined) return next(e);
+
+    const compacted = await next({ ...e, instructions: e.instructions ? `${e.instructions}\n\n${note}` : note });
+    if (compacted?.skip !== undefined || !Array.isArray(compacted?.messages)) return compacted;
+    return { ...compacted, messages: [...compacted.messages, { role: 'user', text: note, toolUses: [] }] };
   });
 
   // node 훅이 먼저 돌아 claim 을 증명한 세션을 주인으로 적는다 — 그 뒤에 읽는 status 가 그것을 본다.

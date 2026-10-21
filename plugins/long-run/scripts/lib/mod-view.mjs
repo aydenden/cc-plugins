@@ -9,7 +9,7 @@
  * `node:` import 를 두지 않는다. 이 파일은 hooks module 이 import 하므로 mod 의 실행 환경에서 돌아야 한다.
  */
 
-import { HANDOFF_RATIO, contextLimitOf, decide } from './guard-core.mjs';
+import { HANDOFF_RATIO, HANDOFF_SKILL, contextLimitOf, decide } from './guard-core.mjs';
 
 /**
  * `frontier-guard.mjs status` 의 stdout 을 읽는다. 못 읽으면 null(«모름»)이고, 가드는 모를 때 통과시킨다.
@@ -85,4 +85,24 @@ export function stopVerdict({ status, usage, stopHookActive }) {
     closedSinceSession: status?.closedSinceSession ?? null,
     stopHookActive,
   });
+}
+
+/**
+ * 맵을 미는 세션이 압축될 때 요약 지시와 압축 뒤 대화에 남길 말. 그 세션의 맵이 아니면 undefined.
+ *
+ * 압축된 세션은 맵의 운영 규약을 잃는다. 그렇다고 압축을 막으면 창이 넘칠 때 막다른 길이 된다 —
+ * 그래서 막지 않고, 하던 티켓까지만 가서 넘기라고 남긴다. 주인이 아직 정해지지 않은(null) 맵은 이
+ * 세션이 claim 한 직후일 수 있어 지시를 남긴다.
+ *
+ * @param {ReturnType<typeof parseStatus>} status
+ * @returns {string | undefined}
+ */
+export function compactNote(status) {
+  const epic = status?.marker?.epic;
+  if (!epic || status.owner === false) return undefined;
+  return (
+    `이 세션은 맵 ${epic} 을 밀고 있었고 방금 대화가 압축됐다. 맵 id 와 지금 claim 한 티켓 id 는 요약에 남긴다. ` +
+    `압축된 세션은 맵의 운영 규약을 잃으므로 새 티켓을 잡지 않는다 — 하던 티켓을 닫을 수 있는 자리까지만 가고 ` +
+    `${HANDOFF_SKILL} --bd ${epic} 으로 넘긴다.`
+  );
 }
