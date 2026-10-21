@@ -42,7 +42,10 @@
 
 ## 강제 — mod 와 Stop hook
 
-**맵을 선언하지 않은 세션에는 아무 일도 하지 않는다.**
+**맵을 선언하지 않은 세션에는 아무 일도 하지 않는다.** 선언한 worktree 안에서도 판정되는 것은
+`claim` 을 부른 **주인 세션 하나**다 — claim 이 출력한 일회용 토큰 줄이 자기 트랜스크립트에 있는
+세션이 다음 Stop 에서 주인으로 적힌다(`lib/claim.mjs`). 같은 worktree 에서 다른 일로 연 세션은
+되밀리지 않는다.
 
 선언한 세션에서는 멈춤 시도마다 **한 번만** 되민다. 두 번째 멈춤은 무조건 통과시킨다(그러지 않으면
 세션이 영영 안 끝난다). 가드가 터지면 막는 것이 아니라 조용히 통과시킨다.
@@ -113,7 +116,7 @@ mod 는 마커 경로와 프론티어를 직접 계산하지 않고 `frontier-gu
 # 이 세션이 그 맵을 민다고 선언 / 해제 / 지금 판정 보기
 node scripts/frontier-guard.mjs claim <epic>
 node scripts/frontier-guard.mjs clear
-node scripts/frontier-guard.mjs status
+node scripts/frontier-guard.mjs status [--session <id>] [트랜스크립트]
 
 # 인계 문서 경로 할당 → 문서를 쓴 뒤 → 넘기고 빠진다
 node scripts/handoff.mjs allocate --slug <슬러그>
@@ -127,7 +130,7 @@ node --test "scripts/test/*.test.mjs"
 claude plugin validate .
 ```
 
-순수 로직만 테스트한다 — 프론티어 분류와 판정(`lib/guard-core.mjs`), 헌장과 가드의 문구 일치
+순수 로직만 테스트한다 — 프론티어 분류·주인·판정(`lib/guard-core.mjs`), claim 토큰(`lib/claim.mjs`), 헌장과 가드의 문구 일치
 (`test/charter-wording.test.mjs`), mod 의 입력 조립과 상태줄 문구(`lib/mod-view.mjs`),
 문서 메타 대조(`lib/doc-meta.mjs`), 경로·키 계산(`lib/handoff-path.mjs`). orca·bd 호출은 실측 대상이라
 테스트하지 않는다. `hooks/register.mjs` 는 배선뿐이라 `claude plugin validate` 가 읽어 내는 hooks·calls
@@ -153,7 +156,5 @@ claude plugin validate .
   규약이 바뀌어도 열려 있는 맵은 옛 문구를 갖고 있다. 가드가 되미는 문구와 어긋나면 `bd update` 로 고친다
 - **맵을 접을 때는 선언을 직접 지운다**(`frontier-guard.mjs clear`). 프론티어가 비어도 맵이 열려 있으면
   마커가 남는다
-- **같은 worktree 에서 세션 둘을 동시에 굴리면** 둘 다 같은 맵으로 판정된다. 인계가 마커를 지우지
-  않는 설계의 대가다
 - **구 orca 호스트에서는 제출을 증명할 수 없다**(`observation: old-host`). 그때는 증명 없이 통과시키고
   수령증에 그 사실을 남긴다 — 없는 증거를 만들지 않는다

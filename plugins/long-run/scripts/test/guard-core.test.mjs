@@ -9,6 +9,7 @@ import {
   contextTokensOf,
   decide,
   isDelegatedToMod,
+  ownership,
   readTranscriptTail,
 } from '../lib/guard-core.mjs';
 
@@ -257,4 +258,58 @@ test('프론티어가 비었어도 컨텍스트가 절반을 넘었으면 닫는
   const verdict = decide({ ...base, frontier: frontierOf(), epicOpen: true, contextTokens: 600_000 });
   assert.match(verdict.reason, /session-handoff/);
   assert.match(verdict.reason, /완료 조건/);
+});
+
+// --- 주인 세션 ---
+//
+// 같은 worktree 에서 다른 일로 연 세션까지 «프론티어를 밀라» 로 되밀리면 안 된다. 주인은 claim 을
+// 부른 세션 하나다 — 그 세션의 트랜스크립트에만 claim 토큰 줄이 있다.
+
+const NOW = '2026-10-21T09:00:00.000Z';
+const never = () => false;
+const always = () => true;
+
+test('주인이 적힌 마커는 그 세션만 주인이다 — 기준 시각은 주인이 된 시각이다', () => {
+  const owned = { epic: 'map-abcd', session: { id: 's1', since: '2026-10-21T08:00:00.000Z' }, claimHash: 'h' };
+  assert.deepEqual(ownership(owned, 's1', NOW, never), { owner: true, since: '2026-10-21T08:00:00.000Z', changed: false });
+  assert.deepEqual(ownership(owned, 's2', NOW, always), { owner: false, since: null, changed: false });
+});
+
+test('주인이 비었으면 claim 을 증명한 세션이 주인이 된다', () => {
+  const claimed = { epic: 'map-abcd', claimHash: 'h' };
+  assert.deepEqual(ownership(claimed, 's1', NOW, always), { owner: true, since: NOW, changed: true });
+  assert.deepEqual(ownership(claimed, 's2', NOW, never), { owner: false, since: null, changed: false });
+});
+
+// 트랜스크립트를 통째로 읽는 일이라 주인이 정해진 뒤에는 턴마다 하지 않는다.
+test('주인이 정해진 뒤에는 증명을 다시 묻지 않는다', () => {
+  let asked = 0;
+  const proves = () => ++asked > 0;
+  ownership({ epic: 'map-abcd', session: { id: 's1', since: NOW }, claimHash: 'h' }, 's1', NOW, proves);
+  assert.equal(asked, 0);
+});
+
+// 인계로 다른 worktree 에 옮겨진 선언은 새 claim 을 기다린다 — 아무 세션도 주인으로 세우지 않는다.
+test('claimHash 가 null 이면 아무도 주인이 아니다', () => {
+  assert.equal(ownership({ epic: 'map-abcd', claimHash: null }, 's1', NOW, always).owner, false);
+});
+
+// 토큰이 생기기 전의 마커다. 진행 중인 맵을 끊지 않으려고 처음 멈추는 세션을 주인으로 세운다.
+test('claimHash 칸 자체가 없는 마커는 처음 멈추는 세션이 주인이 된다', () => {
+  assert.deepEqual(ownership({ epic: 'map-abcd' }, 's1', NOW, never), { owner: true, since: NOW, changed: true });
+});
+
+test('마커나 세션 id 가 없으면 주인이 아니다', () => {
+  assert.equal(ownership(null, 's1', NOW, always).owner, false);
+  assert.equal(ownership({ epic: 'map-abcd', claimHash: 'h' }, undefined, NOW, always).owner, false);
+});
+
+test('🚨 주인이 아닌 세션은 막지 않는다 — 같은 worktree 의 다른 일이다', () => {
+  assert.equal(decide({ ...base, owner: false }).block, false);
+  // 주인 아닌 세션의 판정이 선언을 지우면 주인이 가드를 잃는다.
+  assert.notEqual(decide({ ...base, owner: false, frontier: frontierOf(), epicOpen: false }).clear, true);
+});
+
+test('owner 를 주지 않으면 주인 자리에서 본 판정이다', () => {
+  assert.equal(decide(base).block, true);
 });

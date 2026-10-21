@@ -21,10 +21,12 @@ import { parseStatus, statusLine, stopVerdict } from '../scripts/lib/mod-view.mj
 /** 이 worktree 의 마커 경로. 첫 status 에서 배운다 — 마커가 없는 동안은 bd 를 부르지 않고 파일만 본다. */
 let markerPath = null;
 
+/** 이 세션 자리에서 본 status. 세션 id 를 실어야 주인이 아닌 세션이 판정에서 빠진다. */
 async function readStatus($, cwd) {
   const cli = `${$.plugin.root}/scripts/frontier-guard.mjs`;
   try {
-    const { exitCode, stdout } = await $.process.run(['node', cli, 'status'], cwd ? { cwd } : undefined);
+    const sessionId = await $.session.id();
+    const { exitCode, stdout } = await $.process.run(['node', cli, 'status', '--session', sessionId], cwd ? { cwd } : undefined);
     if (exitCode !== 0) return null;
     const status = parseStatus(stdout);
     if (status?.markerPath) markerPath = status.markerPath;
@@ -65,6 +67,7 @@ export function register(on) {
     return next(e);
   });
 
+  // node 훅이 먼저 돌아 claim 을 증명한 세션을 주인으로 적는다 — 그 뒤에 읽는 status 가 그것을 본다.
   on('classic.Stop', async ($, e, next) => {
     const result = await next({ ...e, [MOD_FLAG]: true });
     if (result?.block || !(await mayBeClaimed($))) return result;

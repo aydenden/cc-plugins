@@ -111,6 +111,35 @@ test('답을 기다리는 질문이 있으면 상태줄이 그 수를 말한다'
   assert.equal(statusLine(parked, usageAt(420_000)), 'long-run map-abcd · 프론티어 1 · 질문 대기 1 · 컨텍스트 42%');
 });
 
+// --- 주인 ---
+
+// status 는 `--session` 으로 물으면 그 세션이 주인인지 싣는다: 참·거짓, 그리고 아직 아무도 증명하지
+// 않은 null.
+test('🚨 다른 세션이 주인이면 막지 않는다', () => {
+  const v = stopVerdict({ status: { ...claimed, owner: false }, usage: usageAt(100_000), stopHookActive: false });
+  assert.equal(v.block, false);
+  assert.notEqual(v.clear, true);
+});
+
+// Stop 에서는 node 훅이 먼저 돌아 claim 을 증명한 세션을 주인으로 적는다. 그래도 null 이면 이 세션은
+// claim 을 하지 않은 것이다 — 주인 없는 마커로 아무 세션이나 되밀면 주인 판정이 무의미해진다.
+test('주인이 아직 아무도 아니면 막지 않는다', () => {
+  assert.equal(stopVerdict({ status: { ...claimed, owner: null }, usage: usageAt(100_000), stopHookActive: false }).block, false);
+});
+
+test('owner 칸이 없는 status 는 주인 자리에서 본 것이다', () => {
+  assert.equal(stopVerdict({ status: claimed, usage: usageAt(100_000), stopHookActive: false }).block, true);
+});
+
+test('다른 세션이 주인이면 상태줄이 그렇게 말한다 — 이 세션은 판정되지 않는다', () => {
+  assert.equal(statusLine({ ...claimed, owner: false }, usageAt(420_000)), 'long-run map-abcd · 다른 세션이 주인');
+});
+
+// claim 한 턴 끝, 첫 Stop 전에는 주인이 적히기 전이다 — 여기서 «다른 세션» 이라 그리면 거짓말이다.
+test('주인이 아직 정해지지 않았으면 평소대로 그린다', () => {
+  assert.equal(statusLine({ ...claimed, owner: null }, usageAt(420_000)), 'long-run map-abcd · 프론티어 2 · 컨텍스트 42%');
+});
+
 test('bd 를 못 읽었으면 프론티어를 0 이 아니라 모름으로 그린다', () => {
   assert.equal(statusLine({ ...claimed, frontier: null }, usageAt(420_000)), 'long-run map-abcd · 프론티어 모름 · 컨텍스트 42%');
 });
