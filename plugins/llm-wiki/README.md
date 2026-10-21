@@ -58,7 +58,7 @@ Lint 커맨드는 없다 — 정비도 커밋도 아래 훅이 log 기록 직후
 | 훅 | 설명 |
 |----|------|
 | SessionStart | 볼트 도달·초기화 검증(경로, `SCHEMA.md`) 후 원격과 동기화 — fetch하고 워킹트리가 깨끗하면 fast-forward, 더럽거나 갈라졌으면 경고만. 세션을 막지 않는다 |
-| PostToolUse (`Write\|Edit`) | 대상이 볼트 `log.md`일 때만 동작 — `--write-index`로 index 재생성 → 점검 → 커밋·푸시. 커밋 메시지는 log.md 마지막 엔트리 헤더에서 뽑는다(`{action}(vault): {제목}`). lint error가 있으면 **커밋을 보류**하고 exit 2로 즉시 조치를 강제하며, 그 외 파일 쓰기에서는 아무것도 하지 않고 즉시 종료 |
+| PostToolUse (`Write\|Edit`) | 대상이 볼트 `log.md`일 때만 동작 — `--write-index`로 index 재생성 → 점검 → 커밋·푸시. 커밋 메시지는 log.md 마지막 엔트리 헤더에서 뽑는다(`{action}(vault): {제목}`). lint error가 있으면 **커밋을 보류**하고 exit 2로 즉시 조치를 강제한다. review 그룹(`contested`·`confidence: low`)은 커밋을 막지 않고 건수와 드릴다운 명령만 알리며, 그 외 파일 쓰기에서는 아무것도 하지 않고 즉시 종료 |
 
 ## 검색: CC 내장 Grep 전수검색
 

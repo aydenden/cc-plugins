@@ -17,8 +17,11 @@
  *
  * Output contract (see ccp-hht): the first output is a few summary lines that
  * both a human and an agent read; only drill-down is JSON. Groups are split by
- * nature — `error` (fix now) is listed per group, `backlog` (standing vault
- * state) is folded into one line.
+ * nature — `error` (fix now) is listed per group, `review` (a deliberate
+ * distrust marker awaiting a human, never "fixed" by the agent) is listed per
+ * group with a `review ` prefix, `backlog` (standing vault state) is folded into
+ * one line. Only `error` makes the first line `LINT error=` — the post-log hook
+ * keys its commit gate on that, so a review item never holds a commit back.
  */
 
 import fs from 'node:fs';
@@ -70,7 +73,7 @@ const GROUPS = [
   { id: 'frontmatter', nature: 'error', label: 'frontmatter invalid' },
   { id: 'raw-drift', nature: 'error', label: 'raw sha256 mismatch' },
   { id: 'log-rotation', nature: 'error', label: 'log.md over rotation limit' },
-  { id: 'contested', nature: 'error', label: 'contested / low confidence' },
+  { id: 'contested', nature: 'review', label: 'contested / low confidence' },
   { id: 'source-format', nature: 'backlog', label: 'sources element off-shape' },
   { id: 'tags', nature: 'backlog', label: 'tag spelling splits the vocabulary' },
   { id: 'orphans', nature: 'backlog', label: 'no inbound wikilink' },
@@ -497,7 +500,9 @@ function runChecks(vault, schema, model) {
   const rotation = measureLog(vault);
   if (rotation && rotation.exceeded) results.set('log-rotation', [rotation]);
 
-  // contested — explicit distrust markers; tiny by design, so an error group.
+  // contested — explicit distrust markers; tiny by design, so listed per group.
+  // A review group, not an error: rule 8 sets these legitimately, and only new
+  // evidence or a human resolves them.
   results.set('contested', pages
     .filter((p) => String(p.fields.contested) === 'true' || p.fields.confidence === 'low')
     .map((p) => ({ path: p.rel, contested: String(p.fields.contested) === 'true', confidence: p.fields.confidence || null, contradictions: asList(p.fields.contradictions) }))
@@ -793,15 +798,21 @@ function rotateLog(vault) {
 
 function printSummary(results) {
   const errors = GROUPS.filter((g) => g.nature === 'error');
+  const review = GROUPS.filter((g) => g.nature === 'review');
   const backlog = GROUPS.filter((g) => g.nature === 'backlog');
-  const errorTotal = errors.reduce((sum, g) => sum + results.get(g.id).length, 0);
-  const backlogTotal = backlog.reduce((sum, g) => sum + results.get(g.id).length, 0);
+  const total = (groups) => groups.reduce((sum, g) => sum + results.get(g.id).length, 0);
+  const errorTotal = total(errors);
+  const counts = `review=${total(review)} backlog=${total(backlog)}`;
 
   const out = [];
-  out.push(errorTotal === 0 ? `LINT ok backlog=${backlogTotal}` : `LINT error=${errorTotal} backlog=${backlogTotal}`);
+  out.push(errorTotal === 0 ? `LINT ok ${counts}` : `LINT error=${errorTotal} ${counts}`);
   for (const group of errors) {
     const count = results.get(group.id).length;
     if (count) out.push(`${group.id} ${count}`);
+  }
+  for (const group of review) {
+    const count = results.get(group.id).length;
+    if (count) out.push(`review ${group.id} ${count}`);
   }
   const backlogParts = backlog.filter((g) => results.get(g.id).length).map((g) => `${g.id} ${results.get(g.id).length}`);
   if (backlogParts.length) out.push(`[backlog] ${backlogParts.join(', ')}`);

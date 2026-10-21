@@ -27,6 +27,9 @@ summary: one-line description of this page              # required
 date: YYYY-MM-DD                                        # required
 sources:                                                # required, always a YAML list
   - raw/articles/foo.md
+# Optional:
+confidence: high | medium | low
+contested: true
 ---
 \`\`\`
 
@@ -52,7 +55,7 @@ test.after(() => vaults.forEach((v) => fs.rmSync(v, { recursive: true, force: tr
  * Throwaway vault: healthy by default, one planted broken link when asked, and
  * optionally a git repository so the hook's commit step has something to act on.
  */
-function makeVault({ broken = false, git = false } = {}) {
+function makeVault({ broken = false, contested = false, git = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-wiki-hook-'));
   vaults.push(root);
   const write = (rel, body) => {
@@ -66,6 +69,11 @@ function makeVault({ broken = false, git = false } = {}) {
     write('concepts/spoke.md',
       '---\ntype: concept\ntags: [approved]\nsummary: the spoke\ndate: 2026-08-16\n'
       + 'sources:\n  - https://example.com/a\n---\n\n# Spoke\n\nSee [[nowhere]].\n');
+  }
+  if (contested) {
+    write('concepts/disputed.md',
+      '---\ntype: concept\ntags: [approved]\nsummary: the disputed claim\ndate: 2026-08-16\ncontested: true\n'
+      + 'sources:\n  - https://example.com/d\n---\n\n# Disputed\n');
   }
   if (git) {
     const run = (...args) => spawnSync('git', ['-C', root, ...args], { encoding: 'utf8' });
@@ -136,7 +144,7 @@ test('on a clean vault: regenerates the index and reports via systemMessage', ()
   assert.equal(res.status, 0);
   const payload = JSON.parse(res.stdout);
   assert.match(payload.systemMessage, /^\[llm-wiki\]/);
-  assert.match(payload.systemMessage, /LINT ok backlog=\d+/);
+  assert.match(payload.systemMessage, /LINT ok review=\d+ backlog=\d+/);
 });
 
 test('on error groups: exits 2 so the summary is fed back to Claude', () => {
@@ -168,6 +176,26 @@ test('on lint errors: defers the commit instead of recording a broken vault', ()
   assert.equal(res.status, 2);
   assert.match(res.stderr, /커밋은 보류/);
   assert.equal(lastCommit(vault), 'init', 'no new commit was made');
+});
+
+test('on review groups only: commits anyway and points at the drill-down', () => {
+  const vault = makeVault({ contested: true, git: true });
+  fs.appendFileSync(path.join(vault, 'log.md'), '\n## [2026-10-21] ingest | 결론 미정 적재\n', 'utf8');
+
+  const res = runHook(vault, path.join(vault, 'log.md'));
+  assert.equal(res.status, 0);
+  const { systemMessage } = JSON.parse(res.stdout);
+  assert.match(systemMessage, /LINT ok review=1 /);
+  assert.match(systemMessage, /^review contested 1$/m);
+  assert.match(systemMessage, /--group contested --json/);
+  assert.match(systemMessage, /GIT committed/);
+  assert.equal(lastCommit(vault), 'ingest(vault): 결론 미정 적재');
+});
+
+test('on a clean vault: no review drill-down hint', () => {
+  const vault = makeVault();
+  const res = runHook(vault, path.join(vault, 'log.md'));
+  assert.doesNotMatch(JSON.parse(res.stdout).systemMessage, /--group/);
 });
 
 test('without git the maintenance result is still reported', () => {
