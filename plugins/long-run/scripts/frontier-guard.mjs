@@ -59,7 +59,7 @@ function readFrontier(epic) {
     const children = bdJson(['list', '--parent', epic, '--limit', '0']);
     const ready = bdJson(['ready', '--parent', epic, '--limit', '0']);
     return {
-      frontier: classifyFrontier({ children, readyIds: ready.map((row) => row.id) }),
+      frontier: classifyFrontier({ children, ready }),
       epicOpen: map.status !== 'closed',
     };
   } catch {

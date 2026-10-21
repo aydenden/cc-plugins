@@ -143,8 +143,10 @@ test('표지가 없거나 참이 아니면 node 훅이 판정한다', () => {
 // `bd list --parent <epic> --json` 의 행 그대로다 — 의존에 막힌 티켓도 status 는 open 으로 온다.
 const row = (id, extra = {}) => ({ id, status: 'open', ...extra });
 
+const human = { labels: ['human'] };
+
 test('막힌 데 없는 열린 티켓은 밀 수 있다', () => {
-  const frontier = classifyFrontier({ children: [row('map-abcd.1'), row('map-abcd.2')], readyIds: ['map-abcd.1', 'map-abcd.2'] });
+  const frontier = classifyFrontier({ children: [row('map-abcd.1'), row('map-abcd.2')], ready: [row('map-abcd.1'), row('map-abcd.2')] });
   assert.deepEqual(frontier, { pushable: ['map-abcd.1', 'map-abcd.2'], questions: [], blocked: [] });
 });
 
@@ -152,16 +154,16 @@ test('막힌 데 없는 열린 티켓은 밀 수 있다', () => {
 // 여기서 빼지 않으면 가드가 에이전트에게 질문 티켓을 claim 하라고 시킨다.
 test('human 라벨 티켓은 질문이다 — ready 에 있어도 밀 수 있는 쪽에 넣지 않는다', () => {
   const frontier = classifyFrontier({
-    children: [row('map-abcd.1'), row('map-abcd.3', { labels: ['human'] })],
-    readyIds: ['map-abcd.1', 'map-abcd.3'],
+    children: [row('map-abcd.1'), row('map-abcd.3', human)],
+    ready: [row('map-abcd.1'), row('map-abcd.3', human)],
   });
   assert.deepEqual(frontier, { pushable: ['map-abcd.1'], questions: ['map-abcd.3'], blocked: [] });
 });
 
 test('ready 에 없는 열린 티켓은 막힌 것이다', () => {
   const frontier = classifyFrontier({
-    children: [row('map-abcd.1'), row('map-abcd.2'), row('map-abcd.3', { labels: ['human'] })],
-    readyIds: ['map-abcd.1', 'map-abcd.3'],
+    children: [row('map-abcd.1'), row('map-abcd.2'), row('map-abcd.3', human)],
+    ready: [row('map-abcd.1'), row('map-abcd.3', human)],
   });
   assert.deepEqual(frontier, { pushable: ['map-abcd.1'], questions: ['map-abcd.3'], blocked: ['map-abcd.2'] });
 });
@@ -169,8 +171,23 @@ test('ready 에 없는 열린 티켓은 막힌 것이다', () => {
 // `bd ready` 는 in_progress 를 뺀다. 그것을 막힌 것으로 세면, 티켓을 claim 한 세션이 자기가 미는
 // 티켓 때문에 «밀 수 있는 것이 없다» 는 판정을 받는다.
 test('claim 한 티켓은 ready 에 없어도 밀 수 있는 것이다', () => {
-  const frontier = classifyFrontier({ children: [row('map-abcd.1', { status: 'in_progress' })], readyIds: [] });
+  const frontier = classifyFrontier({ children: [row('map-abcd.1', { status: 'in_progress' })], ready: [] });
   assert.deepEqual(frontier, { pushable: ['map-abcd.1'], questions: [], blocked: [] });
+});
+
+// 자식이 하위 epic 하나뿐인 맵에서 직계만 보면, 그 epic 이 열려 있는 동안 맵 전체가 «막힘» 으로
+// 읽혀 일이 남았는데도 질문 보고로 멈춘다. `bd ready --parent` 가 주는 후손은 그대로 밀 수 있다.
+test('ready 로 나온 손자 티켓도 밀 수 있는 것이다 — 하위 epic 에 맵이 막히지 않는다', () => {
+  const frontier = classifyFrontier({
+    children: [row('map-abcd.1')],
+    ready: [row('map-abcd.1.1'), row('map-abcd.1.2', human)],
+  });
+  assert.deepEqual(frontier, { pushable: ['map-abcd.1.1'], questions: [], blocked: ['map-abcd.1'] });
+});
+
+test('같은 티켓이 자식과 ready 양쪽에 있어도 한 번만 센다', () => {
+  const frontier = classifyFrontier({ children: [row('map-abcd.1')], ready: [row('map-abcd.1')] });
+  assert.deepEqual(frontier.pushable, ['map-abcd.1']);
 });
 
 // --- 대기뿐인 프론티어 ---
