@@ -122,11 +122,17 @@ mod 는 마커 경로와 프론티어를 직접 계산하지 않고 `frontier-gu
 node scripts/frontier-guard.mjs claim <epic>
 node scripts/frontier-guard.mjs clear
 node scripts/frontier-guard.mjs status [--session <id>] [트랜스크립트]
+# 이 worktree 의 맵 id / 선언을 다른 worktree 로 옮기기(주인은 비운다 — 그곳에서 claim 해야 선다)
+node scripts/frontier-guard.mjs epic
+node scripts/frontier-guard.mjs move <worktree 경로>
 
 # 인계 문서 경로 할당 → 문서를 쓴 뒤 → 넘기고 빠진다
 node scripts/handoff.mjs allocate --slug <슬러그>
-node scripts/handoff.mjs send --doc <절대경로> --close-self [--bd <epic>]
+node scripts/handoff.mjs send --doc <절대경로> --close-self [--bd <epic>] [--hold]
 ```
+
+맵을 미는 worktree 에서 보내면 새 세션의 첫 단계가 `claim` 이 되고, 대상 worktree 가 다르면 선언도
+따라간다. `--bd` 가 그 맵 밖이면 둘 다 건너뛴다 — 같은 worktree 의 남의 맵을 빼앗지 않게.
 
 ## 테스트
 
@@ -137,7 +143,7 @@ claude plugin validate .
 
 순수 로직만 테스트한다 — 프론티어 분류·주인·판정(`lib/guard-core.mjs`), claim 토큰(`lib/claim.mjs`), 헌장과 가드의 문구 일치
 (`test/charter-wording.test.mjs`), mod 의 입력 조립과 상태줄 문구(`lib/mod-view.mjs`),
-문서 메타 대조(`lib/doc-meta.mjs`), 경로·키 계산(`lib/handoff-path.mjs`). orca·bd 호출은 실측 대상이라
+문서 메타 대조와 §0 검사(`lib/doc-meta.mjs`), 인계 프롬프트(`lib/handoff-prompt.mjs`), 경로·키 계산(`lib/handoff-path.mjs`). orca·bd 호출은 실측 대상이라
 테스트하지 않는다. `hooks/register.mjs` 는 배선뿐이라 `claude plugin validate` 가 읽어 내는 hooks·calls
 목록으로 확인한다.
 

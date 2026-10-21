@@ -20,14 +20,17 @@
  *   --close-self            제출 확인 뒤, 이 세션이 서 있는 탭을 지연 후 스스로 닫는다
  *   --close-delay <초>       그 지연. 기본 30, 최소 10
  *   --submit-wait <초>       orca 가 제출을 관측하는 시간. 기본 60
+ *   --hold                  새 세션이 작업을 시작하지 않고 상태만 확인한 뒤 사용자 지시를 기다리게 한다
  *   --dry-run               탭을 띄우지 않고 보낼 내용만 출력
  *
  * 종료코드: 0 정상 / 2 전제 실패 / 5 CLI 호출 실패 / 6 TUI 미준비 또는 제출 미증명
  * 결과를 JSON 한 줄로 stdout 에 출력한다.
  */
 
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   Bail,
   bootClaudeTab,
@@ -40,27 +43,31 @@ import {
 } from './lib/cli.mjs';
 import { declaredWorktreePath, principleSectionViolation, worktreeMismatch } from './lib/doc-meta.mjs';
 import { allocateDoc, ensureHandoffDir } from './lib/handoff-path.mjs';
+import { buildPrompt, inheritedMap } from './lib/handoff-prompt.mjs';
+
+const GUARD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'frontier-guard.mjs');
+
+/** 보내는 worktree 에 선언된 맵 id. 없거나 못 읽으면 `null` — 그때 새 세션에게 claim 을 시키지 않는다. */
+function mapEpicOf() {
+  try {
+    return execFileSync(process.execPath, [GUARD, 'epic'], { encoding: 'utf8', timeout: 10_000 }).trim() || null;
+  } catch {
+    return null;
+  }
+}
 
 /**
- * 인계 프롬프트. **한 줄이어야 한다** — `terminal send` 는 raw 바이트를 쓰므로 개행이 들어가면
- * TUI 가 그 지점에서 제출해 버린다.
+ * 맵 선언을 대상 worktree 로 옮긴다. 마커가 worktree 마다 하나라, 인계가 worktree 를 옮기면 선언이
+ * 따라가지 않아 **새 세션이 가드 없이 출발한다.** 같은 worktree 면 그대로 둔다.
  *
- * 내용의 핵심은 "문서를 읽어라"가 아니라 **"문서로 절차를 대신하지 마라"** 다. 인계 문서는 어디까지
- * 왔는지를 적은 상태 보고서지 절차서가 아니어서, 그것만 따라가면 스킬이 소유한 규약이 통째로 빠진다.
+ * 실패해도 인계를 죽이지 않는다 — 탭은 이미 떴고, 가드가 없는 것보다 인계가 실패한 척하는 쪽이 나쁘다.
  */
-function buildPrompt({ doc, bdId }) {
-  const parts = [
-    `[세션 인계] 이전 세션이 컨텍스트 한계에 닿아 이 작업을 너에게 통째로 넘긴다.`,
-    `1) Read 로 ${doc} 을 읽는다.`,
-    `2) '다음 작업'이 지정한 스킬을 실제로 호출한다 — 인계 문서의 요약으로 대체하지 않는다. 문서는 상태 보고서지 절차서가 아니다.`,
-  ];
-  if (bdId) {
-    parts.push(
-      `3) 진행 정본은 문서가 아니라 bd 다 — \`bd show ${bdId}\` 와 \`bd children ${bdId}\` 로 열린 항목을 먼저 확인하고, 문서와 어긋나면 bd 를 따르고 사용자에게 알린다.`
-    );
+function moveGuardClaim(worktreePath) {
+  try {
+    return execFileSync(process.execPath, [GUARD, 'move', worktreePath], { encoding: 'utf8', timeout: 10_000 }).trim();
+  } catch (error) {
+    return `선언 이사 실패 — 새 세션에서 frontier-guard claim 을 다시 한다: ${error.message}`;
   }
-  parts.push(`마지막으로 문서의 '완료 통보' 절에 적힌 것이 있으면 그대로 이행한다.`);
-  return parts.join(' ');
 }
 
 main(() => {
@@ -98,7 +105,9 @@ main(() => {
     if (why) throw new Bail(2, why);
   }
 
-  const prompt = buildPrompt({ doc, bdId: flags.bd && String(flags.bd) });
+  const bdId = flags.bd && String(flags.bd);
+  const mapEpic = mapEpicOf();
+  const prompt = buildPrompt({ doc, bdId, mapEpic, guard: GUARD.replace(/\\/g, '/'), hold: !!flags.hold });
   const title = flags.title ? String(flags.title) : `인계 ${path.basename(doc, '.md')}`;
 
   // 닫기 계획은 탭을 띄우기 **전에** 세운다 — 지연 값이 틀렸다는 이유로 인계가 끝난 뒤에 죽으면,
@@ -106,7 +115,13 @@ main(() => {
   const closePlan = flags['close-self'] ? planSelfClose({ delaySeconds: flags['close-delay'] }) : null;
 
   if (flags['dry-run']) {
-    console.log(JSON.stringify({ ok: true, dryRun: true, doc, declaredWorktree: declared, worktree: wt.selector, worktreePath: wt.path, title, prompt, selfClose: closePlan }, null, 2));
+    console.log(
+      JSON.stringify(
+        { ok: true, dryRun: true, doc, declaredWorktree: declared, worktree: wt.selector, worktreePath: wt.path, mapEpic, title, prompt, selfClose: closePlan },
+        null,
+        2
+      )
+    );
     return;
   }
 
@@ -117,6 +132,14 @@ main(() => {
     permissionMode: flags['permission-mode'],
     submitWaitSeconds: flags['submit-wait'],
   });
+
+  // 탭이 뜬 뒤에 옮긴다 — 먼저 옮기면 인계가 exit 6 으로 죽었을 때 선언만 빈 worktree 로 간다.
+  // 넘기는 bd 가 마커의 맵 밖이면 그 선언은 이 인계의 것이 아니다 — 옮기면 남의 맵 주인이 풀린다.
+  const guardClaim = inheritedMap({ bdId, mapEpic })
+    ? moveGuardClaim(wt.path)
+    : mapEpic
+      ? '건너뜀 — 넘기는 bd 가 이 worktree 에 선언된 맵 밖이다'
+      : '해당 없음 — 이 worktree 에 선언된 맵이 없다';
 
   // 제출이 확인된 뒤에만 예약한다. 미제출은 위에서 exit 6 으로 죽으므로, 인계가 실패한 채 보낸
   // 세션만 사라지는 경우가 생기지 않는다.
@@ -129,6 +152,8 @@ main(() => {
         doc,
         worktree: wt.selector,
         worktreePath: wt.path,
+        mapEpic,
+        guardClaim,
         handle,
         submission,
         selfClose: closePlan,

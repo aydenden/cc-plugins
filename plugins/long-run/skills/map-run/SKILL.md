@@ -158,7 +158,10 @@ reason 이 이력이다. §0 의 나머지 규칙은 `session-handoff` 의 `refe
 
 🚨 **인계하며 `clear` 하지 않는다.** 마커는 worktree 당 파일 하나라, 지우면 새 세션이 가드 없이
 출발한다. 보내는 세션은 지우지 않아도 멈출 수 있다 — 가드는 멈춤 시도마다 한 번만 되밀고 두 번째는
-무조건 통과시킨다. 받는 세션은 `claim` 을 다시 불러 주인이 된다 — 그 전까지는 아무도 판정되지 않는다.
+무조건 통과시킨다. 주인은 `handoff.mjs` 가 넘긴다 — 보내는 worktree 에 선언이 있으면 새 세션의 인계
+프롬프트 첫 단계가 `claim` 이다(결과 JSON 의 `mapEpic`). worktree 를 옮기는 인계(`--force-worktree`)는
+선언도 함께 옮기되 주인은 비운다 — 결과 JSON 의 `guardClaim` 이 그 말을 한다. 손으로 옮길 때는
+`frontier-guard.mjs move <경로>` 다.
 
 ### 6. 끝난다
 

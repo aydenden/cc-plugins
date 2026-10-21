@@ -84,7 +84,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/handoff.mjs" allocate --slug {슬러그}
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/handoff.mjs" send \
   --doc <문서 절대경로> --close-self \
-  [--bd <부모id>] [--worktree <selector>] [--title <탭 제목>] [--close-delay <초>] [--submit-wait <초>]
+  [--bd <부모id>] [--worktree <selector>] [--title <탭 제목>] [--close-delay <초>] [--submit-wait <초>] [--hold]
 ```
 
 `--worktree` 를 생략하면 **지금 셸의 cwd** 를 담는 worktree 에 탭이 뜬다. 주려면 orca 의 전체
@@ -101,6 +101,17 @@ exit 2 로 막는다. 막히면 **문서의 worktree 에서 다시 보내거나*
 (`terminal wait --for tui-idle` 의 `satisfied`) 확인한 뒤 프롬프트를 보내고, 수령증의 단계가
 `turn_started` 에 닿았는지 본다. 증거가 없으면 **보내지 않았거나 시작되지 않은 것으로 보고 exit 6**
 으로 죽는다 — 재전송은 하지 않는다. 출력의 `submission` 절이 그 판정이다.
+
+**맵(`long-run:map-run`)을 미는 중이면 두 가지가 자동이다.** ① 보내는 worktree 의 맵 id 를 읽어(결과
+JSON 의 `mapEpic`) 인계 프롬프트 첫 단계에 `frontier-guard.mjs claim` 을 박는다 — 가드는 claim 한 주인
+세션만 판정하므로, 이 단계가 새 세션을 주인으로 세우고 보낸 세션을 풀어 준다. ② 탭이 뜬 뒤 대상이 다른
+worktree 면 선언을 그쪽으로 옮긴다(주인은 비운다) — 마커가 worktree 마다 하나라, 옮기지 않으면 새 세션이
+가드 없이 출발한다. 결과 JSON 의 `guardClaim` 이 무엇을 했는지 말한다. 단 `--bd` 가 그 맵 자신·자손이
+아니면 ①②를 둘 다 건너뛴다 — 같은 worktree 에서 다른 세션이 다른 맵을 밀고 있을 수 있고, 그 맵을
+claim 시키면 남의 가드를 빼앗는다. 이사에 실패해도 인계는 죽지 않으므로, 그 줄이 「실패」면 새 세션에서
+`claim` 을 다시 한다.
+
+`--hold` 를 주면 새 세션은 문서만 읽고 사용자 지시를 기다린다. claim 도 그때로 미룬다.
 
 🚨 **§0 에 교훈이 섞이거나 §0 을 인계 이력으로 써도 exit 2 다.** §0(사용자 원칙)은 다음 인계가 통째로
 복사해 가므로, 거기 붙은 것은 사슬을 따라 불어난다. 막히면 출력이 가리킨 줄을 소유 스킬의 references 로

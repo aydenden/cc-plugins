@@ -4,6 +4,8 @@
  *
  *   node frontier-guard.mjs claim <epic>                    이 세션이 그 맵을 민다고 선언(주인이 된다)
  *   node frontier-guard.mjs clear                           선언 해제(맵을 놓을 때. 인계할 때는 지우지 않는다)
+ *   node frontier-guard.mjs epic                            이 worktree 에 선언된 맵 id 한 줄(없으면 빈 출력)
+ *   node frontier-guard.mjs move <경로>                     선언을 다른 worktree 로 옮긴다(주인은 비운다)
  *   node frontier-guard.mjs status [--session <id>] [트랜스크립트]   지금 판정을 사람이 읽는 꼴로
  *   node frontier-guard.mjs --hook                          Stop hook 모드(stdin JSON)
  *
@@ -157,6 +159,30 @@ if (command === 'claim') {
   console.log(`[frontier-guard] ${argument} 를 미는 세션으로 선언했다. 맵이 닫힐 때까지 이 세션의 멈춤만 막는다 — 같은 worktree 의 다른 세션은 판정되지 않는다.`);
   console.log(`[frontier-guard] 마커: ${MARKER}`);
   console.log(claimTokenLine(token));
+} else if (command === 'epic') {
+  // 인계가 새 세션에게 claim 을 시키려고 읽는다. 선언이 없으면 빈 출력이다.
+  const marker = readJson(MARKER);
+  if (marker?.epic) console.log(marker.epic);
+} else if (command === 'move') {
+  // 인계가 worktree 를 옮길 때 선언도 따라가야 한다 — 안 옮기면 새 세션이 가드 없이 출발하고 떠난
+  // worktree 엔 아무도 안 미는 마커가 남는다.
+  if (!argument) {
+    console.error('usage: frontier-guard.mjs move <대상 worktree 경로>');
+    process.exit(1);
+  }
+  const to = markerPathFor(argument);
+  const marker = readJson(MARKER);
+  if (!marker) {
+    console.log('[frontier-guard] 이 worktree 에는 옮길 선언이 없다.');
+  } else if (to === MARKER) {
+    console.log('[frontier-guard] 같은 worktree 다 — 선언은 그대로 둔다. 새 세션이 claim 하면 주인이 된다.');
+  } else {
+    // 주인은 따라가지 않는다 — 옮긴 곳에서 새 세션이 claim 해야 주인이 선다(`ownership` 의 `claimHash: null`).
+    const { session: _owner, ...rest } = marker;
+    writeMarker(to, { ...rest, claimHash: null, worktree: repoRootOf(argument), movedAt: new Date().toISOString() });
+    rmSync(MARKER);
+    console.log(`[frontier-guard] ${marker.epic} 선언을 ${repoRootOf(argument)} 로 옮겼다. 그곳에서 claim 하는 세션이 주인이 된다.`);
+  }
 } else if (command === 'clear') {
   if (existsSync(MARKER)) rmSync(MARKER);
   console.log('[frontier-guard] 선언을 지웠다.');
@@ -212,6 +238,6 @@ if (command === 'claim') {
   }
   process.exit(0);
 } else {
-  console.error('usage: node frontier-guard.mjs <claim <epic>|clear|status [--session <id>] [트랜스크립트]|--hook>');
+  console.error('usage: node frontier-guard.mjs <claim <epic>|clear|epic|move <경로>|status [--session <id>] [트랜스크립트]|--hook>');
   process.exit(1);
 }
