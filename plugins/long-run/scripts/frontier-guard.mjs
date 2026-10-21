@@ -31,7 +31,16 @@ const readMarker = () => {
   }
 };
 
-const bdJson = (args) => JSON.parse(execFileSync('bd', [...args, '--json'], { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] }));
+/**
+ * bd 의 JSON 출력. 실패는 던지고, 부르는 쪽이 «모름» 으로 바꾼다.
+ *
+ * 🚨 본문이 통째로 실려 오므로 기본 1MB 버퍼로는 맵이 자라면서 조용히 터진다 — 그 실패는 «모름» 으로
+ * 떨어져 가드가 말없이 사라지는 꼴이 된다. timeout 은 훅 예산(20초) 안에 bd 호출 넷이 들어가게 둔다.
+ */
+const bdJson = (args) =>
+  JSON.parse(
+    execFileSync('bd', [...args, '--json'], { encoding: 'utf8', timeout: 5_000, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] })
+  );
 
 /**
  * 맵의 프론티어와 맵이 아직 열려 있는지.
