@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  HANDOFF_CLOSED_TICKETS,
   HANDOFF_RATIO,
   MOD_FLAG,
   classifyFrontier,
   contextLimitOf,
   contextTokensOf,
+  countClosedSince,
   decide,
   isDelegatedToMod,
   ownership,
@@ -16,7 +18,7 @@ import {
 const marker = { epic: 'map-abcd' };
 const frontierOf = (pushable = [], questions = [], blocked = []) => ({ pushable, questions, blocked });
 const pushing = frontierOf(['map-abcd.9', 'map-abcd.11']);
-const base = { marker, contextTokens: 100_000, contextLimit: 1_000_000, frontier: pushing, epicOpen: true, stopHookActive: false };
+const base = { marker, contextTokens: 100_000, contextLimit: 1_000_000, measured: true, frontier: pushing, epicOpen: true, stopHookActive: false };
 
 test('창 크기는 모델 이름이 말한다 — [1m] 이면 백만', () => {
   assert.equal(contextLimitOf('claude-opus-5[1m]'), 1_000_000);
@@ -312,4 +314,90 @@ test('🚨 주인이 아닌 세션은 막지 않는다 — 같은 worktree 의 �
 
 test('owner 를 주지 않으면 주인 자리에서 본 판정이다', () => {
   assert.equal(decide(base).block, true);
+});
+
+// --- 닫은 티켓 수 — 인계의 1차 축 ---
+//
+// 컨텍스트 비율은 계측기가 죽으면 0% 로 떨어지는데, 그것을 «여유» 로 말하면 세션이 «계속해도 된다» 로
+// 읽는다 — 창의 76% 를 쓰고도 열 티켓을 닫은 선례가 있다. bd 는 계측기가 죽어도 답하므로 닫은 수가 1차다.
+
+const HANDING_OFF = /session-handoff 로 넘긴다/;
+
+// `bd list --parent <epic> --status closed --json` 의 행 그대로다.
+test('기준 시각 이후 닫힌 자식만 센다 — 앞 세션이 닫은 것은 이 세션 몫이 아니다', () => {
+  const rows = [
+    { id: 'a', status: 'closed', closed_at: '2026-10-21T07:59:59Z' },
+    { id: 'b', status: 'closed', closed_at: '2026-10-21T08:00:00Z' },
+    { id: 'c', status: 'closed', closed_at: '2026-10-21T09:30:00Z' },
+  ];
+  assert.equal(countClosedSince(rows, '2026-10-21T08:00:00Z'), 2);
+});
+
+// bd 의 closed_at 은 초 단위다(실측 `2026-10-21T04:40:49Z`). 밀리초 기준과 그대로 비교하면 주인이 된
+// 같은 초 안에 닫은 티켓이 빠진다.
+test('🚨 기준 시각과 같은 초에 닫힌 티켓도 센다 — closed_at 은 초 단위다', () => {
+  assert.equal(countClosedSince([{ status: 'closed', closed_at: '2026-10-21T04:40:49Z' }], '2026-10-21T04:40:49.617Z'), 1);
+});
+
+// 0 으로 떨어뜨리면 「안 닫았다」가 돼 되미는 축이 조용히 사라진다.
+test('셀 수 없으면 0 이 아니라 null(모름)이다', () => {
+  assert.equal(countClosedSince(null, '2026-10-21T08:00:00Z'), null);
+  assert.equal(countClosedSince([], null), null);
+  assert.equal(countClosedSince([], '아무말'), null);
+});
+
+test('인계 문턱은 닫은 티켓 2건이다 — 티켓 하나가 세션의 40~50% 다', () => {
+  assert.equal(HANDOFF_CLOSED_TICKETS, 2);
+});
+
+test('🚨 이 세션이 두 건을 닫았으면 컨텍스트가 여유로 보여도 넘긴다', () => {
+  const verdict = decide({ ...base, closedSinceSession: 2 });
+  assert.equal(verdict.block, true);
+  assert.match(verdict.reason, HANDING_OFF);
+  assert.match(verdict.reason, /2건을 닫았다/);
+  assert.doesNotMatch(verdict.reason, /--claim/);
+});
+
+test('한 건만 닫았으면 다음 티켓으로 되밀고 지금 몇 건인지 말한다', () => {
+  const verdict = decide({ ...base, closedSinceSession: 1 });
+  assert.doesNotMatch(verdict.reason, HANDING_OFF);
+  assert.match(verdict.reason, /1\/2건/);
+});
+
+// 0 으로 떨어뜨리면 「안 닫았다」가 돼 되미는 축이 조용히 사라진다.
+test('닫은 수를 모르면 문턱을 넘은 것으로 읽지 않고, 스스로 세라고 한다', () => {
+  const verdict = decide({ ...base, closedSinceSession: null });
+  assert.doesNotMatch(verdict.reason, HANDING_OFF);
+  assert.match(verdict.reason, /닫은 티켓 수도 모른다/);
+});
+
+test('프론티어가 비었어도 두 건을 닫았으면 닫는 일은 다음 세션에 넘긴다', () => {
+  const verdict = decide({ ...base, frontier: frontierOf(), closedSinceSession: 2 });
+  assert.match(verdict.reason, HANDING_OFF);
+  assert.match(verdict.reason, /완료 조건/);
+});
+
+// --- 못 잰 컨텍스트 ---
+
+test('🚨 컨텍스트를 못 쟀으면 «여유» 라고 말하지 않는다 — 계측 불가다', () => {
+  const verdict = decide({ ...base, contextTokens: 0, measured: false });
+  assert.equal(verdict.block, true);
+  assert.match(verdict.reason, /계측 불가/);
+  assert.doesNotMatch(verdict.reason, /아직 넘길 자리가 아니다/);
+});
+
+test('못 잰 값으로는 인계를 지시하지도 않는다 — 판정은 닫은 수가 한다', () => {
+  assert.doesNotMatch(decide({ ...base, contextTokens: 600_000, measured: false }).reason, HANDING_OFF);
+  assert.match(decide({ ...base, measured: false, closedSinceSession: 2 }).reason, HANDING_OFF);
+});
+
+test('measured 를 주지 않으면 못 잰 것이다', () => {
+  const { measured: _measured, ...unmeasured } = base;
+  assert.match(decide(unmeasured).reason, /계측 불가/);
+});
+
+test('대기뿐이면 두 건을 닫았어도 인계가 아니라 질문 보고다 — 새 세션도 같은 자리에서 멈춘다', () => {
+  const verdict = decide({ ...base, frontier: frontierOf([], ['map-abcd.3']), closedSinceSession: 2 });
+  assert.match(verdict.reason, /모아 보고/);
+  assert.doesNotMatch(verdict.reason, HANDING_OFF);
 });

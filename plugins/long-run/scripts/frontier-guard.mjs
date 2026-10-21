@@ -19,7 +19,16 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { dirname, join } from 'node:path';
 
 import { claimHashOf, claimTokenLine, newClaimToken, provesClaim } from './lib/claim.mjs';
-import { classifyFrontier, contextLimitOf, contextTokensOf, decide, isDelegatedToMod, ownership, readTranscriptTail } from './lib/guard-core.mjs';
+import {
+  classifyFrontier,
+  contextLimitOf,
+  contextTokensOf,
+  countClosedSince,
+  decide,
+  isDelegatedToMod,
+  ownership,
+  readTranscriptTail,
+} from './lib/guard-core.mjs';
 import { repoKeyOf, repoRootOf, stateRoot } from './lib/state-root.mjs';
 
 /** 그 위치가 속한 worktree 의 마커 경로. 훅은 세션의 `cwd` 로 부른다 — 이 프로세스의 cwd 가 아니다. */
@@ -99,12 +108,31 @@ const isStopEvent = (input) => {
   return input?.tool_name === undefined;
 };
 
+/**
+ * 이 세션이 주인이 된 뒤 닫은 자식의 수. 기준 시각이 없거나 bd 가 답을 못 하면 `null`(모름)이다.
+ * 🚨 `--limit 0` 이 없으면 bd 가 50건에서 자른다 — 잘린 목록은 틀린 닫은 수다.
+ */
+function closedSinceOf(epic, since, cwd) {
+  if (!since) return null;
+  try {
+    return countClosedSince(bdJson(['list', '--parent', epic, '--status', 'closed', '--limit', '0'], cwd), since);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 트랜스크립트에서 점유를 잰다.
+ *
+ * 🚨 **못 쟀다는 것을 값이 아니라 `measured` 로 말한다.** 실패를 `{0, 200k}` 로만 돌려주면 판정이
+ * 그것을 «0% — 여유» 로 읽는다(`guard-core.mjs` 머리말).
+ */
 function measure(transcriptPath) {
   try {
     const { usage, model } = readTranscriptTail(readFileSync(transcriptPath, 'utf8'));
-    return { contextTokens: contextTokensOf(usage), contextLimit: contextLimitOf(model) };
+    return { contextTokens: contextTokensOf(usage), contextLimit: contextLimitOf(model), measured: Boolean(usage) };
   } catch {
-    return { contextTokens: 0, contextLimit: contextLimitOf(null) };
+    return { contextTokens: 0, contextLimit: contextLimitOf(null), measured: false };
   }
 }
 
@@ -140,15 +168,19 @@ if (command === 'claim') {
   const transcript = rest.find((_, i) => at < 0 || (i !== at && i !== at + 1));
   const marker = readJson(MARKER);
   const read = marker?.epic ? readFrontier(marker.epic, process.cwd()) : { frontier: null, epicOpen: true };
-  const measured = transcript ? measure(transcript) : { contextTokens: 0, contextLimit: contextLimitOf(null) };
+  // 잴 근거가 없으면 «안 쟀다» 다 — 0 을 여유로 읽히게 두지 않는다.
+  const measured = transcript ? measure(transcript) : { contextTokens: 0, contextLimit: contextLimitOf(null), measured: false };
   // 세션 id 가 없으면 주인 자리에서 본 판정이다. 있으면 참·거짓, 아무도 주인이 아니면 null(주인 미정).
   let owner;
   if (sessionId) {
     const own = ownership(marker, sessionId, new Date().toISOString(), (hash) => provesClaim(readText(transcript), hash));
     owner = own.owner ? true : marker?.session?.id ? false : null;
   }
-  const verdict = decide({ marker, ...measured, ...read, owner: owner !== false && owner !== null, stopHookActive: false });
-  console.log(JSON.stringify({ markerPath: MARKER, worktree: repoRootOf(), marker, owner, ...read, ...measured, verdict }, null, 2));
+  const closedSinceSession = marker?.epic ? closedSinceOf(marker.epic, marker.session?.since, process.cwd()) : null;
+  const verdict = decide({ marker, ...measured, ...read, owner: owner !== false && owner !== null, closedSinceSession, stopHookActive: false });
+  console.log(
+    JSON.stringify({ markerPath: MARKER, worktree: repoRootOf(), marker, owner, ...read, ...measured, closedSinceSession, verdict }, null, 2)
+  );
 } else if (command === '--hook') {
   try {
     const input = JSON.parse((await readStdin()) || '{}');
@@ -165,11 +197,10 @@ if (command === 'claim') {
     if (isDelegatedToMod(input)) process.exit(0);
     // 주인이 아닌 세션은 bd 도 트랜스크립트 점유도 안 본다 — 같은 worktree 에서 연 다른 세션이다.
     if (!owner) process.exit(0);
-    const { contextTokens, contextLimit } = measure(input.transcript_path);
     const verdict = decide({
       marker,
-      contextTokens,
-      contextLimit,
+      ...measure(input.transcript_path),
+      closedSinceSession: closedSinceOf(marker.epic, since, cwd),
       ...readFrontier(marker.epic, cwd),
       stopHookActive: input.stop_hook_active === true,
       isStopEvent: isStopEvent(input),
