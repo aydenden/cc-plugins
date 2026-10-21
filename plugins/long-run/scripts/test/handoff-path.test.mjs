@@ -14,6 +14,11 @@ test('인계 문서는 번호를 올려 쌓는다 — 덮어쓰면 인계 사슬
   assert.equal(nextDocName(['README.md', 'handoff.md', 'handoff-1.md']), 'handoff-01.md');
 });
 
+// 두 자리만 세면 100 이 안 보여 최댓값이 99 로 남고, 이미 있는 handoff-100.md 를 다시 내준다 — 덮어쓰기다.
+test('🚨 긴 릴레이는 100 을 넘어서도 번호를 올린다', () => {
+  assert.equal(nextDocName(['handoff-99.md', 'handoff-100.md']), 'handoff-101.md');
+});
+
 test('슬러그는 폴더 이름으로 쓸 수 있는 꼴로 깎인다', () => {
   assert.equal(slugify('세션 인계 / 스킬 이식'), '세션-인계-스킬-이식');
   assert.equal(slugify('  '), 'session');

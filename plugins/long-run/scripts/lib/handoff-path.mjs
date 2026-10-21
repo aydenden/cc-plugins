@@ -9,7 +9,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { currentRepoKey, handoffRoot } from './state-root.mjs';
 
-const DOC_RE = /^handoff-(\d{2})\.md$/;
+// 두 자리 이상 — 두 자리만 세면 100 번째 문서를 못 봐 그 번호를 다시 내준다.
+const DOC_RE = /^handoff-(\d{2,})\.md$/;
 
 /** 폴더 이름으로 쓸 수 있는 꼴로 깎는다. */
 export function slugify(raw) {
