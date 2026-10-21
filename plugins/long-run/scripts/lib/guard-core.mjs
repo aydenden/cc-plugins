@@ -118,18 +118,24 @@ export function readTranscriptTail(text) {
  * 열린 자식의 수만 세면 질문 하나에 걸린 티켓과 지금 밀 수 있는 티켓이 같은 한 건으로 보인다.
  * 그러면 가드는 대기뿐인 프론티어에서도 «다음 티켓을 claim 하라» 고 되민다.
  *
- * @param {{children: {id: string, status?: string, labels?: string[] | null}[], readyIds: string[]}} input
- *   `children` 은 `bd list --parent <epic>` 의 닫히지 않은 행, `readyIds` 는 `bd ready --parent <epic>` 의 id.
+ * 🚨 `bd ready --parent` 는 손자까지 준다. 자식이 하위 epic 하나뿐인 맵에서 직계만 보면, 그 epic 이
+ * 열려 있는 동안 맵 전체가 «막힘» 으로 읽힌다. 그래서 ready 후손은 그대로 밀 수 있는 것으로 센다.
+ *
+ * @param {{children: {id: string, status?: string, labels?: string[] | null}[], ready: {id: string, labels?: string[] | null}[]}} input
+ *   `children` 은 `bd list --parent <epic>` 의 닫히지 않은 행, `ready` 는 `bd ready --parent <epic>` 의 행.
  * @returns {{pushable: string[], questions: string[], blocked: string[]}}
  */
-export function classifyFrontier({ children, readyIds }) {
-  const ready = new Set(readyIds);
+export function classifyFrontier({ children, ready }) {
+  const isQuestion = (row) => row.labels?.includes(QUESTION_LABEL) === true;
+  const readyIds = new Set(ready.map((row) => row.id));
   const frontier = { pushable: [], questions: [], blocked: [] };
+  const push = (id) => frontier.pushable.includes(id) || frontier.pushable.push(id);
   for (const child of children) {
-    if (child.labels?.includes(QUESTION_LABEL)) frontier.questions.push(child.id);
-    else if (child.status === 'in_progress' || ready.has(child.id)) frontier.pushable.push(child.id);
+    if (isQuestion(child)) frontier.questions.push(child.id);
+    else if (child.status === 'in_progress' || readyIds.has(child.id)) push(child.id);
     else frontier.blocked.push(child.id);
   }
+  for (const row of ready) if (!isQuestion(row)) push(row.id);
   return frontier;
 }
 
