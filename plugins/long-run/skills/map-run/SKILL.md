@@ -90,7 +90,10 @@ bd create -t task -p 1 --parent {맵id} -t "{측정할 것}"
 node "${CLAUDE_PLUGIN_ROOT}/scripts/frontier-guard.mjs" claim {맵id}
 ```
 
-이 한 줄이 없으면 훅이 붙어 있어도 아무것도 안 한다 — 가드는 선언한 맵에만 붙는다. mod 가 뜬
+이 한 줄이 없으면 훅이 붙어 있어도 아무것도 안 한다 — 가드는 선언한 맵에만 붙는다. claim 을 부른
+세션이 그 맵의 **주인**이 되고(claim 이 출력한 토큰 줄이 그 세션의 트랜스크립트에 남아, 다음 Stop 에서
+마커의 `session.id` 로 적힌다), 같은 worktree 에서 다른 일로 연 세션은 판정되지 않는다. 이미 주인이 있는
+맵을 새 세션이 이어받을 때도 이 한 줄이다 — 그 순간 앞 주인은 풀린다. mod 가 뜬
 세션이면 이 턴이 끝난 뒤 상태줄에 `long-run {맵id} · 프론티어 N · 컨텍스트 N%` 가 나타난다(답을 기다리는
 질문이 있으면 `· 질문 대기 N` 이 붙는다). 선언 직후에는 `status` 로 판정이 서는지 본다 — 마커와
 `frontier` 가 보여야 하고, `frontier` 가 `null` 이면 bd 를 못 읽은 것이다:
@@ -101,7 +104,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/frontier-guard.mjs" status
 
 마커는 **지금 위치의 worktree 별로** 갈린다(`$HOME/.claude/long-run/frontier-guard/<키>.json`,
 `LONG_RUN_STATE_ROOT` 로 옮긴다). 그래서 병렬 worktree 의 세션들은 서로를 건드리지 않고, 같은
-worktree 에 뜬 인계 세션은 같은 선언을 물려받는다.
+worktree 에서는 주인 세션 하나만 판정된다.
 
 ### 4. 민다
 
@@ -150,8 +153,7 @@ reason 이 이력이다. §0 의 나머지 규칙은 `session-handoff` 의 `refe
 
 🚨 **인계하며 `clear` 하지 않는다.** 마커는 worktree 당 파일 하나라, 지우면 새 세션이 가드 없이
 출발한다. 보내는 세션은 지우지 않아도 멈출 수 있다 — 가드는 멈춤 시도마다 한 번만 되밀고 두 번째는
-무조건 통과시킨다. 대가로 **같은 worktree 에서 세션 둘을 동시에 굴리면** 다른 세션도 이 맵으로
-판정된다.
+무조건 통과시킨다. 받는 세션은 `claim` 을 다시 불러 주인이 된다 — 그 전까지는 아무도 판정되지 않는다.
 
 ### 6. 끝난다
 
@@ -184,6 +186,9 @@ bd close {맵id} --reason "{완료 조건 줄마다의 관측. 다음 맵의 출
   티켓이 `bd ready` 에 그대로 남아, 가드가 그것을 밀라고 되민다
 - **bd 를 못 읽으면 가드는 통과시키되 선언은 남긴다.** `status` 의 `frontier` 가 `null` 이면 그 상태다
   (상태줄에는 `프론티어 모름`). bd 가 돌아오면 다음 멈춤부터 다시 판정한다
+- **판정되는 것은 주인 세션뿐이다.** 맵을 미는 세션이 갑자기 안 막히면 `status --session <id>` 의
+  `owner` 와 `marker.session.id` 를 본다 — 다른 세션이 claim 해 주인이 넘어갔거나, 인계 뒤 claim 을
+  건너뛴 것이다. 그 세션에서 `claim` 을 다시 하면 된다. 상태줄에는 `다른 세션이 주인` 으로 나온다
 - **cwd 가 git 저장소 밖이면 키가 cwd 로 떨어진다.** 그 상태로 폴더를 옮겨 다니면 선언을 못 찾아
   가드가 **아무것도 안 하는 쪽**으로 고장난다(막는 쪽이 아니다). `status` 의 `markerPath` 로 확인한다
 - **훅은 세션이 뜰 때 읽힌다.** `hooks/hooks.json` 을 고쳤으면 새 세션부터 적용된다(`--plugin-dir` 로

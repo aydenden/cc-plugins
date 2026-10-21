@@ -14,6 +14,11 @@
  * | 프론티어에 지금 밀 수 있는 것이 있는가 | 열린 자식(`bd list --parent`)을 `bd ready` 와 `human` 라벨로 가른 것. 못 읽으면 «모름» |
  * | 맵이 닫혔는가 | `bd show <epic>` 의 status — 프론티어가 빈 것만으로는 선언을 지우지 않는다 |
  *
+ * 🚨 **같은 worktree 안에서는 주인 세션 하나만 판정된다**(`ownership`). 맵이 도는 worktree 에서
+ * 다른 일로 연 세션까지 «프론티어를 밀라» 로 되밀리면 안 된다. 주인은 마커의 `session.id` 이고,
+ * 그 자리는 `claim` 을 부른 세션만 차지한다 — claim 이 출력한 일회용 토큰이 자기 트랜스크립트에
+ * 있는 세션이다(`claim.mjs`). 인계도 같은 길이다: 새 세션이 claim 해서 주인이 되고, 그 순간 앞 세션은 풀린다.
+ *
  * 🚨 **`stop_hook_active` 면 무조건 통과시킨다.** 그 값이 참이라는 것은 이미 이 훅 때문에 한 번
  * 되돌려 보냈다는 뜻이다. 거기서 또 막으면 세션이 영영 안 끝난다. 즉 가드의 힘은 «멈춤 시도마다
  * 한 번 되민다» 이지 «못 멈추게 한다» 가 아니다 — 그 선을 넘으면 사용자가 Ctrl+C 로만 빠져나오게 된다.
@@ -140,6 +145,36 @@ export function classifyFrontier({ children, ready }) {
 }
 
 /**
+ * 이 세션이 그 마커의 주인인가, 그리고 이 세션의 기준 시각.
+ *
+ * | 마커 | 판정 |
+ * |---|---|
+ * | `session.id` 있음 | 그 id 인 세션만 주인. 다른 세션은 판정되지 않고 자리도 못 뺏는다 |
+ * | `claimHash` 있음, 주인 없음 | 트랜스크립트로 claim 을 증명한 세션이 주인이 된다(`changed`) |
+ * | `claimHash: null` | 다른 worktree 로 옮겨져 새 claim 을 기다린다 — 아무도 주인이 아니다 |
+ * | 둘 다 없음 | 토큰 이전의 마커다. 처음 멈추는 세션이 주인이 된다 — 진행 중인 맵을 끊지 않으려는 것이다 |
+ *
+ * 🚨 **기준 시각은 `claimedAt` 이 아니라 주인이 된 시각이다.** 인계 뒤 앞 세션의 시각으로 세면 새
+ * 세션이 앞 세션의 몫까지 떠안는다. Stop 은 턴마다 도니까 그 시각은 사실상 claim 한 턴이다.
+ *
+ * @param {{epic: string, session?: {id: string, since?: string}, claimHash?: string | null} | null} marker
+ * @param {string | undefined} sessionId 훅 입력의 세션 id
+ * @param {string} now 지금(ISO)
+ * @param {(claimHash: string) => boolean} proves 이 세션이 그 claim 을 했는가. 주인이 빌 때만 부른다 —
+ *   트랜스크립트를 통째로 읽는 일이라 턴마다 하지 않는다
+ * @returns {{owner: boolean, since: string | null, changed: boolean}}
+ */
+export function ownership(marker, sessionId, now, proves) {
+  const none = { owner: false, since: null, changed: false };
+  if (!marker?.epic || !sessionId) return none;
+  if (marker.session?.id) {
+    return marker.session.id === sessionId ? { owner: true, since: marker.session.since ?? null, changed: false } : none;
+  }
+  if (!('claimHash' in marker)) return { owner: true, since: now, changed: true };
+  return marker.claimHash && proves(marker.claimHash) ? { owner: true, since: now, changed: true } : none;
+}
+
+/**
  * 멈춰도 되는가.
  *
  * @param {{
@@ -150,11 +185,13 @@ export function classifyFrontier({ children, ready }) {
  *   epicOpen?: boolean,
  *   stopHookActive: boolean,
  *   isStopEvent?: boolean,
+ *   owner?: boolean,
  *   handoffRatio?: number,
  * }} input `frontier` 가 null 이면 «모름» 이다 — bd 를 못 읽었다는 뜻이지 비었다는 뜻이 아니다.
+ *   `owner` 를 주지 않으면 주인 자리에서 본 판정이다.
  * @returns {{block: boolean, reason?: string, clear?: boolean, ratio: number}}
  */
-export function decide({ marker, contextTokens, contextLimit, frontier, epicOpen = true, stopHookActive, isStopEvent = true, handoffRatio = HANDOFF_RATIO }) {
+export function decide({ marker, contextTokens, contextLimit, frontier, epicOpen = true, stopHookActive, isStopEvent = true, owner = true, handoffRatio = HANDOFF_RATIO }) {
   const ratio = contextLimit > 0 ? contextTokens / contextLimit : 0;
   const pct = `${Math.round(ratio * 100)}%`;
 
@@ -165,6 +202,8 @@ export function decide({ marker, contextTokens, contextLimit, frontier, epicOpen
   if (stopHookActive) return { block: false, ratio };
   // 가드는 선언한 세션에만 붙는다 — 맵을 밀고 있지 않은 세션까지 막으면 못 쓰는 도구가 된다.
   if (!marker?.epic) return { block: false, ratio };
+  // 같은 worktree 의 다른 세션이다(`ownership`) — 막지도, 주인의 선언을 지우지도 않는다.
+  if (!owner) return { block: false, ratio };
   // 모를 때는 통과시키되 선언을 남긴다 — 지우면 bd 가 잠깐 죽은 것만으로 가드가 사라진다.
   if (!frontier) return { block: false, ratio };
 

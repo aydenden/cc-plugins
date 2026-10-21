@@ -50,6 +50,7 @@ function contextOf(usage) {
 export function statusLine(status, usage) {
   const epic = status?.marker?.epic;
   if (!epic) return undefined;
+  if (status.owner === false) return `long-run ${epic} · 다른 세션이 주인`;
   const parts = [`long-run ${epic}`, `프론티어 ${status.frontier ? status.frontier.pushable.length : '모름'}`];
   const asked = status.frontier?.questions.length ?? 0;
   if (asked > 0) parts.push(`질문 대기 ${asked}`);
@@ -66,6 +67,10 @@ export function statusLine(status, usage) {
 /**
  * Stop 판정. 판정 규칙은 `decide()` 그대로고, 입력만 status 출력과 세션 측정값에서 만든다.
  *
+ * `status.owner` 가 null(아무도 주인이 아님)이면 주인이 아닌 것으로 본다 — Stop 에서는 node 훅이 먼저
+ * 돌아 claim 을 증명한 세션을 주인으로 적으므로, 그 뒤에도 null 이면 이 세션은 claim 하지 않았다.
+ * 칸이 없으면(`--session` 없이 물은 status) 주인 자리에서 본 것이다.
+ *
  * @param {{status: ReturnType<typeof parseStatus>, usage: object | null, stopHookActive: boolean}} input
  * @returns {{block: boolean, reason?: string, clear?: boolean, ratio: number}}
  */
@@ -75,6 +80,7 @@ export function stopVerdict({ status, usage, stopHookActive }) {
     ...contextOf(usage),
     frontier: status?.frontier ?? null,
     epicOpen: status?.epicOpen !== false,
+    owner: status?.owner === undefined || status.owner === true,
     stopHookActive,
   });
 }
