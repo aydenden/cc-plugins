@@ -17,7 +17,9 @@
  * that marks the end of a cycle is the only point where "what changed" is exactly
  * one cycle's worth, so that is where the vault is committed. A vault with lint
  * errors is not committed — the fix lands in the next cycle's commit instead of
- * putting a broken state in the shared history.
+ * putting a broken state in the shared history. Review groups (contested / low
+ * confidence) are not errors: they are committed and only reported, since an
+ * open question is a legitimate vault state, not a broken one.
  *
  * Output contract (ccp-hht): the summary goes back to the agent verbatim.
  * Clean vault -> systemMessage, exit 0. Error groups present, or a commit/push
@@ -112,7 +114,11 @@ function main() {
     // git missing or unusable is not a reason to disturb the user's work.
     git = { status: 'skipped', detail: `git unavailable (${e.message})`, exit: 0 };
   }
-  const full = `${message}\n${format(git)}`;
+  // Review groups ride along with the commit: say where the pages are listed,
+  // keyed on the summary's own `review <id> N` lines so no id is hardcoded here.
+  const hints = [...summary.matchAll(/^review (\S+) \d+$/gm)].map(([, id]) =>
+    `검토 대기 페이지 경로: node "$CLAUDE_PLUGIN_ROOT/scripts/lint.mjs" --vault "$WIKI" --group ${id} --json`);
+  const full = [message, ...hints, format(git)].join('\n');
 
   if (git.exit !== 0) {
     process.stderr.write(`${full}\n볼트 정비는 통과했다. 위 git 상태를 지금 조치한다.\n`);

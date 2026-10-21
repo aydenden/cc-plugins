@@ -175,9 +175,29 @@ test.after(() => fs.rmSync(vault, { recursive: true, force: true }));
 
 test('summary reports error and backlog totals', () => {
   const out = lint(vault).split('\n');
-  assert.match(out[0], /^LINT error=\d+ backlog=\d+$/);
+  assert.match(out[0], /^LINT error=\d+ review=\d+ backlog=\d+$/);
   assert.ok(out.some((l) => l.startsWith('[backlog] ')), 'backlog folds into one line');
   assert.ok(out.some((l) => l.startsWith('broken-links ')), 'error groups are listed individually');
+});
+
+test('contested pages alone are a review queue, not an error', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-wiki-review-'));
+  try {
+    const write = (rel, body) => {
+      fs.mkdirSync(path.join(root, path.dirname(rel)), { recursive: true });
+      fs.writeFileSync(path.join(root, rel), body, 'utf8');
+    };
+    write('SCHEMA.md', SCHEMA);
+    write('log.md', '# Log\n');
+    write('concepts/a.md', '---\ntype: concept\ntags: [approved]\nsummary: page a\ndate: 2026-08-16\ncontested: true\ncontradictions: [b]\nsources:\n  - https://example.com/a\n---\n\n# A\n\n[[concepts/b]]\n');
+    write('concepts/b.md', '---\ntype: concept\ntags: [approved]\nsummary: page b\ndate: 2026-08-16\nconfidence: low\nsources:\n  - https://example.com/b\n---\n\n# B\n\n[[concepts/a]]\n');
+
+    const out = lint(root).split('\n');
+    assert.match(out[0], /^LINT ok review=2 backlog=\d+$/);
+    assert.ok(out.includes('review contested 2'), 'review groups are listed individually with a prefix');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('broken-links covers wikilinks and missing raw sources', () => {
@@ -386,7 +406,7 @@ test('a CRLF working copy parses the same as LF', () => {
     write('concepts/c.md', '---\ntype: concept\ntags: [approved]\nsummary: page c\ndate: 2026-08-16\ntitle: removed field\nsources:\n  - https://example.com/c\n---\n\n# C\n\n[[concepts/a]]\n');
 
     const out = lint(crlf).split('\n');
-    assert.match(out[0], /^LINT error=\d+ backlog=\d+$/);
+    assert.match(out[0], /^LINT error=\d+ review=\d+ backlog=\d+$/);
     const fm = JSON.parse(lint(crlf, ['--group', 'frontmatter', '--json', '--limit', '100']));
     assert.equal(fm.items.filter((i) => i.path === 'concepts/a.md').length, 0, 'a valid CRLF page is not a frontmatter error');
     const removed = fm.items.find((i) => i.path === 'concepts/c.md');

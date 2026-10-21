@@ -110,19 +110,20 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/lint.mjs" --vault "$WIKI" --rotate-log
 
 훅이 돌려주는 것은 lint 요약 한 덩어리와 `GIT <status> — <detail>` 한 줄이다.
 
-- 요약이 `LINT ok backlog=N`이면 그대로 보고에 옮기고 끝낸다.
-- `LINT error=N …`이면 **그 자리에서 조치**한다. error 그룹은 `broken-links` `frontmatter` `raw-drift` `log-rotation` `contested`이며, 이때만 드릴다운한다:
+- 요약 첫 줄은 `LINT ok review=N backlog=N` 또는 `LINT error=N review=N backlog=N`이다. `ok`이면 그대로 보고에 옮기고 끝낸다.
+- `LINT error=N …`이면 **그 자리에서 조치**한다. error 그룹은 `broken-links` `frontmatter` `raw-drift` `log-rotation`이며, 이때만 드릴다운한다:
 
   ```bash
   node "${CLAUDE_PLUGIN_ROOT}/scripts/lint.mjs" --vault "$WIKI" --group <id> --json --limit 30
   ```
 
+- review 그룹(`contested` — `contested: true` 또는 `confidence: low` 페이지)은 `review contested N` 줄로 나오고 **커밋을 막지 않는다.** 결론이 안 났거나 근거가 약하다는 정당한 표시이므로 고칠 대상이 아니다 — **lint를 비우려고 표시를 떼지 않는다.** 건수를 보고에 옮기고, 경로는 훅이 덧붙인 드릴다운 명령으로 확인한다. 새 근거로 실제 결론이 났을 때만 규칙 8대로 표시를 거둔다.
 - backlog 그룹(`source-format` `tags` `orphans` `raw-unabsorbed` `low-confidence-unmarked` `stale-pages` `oversized` `title-dups`)은 볼트 전역 레거시다. 건수만 보고하고 넘어간다. **전체 목록을 대화에 쏟지 않는다.**
 - 훅 출력이 오지 않았으면(훅 미설치, `WIKI_PATH` 미설정, node 부재) 위 요약 명령을 직접 한 번 돌리고, 그마저 안 되면 "정비 미실행"을 보고에 한 줄로 남긴다.
 
 ## 커밋·푸시 (`GIT` 줄)
 
-lint가 통과한 사이클만 커밋된다. **error 그룹이 있으면 훅은 커밋을 보류한다** — 깨진 상태를 공유 히스토리에 남기지 않기 위해서다. error를 조치한 뒤 규칙 6대로 `log.md`에 다시 기록하면 그때 이번 사이클 변경까지 함께 커밋된다.
+lint가 통과한 사이클만 커밋된다(review·backlog 그룹은 통과로 친다). **error 그룹이 있으면 훅은 커밋을 보류한다** — 깨진 상태를 공유 히스토리에 남기지 않기 위해서다. error를 조치한 뒤 규칙 6대로 `log.md`에 다시 기록하면 그때 이번 사이클 변경까지 함께 커밋된다.
 
 커밋 메시지는 묻지 않는다 — 훅이 `log.md` 마지막 엔트리 헤더를 `{action}(vault): {제목}`으로 옮긴다. 규칙 6의 헤더 형식이 곧 커밋 메시지이므로 제목을 성의 있게 쓴다.
 
