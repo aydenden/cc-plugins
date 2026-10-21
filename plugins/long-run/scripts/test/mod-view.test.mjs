@@ -102,6 +102,17 @@ test('컨텍스트를 모르면 인계가 아니라 다음 티켓으로 되민�
   assert.doesNotMatch(v.reason, HANDING_OFF);
 });
 
+test('🚨 측정 전이면 되미는 문구가 계측 불가라고 말한다 — 0% 를 여유로 말하지 않는다', () => {
+  const v = stopVerdict({ status: claimed, usage: null, stopHookActive: false });
+  assert.match(v.reason, /계측 불가/);
+});
+
+// 닫은 수는 status 가 bd 에서 센다 — mod 는 그 값을 그대로 판정에 넘긴다.
+test('status 가 센 닫은 수가 문턱을 넘으면 인계로 되민다', () => {
+  const v = stopVerdict({ status: { ...claimed, closedSinceSession: 2 }, usage: usageAt(100_000), stopHookActive: false });
+  assert.match(v.reason, HANDING_OFF);
+});
+
 // --- 대기 ---
 
 const parked = { ...claimed, frontier: { pushable: ['map-abcd.9'], questions: ['map-abcd.3'], blocked: ['map-abcd.4'] } };

@@ -10,7 +10,8 @@
  * | 축 | 근거 |
  * |---|---|
  * | 이 세션이 미는 맵이 있는가 | 마커 파일(`claim` 이 쓴다). 없으면 가드는 아무것도 안 한다 |
- * | 컨텍스트가 얼마나 찼는가 | 트랜스크립트의 마지막 `usage` — 추정이 아니라 API 가 센 값이다 |
+ * | 이 세션이 몇 건을 닫았나 | 주인이 된 시각 이후 `closed_at` 된 자식. **인계의 1차 축이다** |
+ * | 컨텍스트가 얼마나 찼는가 | 세션이 잰 값(mod), 없으면 트랜스크립트의 마지막 `usage`. 못 재면 «계측 불가» |
  * | 프론티어에 지금 밀 수 있는 것이 있는가 | 열린 자식(`bd list --parent`)을 `bd ready` 와 `human` 라벨로 가른 것. 못 읽으면 «모름» |
  * | 맵이 닫혔는가 | `bd show <epic>` 의 status — 프론티어가 빈 것만으로는 선언을 지우지 않는다 |
  *
@@ -19,6 +20,11 @@
  * 그 자리는 `claim` 을 부른 세션만 차지한다 — claim 이 출력한 일회용 토큰이 자기 트랜스크립트에
  * 있는 세션이다(`claim.mjs`). 인계도 같은 길이다: 새 세션이 claim 해서 주인이 되고, 그 순간 앞 세션은 풀린다.
  *
+ * 🚨 **컨텍스트는 «못 잰» 칸을 따로 갖는다**(`measured`). 트랜스크립트를 못 읽으면 점유가 0 으로
+ * 떨어지는데, 그것을 «여유» 로 말하면 세션이 그 문장을 «계속해도 된다» 로 읽는다 — 창의 76% 를
+ * 쓰고도 열 티켓을 닫은 선례가 있다. 그래서 인계의 1차 축은 **닫은 티켓 수**다: bd 는 계측기가 죽어도
+ * 답할 수 있고, 창이 20만이든 100만이든 «티켓 하나 = 세션의 40~50%» 라는 산수가 그대로 선다.
+ *
  * 🚨 **`stop_hook_active` 면 무조건 통과시킨다.** 그 값이 참이라는 것은 이미 이 훅 때문에 한 번
  * 되돌려 보냈다는 뜻이다. 거기서 또 막으면 세션이 영영 안 끝난다. 즉 가드의 힘은 «멈춤 시도마다
  * 한 번 되민다» 이지 «못 멈추게 한다» 가 아니다 — 그 선을 넘으면 사용자가 Ctrl+C 로만 빠져나오게 된다.
@@ -26,6 +32,12 @@
 
 /** 컨텍스트가 이만큼 차면 이어가지 말고 넘긴다. 맵 운영 규약의 «50% 에서 session-handoff». */
 export const HANDOFF_RATIO = 0.5;
+
+/**
+ * 이 세션이 이만큼 닫았으면 넘긴다. 운영 규약 «티켓 하나 = 세션의 40~50%» 의 산수 그대로 — 둘이면 한 세션이다.
+ * 계측기와 달리 이 축은 bd 가 답하므로 창 크기가 바뀌어도, 트랜스크립트를 못 읽어도 선다.
+ */
+export const HANDOFF_CLOSED_TICKETS = 2;
 
 /** 인계를 지시할 때 부를 스킬. 문구를 여기 한 곳에 둬서 스킬 이름이 바뀔 때 갈라지지 않게 한다. */
 export const HANDOFF_SKILL = '/long-run:session-handoff';
@@ -57,7 +69,7 @@ const EXTERNAL_WRITES = '이슈 트래커·문서·push·외부 시스템';
  */
 export const STOP_PLACE_LIST = (pct) => [
   `맵을 닫았다`,
-  `컨텍스트 ${pct} 초과(그때는 \`${HANDOFF_SKILL}\`)`,
+  `이 세션이 티켓 ${HANDOFF_CLOSED_TICKETS}건을 닫았다 또는 컨텍스트 ${pct} 초과(그때는 \`${HANDOFF_SKILL}\`)`,
   `승인이 필요한 바깥 쓰기(${EXTERNAL_WRITES})`,
   `주차한 질문에 막혀 밀 수 있는 티켓이 없을 때`,
 ];
@@ -175,6 +187,22 @@ export function ownership(marker, sessionId, now, proves) {
 }
 
 /**
+ * 기준 시각 이후 닫힌 자식의 수. 셀 수 없으면 `null`(모름) — 0 으로 떨어뜨리면 「안 닫았다」가 돼
+ * 되미는 축이 조용히 사라진다.
+ *
+ * @param {{status?: string, closed_at?: string}[] | null} rows `bd list --parent <epic> --status closed` 의 행
+ * @param {string | null} since 주인이 된 시각(ISO)
+ * @returns {number | null}
+ */
+export function countClosedSince(rows, since) {
+  if (!Array.isArray(rows) || !since) return null;
+  // bd 의 closed_at 은 초 단위라 기준도 초로 내린다 — 같은 초 안에 닫은 티켓이 빠지지 않게.
+  const from = Math.floor(Date.parse(since) / 1000) * 1000;
+  if (Number.isNaN(from)) return null;
+  return rows.filter((r) => r?.status === 'closed' && Date.parse(r.closed_at) >= from).length;
+}
+
+/**
  * 멈춰도 되는가.
  *
  * @param {{
@@ -186,12 +214,29 @@ export function ownership(marker, sessionId, now, proves) {
  *   stopHookActive: boolean,
  *   isStopEvent?: boolean,
  *   owner?: boolean,
+ *   measured?: boolean,
+ *   closedSinceSession?: number | null,
  *   handoffRatio?: number,
+ *   handoffClosed?: number,
  * }} input `frontier` 가 null 이면 «모름» 이다 — bd 를 못 읽었다는 뜻이지 비었다는 뜻이 아니다.
- *   `owner` 를 주지 않으면 주인 자리에서 본 판정이다.
+ *   `owner` 를 주지 않으면 주인 자리에서 본 판정이다. `measured` 가 거짓이면 `contextTokens` 는
+ *   «못 쟀다» 는 뜻이지 «비었다» 가 아니다. `closedSinceSession` 의 `null` 도 «모름» 이라 문턱을 넘은 것으로 읽지 않는다.
  * @returns {{block: boolean, reason?: string, clear?: boolean, ratio: number}}
  */
-export function decide({ marker, contextTokens, contextLimit, frontier, epicOpen = true, stopHookActive, isStopEvent = true, owner = true, handoffRatio = HANDOFF_RATIO }) {
+export function decide({
+  marker,
+  contextTokens,
+  contextLimit,
+  frontier,
+  epicOpen = true,
+  stopHookActive,
+  isStopEvent = true,
+  owner = true,
+  measured = false,
+  closedSinceSession = null,
+  handoffRatio = HANDOFF_RATIO,
+  handoffClosed = HANDOFF_CLOSED_TICKETS,
+}) {
   const ratio = contextLimit > 0 ? contextTokens / contextLimit : 0;
   const pct = `${Math.round(ratio * 100)}%`;
 
@@ -227,20 +272,26 @@ export function decide({ marker, contextTokens, contextLimit, frontier, epicOpen
   // 맵이 닫힌 것을 본 뒤에만 선언을 지운다 — 열린 자식이 0 이라는 것만으로는 «다 했다» 가 아니다.
   if (closing && !epicOpen) return { block: false, clear: true, ratio };
 
-  if (ratio >= handoffRatio) {
-    const left = closing
-      ? `프론티어는 비었지만 맵을 닫는 일(완료 조건 검증)이 남았고`
-      : `프론티어가 ${pushable.length}건 남았지만`;
-    return {
-      block: true,
-      ratio,
-      reason:
-        `컨텍스트 ${pct} 다(${contextTokens.toLocaleString()} / ${contextLimit.toLocaleString()}). ${marker.epic} 의 ${left} ` +
-        `이 세션에서 더 밀지 않는다 — **${HANDOFF_SKILL} 로 넘긴다**(\`--bd ${marker.epic}\`). ` +
-        `🚨 마커는 지우지 않는다 — worktree 당 파일 하나라 지우면 새 세션이 가드 없이 출발한다. ` +
-        `보내는 세션은 지우지 않아도 멈출 수 있다(두 번째 멈춤은 무조건 통과한다). ` +
-        `사용자에게 넘길지 묻지 않는다 — 그것이 규약이다.`,
-    };
+  const left = closing
+    ? `프론티어는 비었지만 맵을 닫는 일(완료 조건 검증)이 남았고`
+    : `프론티어가 ${pushable.length}건 남았지만`;
+  const handoff = (why) => ({
+    block: true,
+    ratio,
+    reason:
+      `${why} ${marker.epic} 의 ${left} ` +
+      `이 세션에서 더 밀지 않는다 — **${HANDOFF_SKILL} 로 넘긴다**(\`--bd ${marker.epic}\`). ` +
+      `🚨 마커는 지우지 않는다 — worktree 당 파일 하나라 지우면 새 세션이 가드 없이 출발한다. ` +
+      `보내는 세션은 지우지 않아도 멈출 수 있다(두 번째 멈춤은 무조건 통과한다). ` +
+      `사용자에게 넘길지 묻지 않는다 — 그것이 규약이다.`,
+  });
+
+  // 🚨 1차 축이다 — 계측기가 죽어도 서고, 창 크기가 바뀌어도 뜻이 안 변한다(머리말).
+  if (closedSinceSession != null && closedSinceSession >= handoffClosed) {
+    return handoff(`이 세션이 ${closedSinceSession}건을 닫았다(문턱 ${handoffClosed}건 — 티켓 하나가 세션의 40~50% 다).`);
+  }
+  if (measured && ratio >= handoffRatio) {
+    return handoff(`컨텍스트 ${pct} 다(${contextTokens.toLocaleString()} / ${contextLimit.toLocaleString()}).`);
   }
 
   if (closing) {
@@ -258,6 +309,14 @@ export function decide({ marker, contextTokens, contextLimit, frontier, epicOpen
     };
   }
 
+  // 못 잰 컨텍스트를 «여유» 로 말하지 않는다 — 그 문장이 세션에게 «계속해도 된다» 로 읽힌 자리다.
+  const gauge = measured
+    ? `컨텍스트는 ${pct} 라 아직 넘길 자리가 아니다`
+    : `🚨 컨텍스트는 **계측 불가**다(잰 값이 없다) — 그 값으로 판정하지 않는다`;
+  const counted =
+    closedSinceSession == null
+      ? `그리고 닫은 티켓 수도 모른다(bd 가 답을 못 했다) — 이 세션이 claim 뒤 닫은 수를 스스로 세어 판정한다`
+      : `잣대는 이 세션이 닫은 티켓 수다: 지금 ${closedSinceSession}/${handoffClosed}건`;
   const waitingParts = [questions.length && `질문 ${questions.length}건`, blocked.length && `막힌 티켓 ${blocked.length}건`].filter(Boolean);
   const parked = waitingParts.length ? `${waitingParts.join('·')}은 답을 기다리므로 건드리지 않는다. ` : '';
   return {
@@ -266,7 +325,7 @@ export function decide({ marker, contextTokens, contextLimit, frontier, epicOpen
     reason:
       `${marker.epic} 의 프론티어가 ${pushable.length}건 남았다(${pushable.join(', ')}). ${parked}` +
       `**곧장 다음 티켓을 \`bd update <id> --claim\` 하고 이어간다 — «다음으로 갈까요?» 라고 묻지 않는다.** ` +
-      `컨텍스트는 ${pct} 라 아직 넘길 자리가 아니다. 멈춰도 되는 자리는 넷뿐이다: ` +
+      `${gauge}. ${counted}. 멈춰도 되는 자리는 넷뿐이다: ` +
       `${STOP_PLACES(`${Math.round(handoffRatio * 100)}%`)}. ` +
       `그 넷이 아니면 보고는 작업 사이가 아니라 세션 끝에 한 번 한다.`,
   };

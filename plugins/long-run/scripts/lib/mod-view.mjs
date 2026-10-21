@@ -31,12 +31,13 @@ export function parseStatus(stdout) {
   }
 }
 
-/** 세션 측정값에서 판정 입력의 컨텍스트 두 값. 측정 전이면 점유 0 — 인계가 아니라 다음 티켓으로 되민다. */
+/** 세션 측정값에서 판정 입력의 컨텍스트. 측정 전이면 «못 쟀다» 로 싣는다 — 0 을 여유로 읽히게 두지 않는다. */
 function contextOf(usage) {
   const context = usage?.context;
   return {
     contextTokens: context?.tokens ?? 0,
     contextLimit: context?.window > 0 ? context.window : contextLimitOf(null),
+    measured: typeof context?.tokens === 'number',
   };
 }
 
@@ -81,6 +82,7 @@ export function stopVerdict({ status, usage, stopHookActive }) {
     frontier: status?.frontier ?? null,
     epicOpen: status?.epicOpen !== false,
     owner: status?.owner === undefined || status.owner === true,
+    closedSinceSession: status?.closedSinceSession ?? null,
     stopHookActive,
   });
 }
