@@ -38,7 +38,7 @@ import {
   resolveWorktreeSelector,
   scheduleSelfClose,
 } from './lib/cli.mjs';
-import { declaredWorktreePath, worktreeMismatch } from './lib/doc-meta.mjs';
+import { declaredWorktreePath, principleSectionViolation, worktreeMismatch } from './lib/doc-meta.mjs';
 import { allocateDoc, ensureHandoffDir } from './lib/handoff-path.mjs';
 
 /**
@@ -82,12 +82,17 @@ main(() => {
   if (!doc) throw new Bail(2, 'send 에는 --doc <인계문서 경로> 가 필요하다.');
   // 문서 없이 탭부터 띄우면 새 세션이 읽을 것이 없는 채로 뜬다 — 조용히 헤매는 실패라 먼저 막는다.
   if (!fs.existsSync(doc)) throw new Bail(2, `인계 문서가 없다: ${doc}\n문서를 먼저 쓰고 나서 보낸다.`);
+  const docText = fs.readFileSync(doc, 'utf8');
+
+  // §0 은 다음 인계가 통째로 복사해 가므로, 섞인 교훈은 보내는 이 자리에서 걸러야 사슬로 번지지 않는다.
+  const misplaced = principleSectionViolation(docText);
+  if (misplaced) throw new Bail(2, misplaced);
 
   const wt = flags.worktree ? resolveWorktreeSelector(String(flags.worktree)) : resolveWorktreeByCwd();
 
   // 대상이 문서와 같은 worktree 인지 본다. cwd 조회는 실패하지 않으므로 — 다른 등록된 worktree 에
   // 서 있어도 조용히 성공한다 — 여기서 막지 않으면 엉뚱한 탭이 뜬 것을 새 세션만 알게 된다.
-  const declared = declaredWorktreePath(fs.readFileSync(doc, 'utf8'));
+  const declared = declaredWorktreePath(docText);
   if (!flags['force-worktree']) {
     const why = worktreeMismatch({ declared, resolved: wt.path });
     if (why) throw new Bail(2, why);
