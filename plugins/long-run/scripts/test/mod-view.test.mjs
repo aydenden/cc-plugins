@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { HANDOFF_SKILL } from '../lib/guard-core.mjs';
-import { compactNote, parseStatus, statusLine, stopVerdict } from '../lib/mod-view.mjs';
+import { compactNote, movesMap, parseStatus, statusLine, stopVerdict } from '../lib/mod-view.mjs';
 
 // `frontier-guard.mjs status` 가 내는 꼴 그대로다 — 프론티어는 분류된 id 로 실린다.
 const claimed = {
@@ -120,6 +120,38 @@ const parked = { ...claimed, frontier: { pushable: ['map-abcd.9'], questions: ['
 // 주차한 질문은 되미는 자리에서 한 번 보고될 뿐이라, 그 사이에 사람 눈에 띄는 곳은 상태줄뿐이다.
 test('답을 기다리는 질문이 있으면 상태줄이 그 수를 말한다', () => {
   assert.equal(statusLine(parked, usageAt(420_000)), 'long-run map-abcd · 프론티어 1 · 질문 대기 1 · 컨텍스트 42%');
+});
+
+// --- 잡은 티켓과 닫은 수 ---
+
+test('잡은 티켓과 이 세션이 닫은 수를 함께 그린다', () => {
+  const status = { ...claimed, owner: true, claimed: ['map-abcd.9'], closedSinceSession: 1 };
+  assert.equal(statusLine(status, usageAt(420_000)), 'long-run map-abcd · 작업 map-abcd.9 · 프론티어 2 · 닫음 1/2 · 컨텍스트 42%');
+});
+
+// 인계의 1차 축은 닫은 수다 — 컨텍스트가 여유로 보여도 문턱을 넘었으면 그 사실을 붙인다.
+test('닫은 수가 문턱에 닿으면 컨텍스트가 여유여도 인계할 때다', () => {
+  const status = { ...claimed, owner: true, closedSinceSession: 2 };
+  assert.equal(statusLine(status, usageAt(100_000)), 'long-run map-abcd · 프론티어 2 · 닫음 2/2 · 컨텍스트 10% · 인계할 때');
+});
+
+// 주인인데 bd 가 닫은 수를 못 셌으면 세션이 스스로 세야 한다 — 칸을 지우면 그 사실이 안 보인다.
+test('주인인데 닫은 수를 모르면 모른다고 그린다', () => {
+  assert.equal(
+    statusLine({ ...claimed, owner: true, closedSinceSession: null }, usageAt(100_000)),
+    'long-run map-abcd · 프론티어 2 · 닫음 모름 · 컨텍스트 10%'
+  );
+});
+
+// 상태줄의 숫자는 status 가 bd 를 여러 번 불러 낸다. 그래서 맵의 티켓이나 선언을 움직인 명령 뒤에만 다시 그린다.
+test('맵의 티켓이나 선언을 움직이는 셸 명령만 상태줄을 다시 그리게 한다', () => {
+  for (const command of ['bd close map-abcd.9 --reason "x"', 'bd update map-abcd.9 --claim', 'bd create -t task --parent map-abcd', 'bd reopen map-abcd.9', 'node "/p/scripts/frontier-guard.mjs" claim map-abcd']) {
+    assert.equal(movesMap(command), true, command);
+  }
+  for (const command of ['bd show map-abcd', 'bd ready --parent map-abcd', 'npm test']) {
+    assert.equal(movesMap(command), false, command);
+  }
+  assert.equal(movesMap(undefined), false);
 });
 
 // --- 압축 ---

@@ -9,7 +9,7 @@
  * `node:` import 를 두지 않는다. 이 파일은 hooks module 이 import 하므로 mod 의 실행 환경에서 돌아야 한다.
  */
 
-import { HANDOFF_RATIO, HANDOFF_SKILL, contextLimitOf, decide } from './guard-core.mjs';
+import { HANDOFF_CLOSED_TICKETS, HANDOFF_RATIO, HANDOFF_SKILL, contextLimitOf, decide } from './guard-core.mjs';
 
 /**
  * `frontier-guard.mjs status` 의 stdout 을 읽는다. 못 읽으면 null(«모름»)이고, 가드는 모를 때 통과시킨다.
@@ -52,16 +52,19 @@ export function statusLine(status, usage) {
   const epic = status?.marker?.epic;
   if (!epic) return undefined;
   if (status.owner === false) return `long-run ${epic} · 다른 세션이 주인`;
-  const parts = [`long-run ${epic}`, `프론티어 ${status.frontier ? status.frontier.pushable.length : '모름'}`];
+  const parts = [`long-run ${epic}`];
+  if (status.claimed?.length) parts.push(`작업 ${status.claimed.join(', ')}`);
+  parts.push(`프론티어 ${status.frontier ? status.frontier.pushable.length : '모름'}`);
+  const closed = status.closedSinceSession;
+  // 주인인데 못 셌으면 세션이 스스로 세야 한다 — 칸을 지우면 그 사실이 안 보인다.
+  if (typeof closed === 'number') parts.push(`닫음 ${closed}/${HANDOFF_CLOSED_TICKETS}`);
+  else if (status.owner === true) parts.push('닫음 모름');
   const asked = status.frontier?.questions.length ?? 0;
   if (asked > 0) parts.push(`질문 대기 ${asked}`);
   const percent = usage?.context?.percent;
-  if (typeof percent !== 'number') {
-    parts.push('컨텍스트 측정 전');
-  } else {
-    parts.push(`컨텍스트 ${percent}%`);
-    if (percent >= HANDOFF_RATIO * 100) parts.push('인계할 때');
-  }
+  parts.push(typeof percent === 'number' ? `컨텍스트 ${percent}%` : '컨텍스트 측정 전');
+  const due = (typeof closed === 'number' && closed >= HANDOFF_CLOSED_TICKETS) || (typeof percent === 'number' && percent >= HANDOFF_RATIO * 100);
+  if (due) parts.push('인계할 때');
   return parts.join(' · ');
 }
 
@@ -86,6 +89,12 @@ export function stopVerdict({ status, usage, stopHookActive }) {
     stopHookActive,
   });
 }
+
+/** 맵의 티켓이나 선언을 움직이는 셸 명령. status 는 bd 를 여러 번 부르므로 이것이 돈 뒤에만 상태줄을 다시 그린다. */
+const MAP_COMMAND = /\bbd\s+(update|close|create|reopen)\b|frontier-guard/;
+
+/** 그 셸 명령이 상태줄의 숫자를 바꿀 수 있는가. */
+export const movesMap = (command) => typeof command === 'string' && MAP_COMMAND.test(command);
 
 /**
  * 맵을 미는 세션이 압축될 때 요약 지시와 압축 뒤 대화에 남길 말. 그 세션의 맵이 아니면 undefined.

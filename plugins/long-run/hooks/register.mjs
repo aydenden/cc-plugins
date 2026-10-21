@@ -16,7 +16,7 @@
  */
 
 import { MOD_FLAG } from '../scripts/lib/guard-core.mjs';
-import { compactNote, parseStatus, statusLine, stopVerdict } from '../scripts/lib/mod-view.mjs';
+import { compactNote, movesMap, parseStatus, statusLine, stopVerdict } from '../scripts/lib/mod-view.mjs';
 
 /** 이 worktree 의 마커 경로. 첫 status 에서 배운다 — 마커가 없는 동안은 bd 를 부르지 않고 파일만 본다. */
 let markerPath = null;
@@ -66,6 +66,24 @@ export function register(on) {
     await refreshStatusLine($, e);
     return next(e);
   });
+
+  // 티켓을 닫거나 잡은 직후 숫자가 바뀐다 — 턴 끝을 기다리지 않고 다시 그린다. 명령이 돈 뒤 훅 밖으로
+  // 미뤄 툴 결과를 붙잡지 않는다. `.catch` 를 달지 않는다 — `next` 뒤에 터지면 명령이 두 번 돈다.
+  for (const tool of ['Bash', 'PowerShell']) {
+    on('tool.call', { tool }, async ($, e, next) => {
+      const result = await next(e);
+      if (movesMap(e.command)) {
+        // 못 그리면 지난 줄이 남는다 — 다음 턴 끝에 다시 그린다.
+        $.clock.after(0, () =>
+          $.session
+            .usage()
+            .then((usage) => refreshStatusLine($, usage))
+            .catch(() => {})
+        );
+      }
+      return result;
+    });
+  }
 
   // 압축은 막지 않는다 — 창이 넘칠 때 건너뛰면 막다른 길이 된다. 요약과 압축 뒤 대화에 인계 지시만 남긴다.
   // `.catch` 를 달지 않는다 — `next` 뒤에 터지면 `.catch` 가 `next` 를 다시 불러 압축이 두 번 돈다.
