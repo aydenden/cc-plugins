@@ -2,9 +2,11 @@
 
 mod 로 그리는 상태줄. 외부 도구 없이 프롬프트 아래에 모델·git·컨텍스트·사용량을 띄운다.
 
+![statusline이 그린 상태줄 3줄](../../docs/images/statusline.png)
+
 `statusLine` 설정은 다시 그릴 때마다 명령 하나를 통째로 실행한다. 이 플러그인은 그 자리를 mod 로
-바꾼다 — 값은 엔진이 이미 갖고 있는 것을 이벤트로 받고, 프로세스는 git 처럼 엔진 밖의 값이 필요할
-때만 띄운다.
+바꾼다. 값은 Claude Code 가 이미 갖고 있는 것을 이벤트로 받고, 프로세스는 git 처럼 Claude Code 밖의
+값이 필요할 때만 띄운다.
 
 | 층 | 무엇 | 어디 |
 |---|---|---|
@@ -12,12 +14,18 @@ mod 로 그리는 상태줄. 외부 도구 없이 프롬프트 아래에 모델�
 | 판단 | 설정 다듬기·배치·위젯·명령 출력 해석 (순수 함수) | `scripts/lib/` |
 | 어댑터 | 값 모으기와 이벤트 배선 | `hooks/register.mjs` |
 
-## 그리는 자리
+## 설치
 
-프롬프트 아래 힌트 줄(`PromptHint`) 밑이다. 엔진의 힌트 줄은 그대로 두고 그 아래에 줄을 더한다.
+```bash
+/plugin marketplace add aydenden/cc-plugins
+/plugin install statusline@aydenden-plugins
+```
 
-`$.ui.status` 는 쓰지 않는다. 실측해 보면 플러그인당 글자 한 줄이고, ANSI 색과 줄바꿈이 깨진 글자로
-찍히며, 앞에 `⚠ <플러그인>:` 이 붙는다 — 알림용이다.
+- 쓰던 `statusLine` 설정은 직접 지운다. 이 플러그인은 `settings.json` 을 건드리지 않는다
+- Claude Code v2.1.287 이상 (mod). mod 가 안 뜨는 세션(구버전, 조직 정책, `--safe-mode`)에서는 아무것도
+  그리지 않는다
+- 터미널과 데스크톱에서만 그려진다 (`PromptHint` 가 있는 곳)
+- powerline 화살표는 Nerd Font 나 powerline 글리프가 있는 글꼴이 필요하다
 
 ## 설정
 
@@ -27,7 +35,7 @@ mod 로 그리는 상태줄. 외부 도구 없이 프롬프트 아래에 모델�
 ```json
 {
   "version": 1,
-  "powerline": { "enabled": true, "separator": "" },
+  "powerline": { "enabled": true, "separator": "" },
   "theme": "nord",
   "minimal": true,
   "lines": [
@@ -93,7 +101,7 @@ mod 로 그리는 상태줄. 외부 도구 없이 프롬프트 아래에 모델�
 | 분류 | 값이 오는 곳 |
 |---|---|
 | 모델·버전·세션 id·작업 디렉터리 | `$.session.*` |
-| 컨텍스트, 5시간·주간 사용량과 리셋, 비용 | `$.session.usage()` 와 `session.measure` 이벤트 — 네트워크 호출 없음 |
+| 컨텍스트, 5시간·주간 사용량과 리셋, 비용 | `$.session.usage()` 와 `session.measure` 이벤트. 네트워크 호출 없음 |
 | 모델별 주간 사용량, 추가 사용량 | `api.anthropic.com/api/oauth/usage`. 자격 증명은 호스트가 헤더에 넣고 mod 에는 오지 않는다. 이 위젯이 켜져 있을 때만 부른다 |
 | 노력 수준, 세션 이름 | 훅 입력 → 트랜스크립트 → 설정 순 |
 | 출력 스타일, 음성, 샌드박스, 원격 제어 | `/config` 행과 설정 |
@@ -118,13 +126,12 @@ mod 로 그리는 상태줄. 외부 도구 없이 프롬프트 아래에 모델�
 
 jj 위젯은 파서만 테스트했고 실제 jj 로 돌려 보지 못했다.
 
-## 전제
+## 그리는 자리
 
-- Claude Code v2.1.287 이상 (mod). mod 가 안 뜨는 세션(구버전, 조직 정책, `--safe-mode`)에서는 아무것도
-  그리지 않는다
-- 터미널과 데스크톱에서만 그려진다 (`PromptHint` 가 있는 곳)
-- powerline 화살표는 Nerd Font 나 powerline 글리프가 있는 글꼴이 필요하다
-- 쓰던 `statusLine` 설정은 직접 지운다. 이 플러그인은 `settings.json` 을 건드리지 않는다
+프롬프트 아래 힌트 줄(`PromptHint`) 밑이다. Claude Code 의 힌트 줄은 그대로 두고 그 아래에 줄을 더한다.
+
+`$.ui.status` 는 쓰지 않는다. 실측해 보면 플러그인당 글자 한 줄이고, ANSI 색과 줄바꿈이 깨진 글자로
+찍히며, 앞에 `⚠ <플러그인>:` 이 붙는다. 알림용이다.
 
 ## 테스트
 
@@ -133,7 +140,7 @@ node --test "scripts/test/*.test.mjs"
 claude plugin validate .
 ```
 
-순수 로직만 테스트한다 — 형식, 설정 다듬기와 가져오기, 배치, 위젯, 명령 출력 해석, `/sl`. 값을 모으는
+순수 로직만 테스트한다(형식, 설정 다듬기와 가져오기, 배치, 위젯, 명령 출력 해석, `/sl`). 값을 모으는
 쪽은 실측 대상이라 테스트하지 않는다. `hooks/register.mjs` 는 `claude plugin validate` 가 읽어 내는
 hooks·calls 목록으로 확인한다.
 
