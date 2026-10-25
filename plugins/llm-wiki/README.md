@@ -27,6 +27,72 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 
 `WIKI_PATH` 우선, 없으면 `OBSIDIAN_VAULT_PATH` 폴백. SessionStart 훅이 경로와 `SCHEMA.md` 존재를 검증한다.
 
+### SCHEMA.md 최소 예시
+
+lint는 `## Frontmatter`의 yaml 블록(`# required` 표시가 필수 필드), `## Page Types & Directories`의 표,
+`## Tag Taxonomy`의 `` - `태그` `` 목록을 읽는다. 셋 중 하나라도 없으면 lint가 멈춘다. 나머지 절은 적재 절차가 읽는 규칙이다.
+
+<details><summary>볼트 루트에 둘 <code>SCHEMA.md</code></summary>
+
+````markdown
+# Wiki Schema
+
+## Domain
+프론트엔드 개발 학습 노트.
+
+## Conventions
+- 파일 이름은 소문자·하이픈 (`react-suspense.md`)
+- 페이지끼리는 `[[wikilinks]]`로 잇는다 (페이지당 2개 이상)
+- 고칠 때마다 `date`를 올린다. `index.md`는 손으로 고치지 않는다(lint가 만든다)
+- 모든 작업은 `log.md` 끝에 `## [YYYY-MM-DD] action | 제목` 한 줄로 남긴다
+
+## Frontmatter
+
+```yaml
+---
+type: entity | concept | comparison | query | summary   # required
+tags: [아래 택소노미]                                    # required
+summary: 이 페이지 한 줄 설명                            # required
+date: YYYY-MM-DD                                        # required, 마지막 수정일
+sources:                                                # required, 목록
+  - raw/articles/foo.md
+  - https://example.com/post
+# Optional:
+confidence: high | medium | low
+contested: true
+contradictions: [page-slug]
+---
+```
+
+## Page Types & Directories
+
+| type | directory | holds |
+|---|---|---|
+| `entity` | `entities/` | 도구·라이브러리·회사 하나 |
+| `concept` | `concepts/` | 개념·주제 하나 |
+| `comparison` | `comparisons/` | 둘 이상의 비교 |
+| `query` | `queries/` | 여러 페이지로 답한 질문 |
+| `summary` | `summaries/` | 원문 하나의 요약 |
+
+## Tag Taxonomy
+통제 어휘다. 해당 항목이 있으면 그 표기를 쓰고, 없으면 자유 키워드를 붙인다.
+
+- `react` — React와 그 생태계
+- `typescript` — 타입 시스템
+- `performance` — 렌더링·번들 성능
+
+## Page Thresholds
+- 2개 이상 원문에 나오거나 한 원문의 중심 주제일 때만 새 페이지를 만든다
+- 200줄을 넘으면 하위 주제로 나눈다
+
+## Update Policy
+새 정보가 기존 내용과 충돌하면 양쪽을 날짜·출처와 함께 적고 `contradictions:`에 표시한다.
+````
+
+</details>
+
+`log.md`는 빈 파일(`# Log` 한 줄)로 시작해도 된다.
+
 ## 커맨드 (llm-wiki Core Operations 대응)
 
 | 커맨드 | llm-wiki 연산 | 설명 |
