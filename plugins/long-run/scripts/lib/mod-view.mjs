@@ -20,6 +20,8 @@ import { HANDOFF_CLOSED_TICKETS, HANDOFF_RATIO, HANDOFF_SKILL, contextLimitOf, d
  *   marker: {epic: string} | null,
  *   frontier: {pushable: string[], questions: string[], blocked: string[]} | null,
  *   epicOpen?: boolean,
+ *   epicTitle?: string | null,
+ *   claimed?: {id: string, title: string | null}[] | null,
  * } | null} `frontier` 가 null 이면 CLI 가 bd 를 못 읽은 것이다.
  */
 export function parseStatus(stdout) {
@@ -41,28 +43,50 @@ function contextOf(usage) {
   };
 }
 
+/** 상태줄에 그리는 맵 제목의 최대 글자 수. 한글은 터미널 두 칸이라 칸이 아니라 글자로 센다. */
+export const EPIC_TITLE_MAX = 20;
+
+/** 상태줄에 그리는 잡은 티켓 제목의 최대 글자 수. 지금 미는 일이라 맵보다 길게 둔다. */
+export const TICKET_TITLE_MAX = 40;
+
+/** 글자(코드 포인트) 단위로 자른다 — 문자열 길이로 자르면 서로게이트 쌍이 갈라진다. */
+function clip(text, max) {
+  const chars = [...text];
+  return chars.length > max ? `${chars.slice(0, max).join('')}…` : text;
+}
+
+/** `🧭 [맵][잡은 티켓]`. 사람은 bd id 를 모르므로 제목을 쓰고, 제목이 없을 때만 id 로 물러선다. */
+function heading(status, withTicket) {
+  const epic = `[${clip(status.epicTitle || status.marker.epic, EPIC_TITLE_MAX)}]`;
+  const [first, ...rest] = (withTicket && status.claimed) || [];
+  if (!first) return `🧭 ${epic}`;
+  const more = rest.length ? ` +${rest.length}` : '';
+  return `🧭 ${epic}[${clip(first.title || first.id, TICKET_TITLE_MAX)}${more}]`;
+}
+
 /**
  * 상태줄 한 줄. 선언하지 않은 세션이면 undefined(상태줄을 지운다).
+ *
+ * 열린 티켓은 밀기·막힘·질문으로 빠짐없이 갈리므로 셋을 늘 그린다 — 멈춘 이유가 막힘인지 질문인지가
+ * 한 줄에서 보여야 한다. 문턱이 있는 값(닫음·컨텍스트)은 `값/문턱` 으로 그린다.
  *
  * @param {ReturnType<typeof parseStatus>} status
  * @param {{context?: {tokens?: number, window: number, percent?: number}} | null} usage
  * @returns {string | undefined}
  */
 export function statusLine(status, usage) {
-  const epic = status?.marker?.epic;
-  if (!epic) return undefined;
-  if (status.owner === false) return `long-run ${epic} · 다른 세션이 주인`;
-  const parts = [`long-run ${epic}`];
-  if (status.claimed?.length) parts.push(`작업 ${status.claimed.join(', ')}`);
-  parts.push(`프론티어 ${status.frontier ? status.frontier.pushable.length : '모름'}`);
+  if (!status?.marker?.epic) return undefined;
+  if (status.owner === false) return `${heading(status, false)} · 다른 세션이 주인`;
+  const parts = [heading(status, true)];
+  const count = (ids) => (status.frontier ? ids.length : '?');
+  const { pushable = [], blocked = [], questions = [] } = status.frontier ?? {};
+  parts.push(`밀기 ${count(pushable)}`, `막힘 ${count(blocked)}`, `질문 ${count(questions)}`);
   const closed = status.closedSinceSession;
   // 주인인데 못 셌으면 세션이 스스로 세야 한다 — 칸을 지우면 그 사실이 안 보인다.
   if (typeof closed === 'number') parts.push(`닫음 ${closed}/${HANDOFF_CLOSED_TICKETS}`);
-  else if (status.owner === true) parts.push('닫음 모름');
-  const asked = status.frontier?.questions.length ?? 0;
-  if (asked > 0) parts.push(`질문 대기 ${asked}`);
+  else if (status.owner === true) parts.push(`닫음 ?/${HANDOFF_CLOSED_TICKETS}`);
   const percent = usage?.context?.percent;
-  parts.push(typeof percent === 'number' ? `컨텍스트 ${percent}%` : '컨텍스트 측정 전');
+  parts.push(`컨텍스트 ${typeof percent === 'number' ? `${percent}%` : '?'}/${HANDOFF_RATIO * 100}%`);
   const due = (typeof closed === 'number' && closed >= HANDOFF_CLOSED_TICKETS) || (typeof percent === 'number' && percent >= HANDOFF_RATIO * 100);
   if (due) parts.push('인계할 때');
   return parts.join(' · ');

@@ -82,24 +82,26 @@ const bdJson = (args, cwd) =>
  * 같게 읽으면 bd 가 잠깐 죽은 것만으로 가드가 선언을 지운다. `bd list --parent` 는 없는 맵에도 빈
  * 배열을 exit 0 으로 내므로(실측), 맵이 있는지는 `bd show` 가 먼저 가른다.
  *
- * `claimed` 는 지금 잡혀 있는(in_progress) 자식 id 다 — 상태줄이 «작업» 칸에 그린다.
+ * `epicTitle` 과 `claimed`(지금 잡혀 있는 in_progress 자식)는 상태줄이 그린다 — 사람은 id 를 모르므로
+ * 제목을 싣는다. 이미 받은 `bd show`·`bd list` 행에 있어 호출을 늘리지 않는다.
  *
- * @returns {{frontier: ReturnType<typeof classifyFrontier> | null, epicOpen: boolean, claimed: string[] | null}}
+ * @returns {{frontier: ReturnType<typeof classifyFrontier> | null, epicOpen: boolean, epicTitle: string | null, claimed: {id: string, title: string | null}[] | null}}
  */
 function readFrontier(epic, cwd) {
   try {
     const [map] = [bdJson(['show', epic], cwd)].flat();
-    if (!map?.status) return { frontier: null, epicOpen: true, claimed: null };
+    if (!map?.status) return { frontier: null, epicOpen: true, epicTitle: null, claimed: null };
     // 기본 목록은 닫힌 티켓을 빼고 50건에서 자른다 — 잘린 프론티어는 틀린 프론티어다.
     const children = bdJson(['list', '--parent', epic, '--limit', '0'], cwd);
     const ready = bdJson(['ready', '--parent', epic, '--limit', '0'], cwd);
     return {
       frontier: classifyFrontier({ children, ready }),
       epicOpen: map.status !== 'closed',
-      claimed: children.filter((c) => c.status === 'in_progress').map((c) => c.id),
+      epicTitle: map.title ?? null,
+      claimed: children.filter((c) => c.status === 'in_progress').map((c) => ({ id: c.id, title: c.title ?? null })),
     };
   } catch {
-    return { frontier: null, epicOpen: true, claimed: null };
+    return { frontier: null, epicOpen: true, epicTitle: null, claimed: null };
   }
 }
 
@@ -199,7 +201,7 @@ if (command === 'claim') {
   const sessionId = at >= 0 ? rest[at + 1] : undefined;
   const transcript = rest.find((_, i) => at < 0 || (i !== at && i !== at + 1));
   const marker = readJson(MARKER);
-  const read = marker?.epic ? readFrontier(marker.epic, process.cwd()) : { frontier: null, epicOpen: true, claimed: null };
+  const read = marker?.epic ? readFrontier(marker.epic, process.cwd()) : { frontier: null, epicOpen: true, epicTitle: null, claimed: null };
   // 잴 근거가 없으면 «안 쟀다» 다 — 0 을 여유로 읽히게 두지 않는다.
   const measured = transcript ? measure(transcript) : { contextTokens: 0, contextLimit: contextLimitOf(null), measured: false };
   // 세션 id 가 없으면 주인 자리에서 본 판정이다. 있으면 참·거짓, 아무도 주인이 아니면 null(주인 미정).
