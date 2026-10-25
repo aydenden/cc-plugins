@@ -2,13 +2,33 @@
 
 여러 세션에 걸치는 작업을 끝까지 민다.
 
-스킬은 세션 안에서만 살아서 세션 경계를 못 넘는다. 그래서 이 플러그인은 세션 밖의 셋으로 사슬을 굴린다.
+스킬은 세션 안에서만 살아서 세션 경계를 못 넘는다. 그래서 이 플러그인은 세션이 끝나도 남는 세 가지로 나눴다.
 
-| 층 | 무엇 | 왜 세션을 넘나 |
+| 역할 | 무엇으로 | 왜 세션을 넘나 |
 |---|---|---|
-| 계약 | bd epic 본문 (맵 헌장) | DB 에 있다. 세션이 죽어도 남는다 |
-| 강제 | mod (`hooks/register.mjs`), 대비로 Stop hook (`scripts/frontier-guard.mjs`) | 플러그인에 달려 있어 어느 repo·worktree 에서 연 세션에도 붙는다 |
-| 운반 | `long-run:session-handoff` | 인계 문서 하나로 소유권을 넘긴다 |
+| 목표와 남은 티켓 | bd epic 본문(맵 헌장: 목표·완료 조건·운영 규약) | DB 에 있다. 세션이 죽어도 남는다 |
+| 멈춤 막기 | mod (`hooks/register.mjs`), 대비로 Stop hook (`scripts/frontier-guard.mjs`) | 플러그인에 달려 있어 어느 repo·worktree 에서 연 세션에도 붙는다 |
+| 다음 세션으로 넘기기 | `long-run:session-handoff` | 인계 문서 하나로 소유권을 넘긴다 |
+
+## 설치
+
+```bash
+/plugin marketplace add aydenden/cc-plugins
+/plugin install long-run@aydenden-plugins
+```
+
+전제:
+
+- [`bd`](https://github.com/steveyegge/beads) (beads): 맵과 프론티어(지금 밀 수 있는 티켓). PATH 에 있어야 한다
+- [`orca`](https://www.onorca.dev/): worktree·터미널. 인계가 새 탭을 띄우는 경로다
+- Node.js 18+ (내장 모듈만 쓴다. 런타임 의존성 0)
+- 상태줄과 mod 판정은 Claude Code v2.1.287 이상. 그보다 낮으면 Stop hook 만으로 동작한다
+- 인계는 이 세션이 Orca 터미널에서 돌고 있을 때 자기 탭을 닫는다(`ORCA_TERMINAL_HANDLE`)
+- `handoff` 스킬: 인계 문서 본문 합성을 위임한다. 없으면 `/setup-matt-pocock-skills` 로 설치한다.
+  `references/handoff-doc.md` 만으로도 문서는 쓸 수 있지만, 그때는 대화 압축·비밀 삭제 판단이 빠진다
+- `wayfinder` 스킬: 선행 계획 맵이 필요할 때만. 없으면 완료 조건을 사용자와 직접 합의한다
+
+`bd`·`orca` 에는 폴백이 없다. 없으면 그 사실을 보고하고 멈춘다.
 
 ## 스킬
 
@@ -17,33 +37,10 @@
 | `long-run:map-run` | 목표를 bd epic(맵)으로 세우고, 헌장·프론티어를 깔고, 가드를 걸고, 완료 조건을 검증해 맵을 닫을 때까지 민다 |
 | `long-run:session-handoff` | 인계 문서 경로를 할당하고, 본문 합성은 `handoff` 스킬에 위임하고, 새 orca 탭에 claude 를 띄워 소유권을 넘긴 뒤 자기 탭을 닫는다 |
 
-### 위임하는 판단
-
-| 필요한 판단 | 부르는 스킬 | 이 플러그인이 남기는 것 |
-|---|---|---|
-| 대화를 다음 세션이 읽을 문서로 압축 | `handoff` (mattpocock 스킬군) | 저장 위치·번호 사슬, 절 구성 계약, 탭 기동·제출 증명 |
-| 무엇을 만들지 아직 결정에 걸려 있을 때 그 길 찾기 | `wayfinder` (같은 스킬군) | 그 결정을 물려받아 완료조건까지 **실행**하는 맵 |
-
-`handoff` 는 OS 임시 디렉터리에 쓰는 것이 기본이라 **저장 위치는 이 플러그인이 덮어쓴다** — 임시
-디렉터리는 청소되고 번호도 안 붙어서 인계 사슬이 남지 않는다.
-
-### wayfinder 와의 경계
-
-`wayfinder` 는 **계획**(판정 티켓을 풀어 길을 찾는다), `map-run` 은 **실행**(완료조건까지 민다)이다.
-판정은 하나 — **완료 조건을 관측 가능한 문장으로 지금 쓸 수 있는가.** 못 쓰면 남은 것은 작업이 아니라
-결정이므로 `wayfinder` 가 먼저다.
-
-닫힌 wayfinder 맵은 헌장으로 이관된다: Decisions so far → 확정된 결정 / Not yet specified →
-아직 규정 못 한 것 · 초기 티켓 / Out of scope → 범위 밖.
-
-🚨 **두 맵을 한 맵으로 합치지 않는다.** `wayfinder` 는 「세션당 티켓 하나」·「차팅 후 정지」가 규약이고
-이 플러그인의 Stop hook 은 바로 그 정지를 되민다. 라벨도 갈라 둔다(`long-run:map` ↔ `wayfinder:map`) —
-섞이면 `wayfinder` 의 「Work through the map」이 실행 맵을 집어 1티켓 규약으로 굴린다.
-
-## 강제 — mod 와 Stop hook
+## 강제: mod 와 Stop hook
 
 **맵을 선언하지 않은 세션에는 아무 일도 하지 않는다.** 선언한 worktree 안에서도 판정되는 것은
-`claim` 을 부른 **주인 세션 하나**다 — claim 이 출력한 일회용 토큰 줄이 자기 트랜스크립트에 있는
+`claim` 을 부른 **주인 세션 하나**다. claim 이 출력한 일회용 토큰 줄이 자기 트랜스크립트에 있는
 세션이 다음 Stop 에서 주인으로 적힌다(`lib/claim.mjs`). 같은 worktree 에서 다른 일로 연 세션은
 되밀리지 않는다.
 
@@ -53,17 +50,17 @@
 | 프론티어 | 되미는 말 | 마커 |
 |---|---|---|
 | 밀 수 있는 티켓이 있다 | 「곧장 다음 티켓을 claim 하라」. 이 세션이 티켓 2건을 닫았거나 컨텍스트가 창의 50% 를 넘었으면 「이어가지 말고 인계하라」 | 남긴다 |
-| 밀 수 있는 것은 없고 질문·막힌 티켓만 남았다 | 「기다리는 질문을 모아 보고하고 멈춰라」 | 남긴다 — 답이 오면 이어 민다 |
+| 밀 수 있는 것은 없고 질문·막힌 티켓만 남았다 | 「기다리는 질문을 모아 보고하고 멈춰라」 | 남긴다. 답이 오면 이어 민다 |
 | 비었는데 맵이 열려 있다 | 「서브에이전트 하나로 완료 조건을 검증하고 맵을 닫아라」. 50% 를 넘었으면 그 일을 인계 | 남긴다 |
 | 비었고 맵이 닫혔다 | 없음 (통과) | 지운다 |
 | 모른다 (bd 를 못 읽었다) | 없음 (통과) | 남긴다 |
 
 **밀 수 있는 티켓**은 `bd ready --parent <맵>` 에 나오거나 이미 claim 된 것 중 `human` 라벨이 없는 것이다.
 `human` 라벨 티켓은 사람의 답을 기다리는 **질문**이고(`bd human list` · `bd human respond <id>`), 나머지
-열린 티켓은 **막힌 것**이다. 갈림길에서 맵 전체가 서지 않도록 질문은 티켓으로 주차하고, 무엇이 그 답을
-기다리는지는 `bd dep add` 로 적는다 — 가드가 읽을 수 있는 것은 데이터뿐이다.
+열린 티켓은 **막힌 것**이다. 갈림길에서 맵 전체가 서지 않도록 질문은 티켓으로 남겨 두고, 무엇이 그 답을
+기다리는지는 `bd dep add` 로 적는다. 가드가 읽을 수 있는 것은 데이터뿐이다.
 
-🚨 **인계의 1차 축은 닫은 티켓 수다**(문턱 2건 — 티켓 하나가 세션의 40~50%). 컨텍스트 비율은 계측이
+**인계의 1차 축은 닫은 티켓 수다**(문턱 2건. 티켓 하나가 세션의 40~50%). 컨텍스트 비율은 계측이
 실패하면 0% 로 떨어지는데, 그것을 「여유」로 읽어 한 세션이 열 티켓을 닫은 선례가 있다. 그래서 못 잰
 컨텍스트는 «계측 불가» 로 따로 말하고 그 값으로 판정하지 않는다. 닫은 수는 주인이 된 시각 이후
 `closed_at` 된 자식을 bd 에서 센다.
@@ -71,43 +68,30 @@
 맵을 닫는 자리의 검증은 **지시일 뿐 증명이 아니다.** 가드는 검증하라고 한 번 되밀고 맵이 닫혔는지만 본다.
 서브에이전트가 실제로 돌았는지, 완료 조건이 참인지는 보지 못한다.
 
-판정은 둘 중 하나가 한다. 규칙은 같다 — `scripts/lib/guard-core.mjs` 의 `decide()`, 그 축과 근거는
+판정은 둘 중 하나가 한다. 규칙은 같다. `scripts/lib/guard-core.mjs` 의 `decide()` 이고, 그 축과 근거는
 그 파일 머리말에 있다.
 
 | | mod (`hooks/register.mjs`) | Stop hook (`frontier-guard.mjs --hook`) |
 |---|---|---|
-| 언제 판정하나 | mod 가 뜬 세션 (CC v2.1.287+) | mod 가 안 뜬 세션 — 구버전, 조직 정책, `--safe-mode` |
-| 컨텍스트 | 세션이 잰 값 (`$.session.usage()` — 실제 창 크기) | 트랜스크립트 꼬리의 `usage`, 창은 모델 이름의 `[1m]` 으로 추정 |
-| 상태줄 | `long-run <맵> · 작업 <잡은 티켓> · 프론티어 N · 닫음 n/2 · 컨텍스트 N%` — 턴 끝과 `bd update/close/create/reopen` 직후에 갱신. 답을 기다리는 질문이 있으면 `· 질문 대기 N`, 2건을 닫았거나 50% 를 넘으면 `· 인계할 때`, 다른 세션이 주인이면 `· 다른 세션이 주인` | 없음 |
+| 언제 판정하나 | mod 가 뜬 세션 (Claude Code v2.1.287+) | mod 가 안 뜬 세션: 구버전, 조직 정책, `--safe-mode` |
+| 컨텍스트 | 세션이 잰 값 (`$.session.usage()`, 실제 창 크기) | 트랜스크립트 꼬리의 `usage`, 창은 모델 이름의 `[1m]` 으로 추정 |
+| 상태줄 | `long-run <맵> · 작업 <잡은 티켓> · 프론티어 N · 닫음 n/2 · 컨텍스트 N%`. 턴 끝과 `bd update/close/create/reopen` 직후에 갱신. 답을 기다리는 질문이 있으면 `· 질문 대기 N`, 2건을 닫았거나 50% 를 넘으면 `· 인계할 때`, 다른 세션이 주인이면 `· 다른 세션이 주인` | 없음 |
 
 mod 는 맵을 미는 세션이 **압축될 때**도 끼어든다. 압축은 막지 않고(창이 넘칠 때 건너뛰면 막다른 길이
-된다), 요약 지시와 압축 뒤 대화에 「새 티켓을 잡지 말고 하던 티켓까지만 가서 인계하라」를 남긴다 —
+된다), 요약 지시와 압축 뒤 대화에 「새 티켓을 잡지 말고 하던 티켓까지만 가서 인계하라」를 남긴다.
 압축된 세션은 맵의 운영 규약을 잃기 때문이다. 다른 세션이 주인인 맵이면 아무것도 덧붙이지 않는다.
 
 둘이 같은 멈춤을 두 번 판정하지 않도록, mod 는 Stop 이벤트에 `long_run_mod: true` 를 실어 아래로 넘기고
 Stop hook 은 그것을 보면 빠진다(`guard-core.mjs` 의 `MOD_FLAG`). 환경변수가 아니라 이벤트에 싣는 이유는
 환경변수는 mod 가 꺼진 뒤에도 프로세스에 남아 대비까지 입을 다물게 하기 때문이다.
 
-mod 는 마커 경로와 프론티어를 직접 계산하지 않고 `frontier-guard.mjs status` 를 부른다 — mod 는
+mod 는 마커 경로와 프론티어를 직접 계산하지 않고 `frontier-guard.mjs status` 를 부른다. mod 는
 `node:` 모듈을 못 쓰므로 키 계산을 다시 짜면 같은 규칙이 두 벌이 된다. 마커 경로를 한 번 배운 뒤로는
 마커 파일이 없는 동안 `bd` 를 부르지 않는다.
 
-## 전제
-
-- `bd` (beads) — 맵과 프론티어. PATH 에 있어야 한다
-- `orca` — worktree·터미널. 인계가 새 탭을 띄우는 경로다
-- Node.js 18+ (내장 모듈만 쓴다. 런타임 의존성 0)
-- 상태줄과 mod 판정은 Claude Code v2.1.287 이상. 그보다 낮으면 Stop hook 만으로 동작한다
-- 인계는 이 세션이 Orca 터미널에서 돌고 있을 때 자기 탭을 닫는다(`ORCA_TERMINAL_HANDLE`)
-- `handoff` 스킬 — 인계 문서 본문 합성을 위임한다. 없으면 `/setup-matt-pocock-skills` 로 설치한다.
-  `references/handoff-doc.md` 만으로도 문서는 쓸 수 있지만, 그때는 대화 압축·비밀 삭제 판단이 빠진다
-- `wayfinder` 스킬 — 선행 계획 맵이 필요할 때만. 없으면 완료 조건을 사용자와 직접 합의한다
-
-`bd`·`orca` 에는 폴백이 없다. 없으면 그 사실을 보고하고 멈춘다.
-
 ## 상태가 사는 곳
 
-작업 저장소가 아니라 홈 아래다 — 이 플러그인은 아무 repo 에서나 열린 세션에 붙으므로, 남의 repo 에
+작업 저장소가 아니라 홈 아래다. 이 플러그인은 아무 repo 에서나 열린 세션에 붙으므로, 남의 repo 에
 파일을 만들지 않는다.
 
 | 무엇 | 기본 위치 | 환경변수 |
@@ -115,7 +99,7 @@ mod 는 마커 경로와 프론티어를 직접 계산하지 않고 `frontier-gu
 | 가드 마커·닫기 로그 | `~/.claude/long-run/` | `LONG_RUN_STATE_ROOT` |
 | 인계 문서 | `~/.claude/handoff/<worktree 키>/<슬러그>/handoff-NN.md` | `HANDOFF_ROOT` |
 
-🚨 **키는 worktree 마다 갈린다**(`<basename>-<경로해시8>`). 머신에 하나로 두면 서로 무관한 저장소의
+**키는 worktree 마다 갈린다**(`<basename>-<경로해시8>`). 머신에 하나로 두면 서로 무관한 저장소의
 세션까지 같은 맵으로 판정한다. 인계는 같은 worktree 의 새 탭으로 가므로 받는 세션은 같은 키를 읽어
 선언을 물려받는다.
 
@@ -136,20 +120,30 @@ node scripts/handoff.mjs send --doc <절대경로> --close-self [--bd <epic>] [-
 ```
 
 맵을 미는 worktree 에서 보내면 새 세션의 첫 단계가 `claim` 이 되고, 대상 worktree 가 다르면 선언도
-따라간다. `--bd` 가 그 맵 밖이면 둘 다 건너뛴다 — 같은 worktree 의 남의 맵을 빼앗지 않게.
+따라간다. `--bd` 가 그 맵 밖이면 둘 다 건너뛴다. 같은 worktree 의 남의 맵을 빼앗지 않기 위해서다.
 
-## 테스트
+## 위임하는 판단
 
-```bash
-node --test "scripts/test/*.test.mjs"
-claude plugin validate .
-```
+| 필요한 판단 | 부르는 스킬 | 이 플러그인이 남기는 것 |
+|---|---|---|
+| 대화를 다음 세션이 읽을 문서로 압축 | `handoff` (mattpocock 스킬군) | 저장 위치·번호 사슬, 절 구성 계약, 탭 기동·제출 증명 |
+| 무엇을 만들지 아직 결정에 걸려 있을 때 그 길 찾기 | `wayfinder` (같은 스킬군) | 그 결정을 물려받아 완료조건까지 **실행**하는 맵 |
 
-순수 로직만 테스트한다 — 프론티어 분류·주인·판정(`lib/guard-core.mjs`), claim 토큰(`lib/claim.mjs`), 헌장과 가드의 문구 일치
-(`test/charter-wording.test.mjs`), mod 의 입력 조립과 상태줄 문구(`lib/mod-view.mjs`),
-문서 메타 대조와 §0 검사(`lib/doc-meta.mjs`), 인계 프롬프트(`lib/handoff-prompt.mjs`), 경로·키 계산(`lib/handoff-path.mjs`). orca·bd 호출은 실측 대상이라
-테스트하지 않는다. `hooks/register.mjs` 는 배선뿐이라 `claude plugin validate` 가 읽어 내는 hooks·calls
-목록으로 확인한다.
+`handoff` 는 OS 임시 디렉터리에 쓰는 것이 기본이라 **저장 위치는 이 플러그인이 덮어쓴다.** 임시
+디렉터리는 청소되고 번호도 안 붙어서 인계 사슬이 남지 않는다.
+
+### wayfinder 와의 경계
+
+`wayfinder` 는 **계획**(판정 티켓을 풀어 길을 찾는다), `map-run` 은 **실행**(완료조건까지 민다)이다.
+판정은 하나다. **완료 조건을 관측 가능한 문장으로 지금 쓸 수 있는가.** 못 쓰면 남은 것은 작업이 아니라
+결정이므로 `wayfinder` 가 먼저다.
+
+닫힌 wayfinder 맵은 헌장으로 이관된다: Decisions so far → 확정된 결정 / Not yet specified →
+아직 규정 못 한 것 · 초기 티켓 / Out of scope → 범위 밖.
+
+**두 맵을 한 맵으로 합치지 않는다.** `wayfinder` 는 「세션당 티켓 하나」·「차팅 후 정지」가 규약이고
+이 플러그인의 Stop hook 은 바로 그 정지를 되민다. 라벨도 갈라 둔다(`long-run:map` ↔ `wayfinder:map`).
+섞이면 `wayfinder` 의 「Work through the map」이 실행 맵을 집어 1티켓 규약으로 굴린다.
 
 ## orca 계약에 기대는 지점
 
@@ -172,4 +166,17 @@ claude plugin validate .
 - **맵을 접을 때는 선언을 직접 지운다**(`frontier-guard.mjs clear`). 프론티어가 비어도 맵이 열려 있으면
   마커가 남는다
 - **구 orca 호스트에서는 제출을 증명할 수 없다**(`observation: old-host`). 그때는 증명 없이 통과시키고
-  수령증에 그 사실을 남긴다 — 없는 증거를 만들지 않는다
+  수령증에 그 사실을 남긴다. 없는 증거를 만들지 않는다
+
+## 테스트
+
+```bash
+node --test "scripts/test/*.test.mjs"
+claude plugin validate .
+```
+
+순수 로직만 테스트한다. 프론티어 분류·주인·판정(`lib/guard-core.mjs`), claim 토큰(`lib/claim.mjs`), 헌장과 가드의 문구 일치
+(`test/charter-wording.test.mjs`), mod 의 입력 조립과 상태줄 문구(`lib/mod-view.mjs`),
+문서 메타 대조와 §0 검사(`lib/doc-meta.mjs`), 인계 프롬프트(`lib/handoff-prompt.mjs`), 경로·키 계산(`lib/handoff-path.mjs`). orca·bd 호출은 실측 대상이라
+테스트하지 않는다. `hooks/register.mjs` 는 배선뿐이라 `claude plugin validate` 가 읽어 내는 hooks·calls
+목록으로 확인한다.
