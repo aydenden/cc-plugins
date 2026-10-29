@@ -65,8 +65,10 @@ description: "여러 세션에 걸쳐야 끝나는 목표 하나를 실행 맵(b
 | Notes | 운영 규약에 덧붙일 것이 있는지만 본다 |
 
 ```bash
-bd create -t epic -p 1 --labels long-run:map -t "{한 줄 목적지}" --description-file {헌장경로}
+bd create -t epic -p 1 --labels long-run:map --title "{한 줄 목적지}" --description-file {헌장경로}
 ```
+
+`-t` 는 type 이다 — 제목을 `-t` 로 주면 앞의 type 을 덮어쓰고 `title required` 로 죽는다. 제목은 `--title` 이다.
 
 ### 2. 프론티어를 깐다
 
@@ -75,7 +77,7 @@ bd create -t epic -p 1 --labels long-run:map -t "{한 줄 목적지}" --descript
 선행 wayfinder 맵이 이미 그 크기를 재 놓았으면 측정 티켓을 또 만들지 않는다.
 
 ```bash
-bd create -t task -p 1 --parent {맵id} -t "{측정할 것}"
+bd create -t task -p 1 --parent {맵id} --title "{측정할 것}"
 ```
 
 **티켓으로 만들 것과 안개에 둘 것을 가른다.** 기준은 「지금 답할 수 있나」가 아니라 **「지금 질문을
@@ -121,7 +123,7 @@ worktree 에서는 주인 세션 하나만 판정된다.
 선택(A/B)을 만나면 질문을 티켓으로 주차하고, 그 답이 있어야 하는 티켓에 의존을 건 뒤 나머지를 민다:
 
 ```bash
-bd create -t task --parent {맵id} --labels human -t "{A/B 와 각 선택이 완료 조건에 무엇을 바꾸는지}"
+bd create -t task --parent {맵id} --labels human --title "{A/B 와 각 선택이 완료 조건에 무엇을 바꾸는지}"
 bd dep add {그 답을 기다리는 티켓} {질문id}
 ```
 
@@ -138,7 +140,7 @@ bd dep add {그 답을 기다리는 티켓} {질문id}
 작업 중 새 미지수가 나오면 현재 티켓을 넓히지 말고 형제를 만든다:
 
 ```bash
-bd create -t task --parent {맵id} --deps discovered-from:{현재id} -t "{발견}"
+bd create -t task --parent {맵id} --deps discovered-from:{현재id} --title "{발견}"
 ```
 
 티켓을 닫을 때 **그 답이 안개를 걷었는지** 본다. 「아직 규정 못 한 것」의 한 덩이를 이제 정확히 말할 수
