@@ -10,6 +10,7 @@
  *   node frontier-guard.mjs wave-settle <티켓>              정산한 티켓을 웨이브에서 뺀다(마지막이면 웨이브가 끝난다)
  *   node frontier-guard.mjs clear                           선언 해제(맵을 놓을 때. 인계할 때는 지우지 않는다)
  *   node frontier-guard.mjs epic                            이 worktree 에 선언된 맵 id 한 줄(없으면 빈 출력)
+ *   node frontier-guard.mjs wave                            정산 안 된 웨이브의 Run id 한 줄(없으면 빈 출력)
  *   node frontier-guard.mjs move <경로>                     선언을 다른 worktree 로 옮긴다(주인은 비운다)
  *   node frontier-guard.mjs status [--session <id>] [트랜스크립트]   지금 판정을 사람이 읽는 꼴로
  *   node frontier-guard.mjs --hook                          Stop hook 모드(stdin JSON)
@@ -156,6 +157,10 @@ if (command === 'claim') {
   // 인계가 새 세션에게 claim 을 시키려고 읽는다. 선언이 없으면 빈 출력이다.
   const marker = readJson(MARKER);
   if (marker?.epic) console.log(marker.epic);
+} else if (command === 'wave') {
+  // 인계가 새 세션에게 run-use 를 시키려고 읽는다. 정산할 워커가 없으면 빈 출력이다.
+  const marker = readJson(MARKER);
+  if (pendingWave(marker).length) console.log(marker.wave.runId);
 } else if (command === 'move') {
   // 인계가 worktree 를 옮길 때 선언도 따라가야 한다 — 안 옮기면 새 세션이 가드 없이 출발하고 떠난
   // worktree 엔 아무도 안 미는 마커가 남는다.
@@ -274,6 +279,6 @@ if (command === 'claim') {
   }
   process.exit(0);
 } else {
-  console.error('usage: node frontier-guard.mjs <claim <epic> [--no-ticket-limit|--ticket-limit]|wave-begin <runId> <티켓>=<dispatch>...|wave-settle <티켓>|clear|epic|move <경로>|status [--session <id>] [트랜스크립트]|--hook>');
+  console.error('usage: node frontier-guard.mjs <claim <epic> [--no-ticket-limit|--ticket-limit]|wave-begin <runId> <티켓>=<dispatch>...|wave-settle <티켓>|clear|epic|wave|move <경로>|status [--session <id>] [트랜스크립트]|--hook>');
   process.exit(1);
 }

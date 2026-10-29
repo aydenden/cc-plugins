@@ -50,6 +50,28 @@ test('inheritedMap — bd 가 없거나 맵 자신·그 자손이면 맵을 잇�
   assert.equal(inheritedMap({ bdId: 'other-c68e' }), null);
 });
 
+// Run 의 전달 큐는 터미널이 아니라 Run 에 묶여 있어, run-use 한 새 터미널이 남은 worker_done 을 받는다.
+// 이 단계가 빠지면 새 세션은 워커 보고를 못 받고, 가드는 웨이브 정산을 기다리라고 되밀기만 한다.
+test('🚨 진행 중 웨이브가 있으면 claim 다음에 그 Run 을 run-use 로 이어받고 보고를 기다린다', () => {
+  const prompt = buildPrompt({ doc, mapEpic: 'map-yged', guard, waveRun: 'run_fb4934954c3b' });
+  assert.match(prompt, /orca orchestration run-use --id run_fb4934954c3b/);
+  assert.match(prompt, /check --wait --types "worker_done,escalation,question"/);
+  assert.ok(prompt.indexOf('claim map-yged') < prompt.indexOf('run-use'));
+  assert.ok(prompt.indexOf('run-use') < prompt.indexOf(doc));
+  assert.doesNotMatch(prompt, /\n/);
+});
+
+test('웨이브를 잇는 것은 맵을 잇는 인계뿐이다 — 맵 밖 bd 나 웨이브 없는 맵엔 run-use 가 없다', () => {
+  assert.doesNotMatch(buildPrompt({ doc, bdId: 'other-c68e', mapEpic: 'map-zrr2.23', guard, waveRun: 'run_x' }), /run-use/);
+  assert.doesNotMatch(buildPrompt({ doc, mapEpic: 'map-yged', guard }), /run-use/);
+});
+
+test('hold 면 run-use 도 이어가라는 지시가 올 때로 미룬다', () => {
+  const prompt = buildPrompt({ doc, mapEpic: 'map-yged', guard, waveRun: 'run_x', hold: true });
+  assert.match(prompt, /이어가라는 지시가 오면 .*claim map-yged.*run-use --id run_x/);
+  assert.ok(prompt.indexOf(doc) < prompt.indexOf('run-use'));
+});
+
 test('hold 면 지금 claim 하지 않고, 이어가라는 지시가 올 때 claim 하라고 남긴다', () => {
   const prompt = buildPrompt({ doc, mapEpic: 'map-yged', guard, hold: true });
   assert.match(prompt, /작업을 시작하지 않는다/);

@@ -47,10 +47,10 @@ import { buildPrompt, inheritedMap } from './lib/handoff-prompt.mjs';
 
 const GUARD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'frontier-guard.mjs');
 
-/** 보내는 worktree 에 선언된 맵 id. 없거나 못 읽으면 `null` — 그때 새 세션에게 claim 을 시키지 않는다. */
-function mapEpicOf() {
+/** 가드의 한 줄 조회. 없거나 못 읽으면 `null` — 그때 새 세션에게 그 단계를 시키지 않는다. */
+function guardLine(command) {
   try {
-    return execFileSync(process.execPath, [GUARD, 'epic'], { encoding: 'utf8', timeout: 10_000 }).trim() || null;
+    return execFileSync(process.execPath, [GUARD, command], { encoding: 'utf8', timeout: 10_000 }).trim() || null;
   } catch {
     return null;
   }
@@ -106,8 +106,9 @@ main(() => {
   }
 
   const bdId = flags.bd && String(flags.bd);
-  const mapEpic = mapEpicOf();
-  const prompt = buildPrompt({ doc, bdId, mapEpic, guard: GUARD.replace(/\\/g, '/'), hold: !!flags.hold });
+  const mapEpic = guardLine('epic');
+  const waveRun = guardLine('wave');
+  const prompt = buildPrompt({ doc, bdId, mapEpic, guard: GUARD.replace(/\\/g, '/'), waveRun, hold: !!flags.hold });
   const title = flags.title ? String(flags.title) : `인계 ${path.basename(doc, '.md')}`;
 
   // 닫기 계획은 탭을 띄우기 **전에** 세운다 — 지연 값이 틀렸다는 이유로 인계가 끝난 뒤에 죽으면,
@@ -117,7 +118,7 @@ main(() => {
   if (flags['dry-run']) {
     console.log(
       JSON.stringify(
-        { ok: true, dryRun: true, doc, declaredWorktree: declared, worktree: wt.selector, worktreePath: wt.path, mapEpic, title, prompt, selfClose: closePlan },
+        { ok: true, dryRun: true, doc, declaredWorktree: declared, worktree: wt.selector, worktreePath: wt.path, mapEpic, waveRun, title, prompt, selfClose: closePlan },
         null,
         2
       )
@@ -153,6 +154,7 @@ main(() => {
         worktree: wt.selector,
         worktreePath: wt.path,
         mapEpic,
+        waveRun,
         guardClaim,
         handle,
         submission,

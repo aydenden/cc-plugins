@@ -26,21 +26,32 @@ export function inheritedMap({ bdId, mapEpic }) {
  * 맵을 미는 worktree 라면 claim 이 첫 단계다. 가드는 claim 한 주인 세션만 판정하므로, 이 단계가 빠지면
  * 새 세션은 가드 없이 출발한다 — 문서가 아니라 프롬프트에 박는 이유다.
  *
- * @param {{doc: string, bdId?: string, mapEpic?: string | null, guard?: string, hold?: boolean}} input
- *   `mapEpic` 은 보내는 worktree 에 선언된 맵 id(`frontier-guard.mjs epic`), `guard` 는 그 스크립트 경로
+ * 진행 중 웨이브가 있으면 claim 다음이 `run-use` 다. Run 의 전달 큐는 터미널이 아니라 Run 에 묶여 있어
+ * run-use 한 새 터미널이 남은 worker_done 을 받고, 보낸 터미널은 그 순간 fenced 된다(실측). 이 단계가
+ * 빠지면 워커 보고를 받을 코디네이터가 없어 가드는 정산을 기다리라고 되밀기만 한다.
+ *
+ * @param {{doc: string, bdId?: string, mapEpic?: string | null, guard?: string, waveRun?: string | null, hold?: boolean}} input
+ *   `mapEpic` 은 보내는 worktree 에 선언된 맵 id(`frontier-guard.mjs epic`), `guard` 는 그 스크립트 경로,
+ *   `waveRun` 은 그 맵의 정산 안 된 웨이브의 Run id(`frontier-guard.mjs wave`)
  * @returns {string}
  */
-export function buildPrompt({ doc, bdId, mapEpic, guard, hold = false }) {
+export function buildPrompt({ doc, bdId, mapEpic, guard, waveRun, hold = false }) {
   const map = inheritedMap({ bdId, mapEpic });
   const claim = map && guard ? `\`node "${guard}" claim ${map}\`` : null;
+  const runUse = claim && waveRun ? `\`orca orchestration run-use --id ${waveRun} --json\`` : null;
+  const waitReports = '`orca orchestration check --wait --types "worker_done,escalation,question" --json`';
   const parts = [`[세션 인계] 이전 세션이 컨텍스트 한계에 닿아 이 작업을 너에게 통째로 넘긴다.`];
   if (claim && !hold) {
     parts.push(`0) 맵 ${map} 의 주인이 된다 — 다른 무엇보다 먼저 ${claim} 를 실행한다. 이것이 없으면 프론티어 가드가 이 세션을 판정하지 않는다.`);
   }
+  if (runUse && !hold) {
+    parts.push(`0-1) 진행 중 웨이브의 코디네이터가 된다 — 이어서 ${runUse} 를 실행한다. 워커 보고는 이 Run 으로 오므로 이 터미널이 받고, 남은 보고는 ${waitReports} 로 기다린다.`);
+  }
   parts.push(`1) Read 로 ${doc} 을 읽는다.`);
+  const resume = [claim && `${claim} 를 실행하고`, runUse && `${runUse} 로 웨이브를 이어받은 뒤`].filter(Boolean).join(' ');
   parts.push(
     hold
-      ? `2) 🚨 사용자 지시: 작업을 시작하지 않는다 — 스킬 호출·claim·수정을 하지 말고, 상태만 확인한 뒤 멈춰서 사용자 지시를 기다린다. 이어가라는 지시가 오면 그때 ${claim ? `먼저 ${claim} 를 실행하고 ` : ''}'다음 작업'의 스킬을 실제로 호출한다(문서의 요약으로 대체하지 않는다).`
+      ? `2) 🚨 사용자 지시: 작업을 시작하지 않는다 — 스킬 호출·claim·수정을 하지 말고, 상태만 확인한 뒤 멈춰서 사용자 지시를 기다린다. 이어가라는 지시가 오면 그때 ${resume ? `먼저 ${resume} ` : ''}'다음 작업'의 스킬을 실제로 호출한다(문서의 요약으로 대체하지 않는다).`
       : `2) '다음 작업'이 지정한 스킬을 실제로 호출한다 — 인계 문서의 요약으로 대체하지 않는다. 문서는 상태 보고서지 절차서가 아니다.`
   );
   if (bdId) {
