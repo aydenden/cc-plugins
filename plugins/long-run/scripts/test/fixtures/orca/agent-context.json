@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "commandCount": 8,
+  "commands": [
+    { "command": "orchestration worker-list", "path": ["orchestration", "worker-list"], "flags": ["help", "json", "pairing-code", "environment", "run", "terminal-state", "include-remote", "cursor", "limit"] },
+    { "command": "orchestration check", "path": ["orchestration", "check"], "flags": ["help", "json", "pairing-code", "environment", "terminal", "run", "ack", "unread", "peek", "all", "types", "format", "wait", "timeout-ms", "retry-request"] },
+    { "command": "orchestration run-create", "path": ["orchestration", "run-create"], "flags": ["help", "json", "pairing-code", "environment", "objective", "from", "retry-request"] },
+    { "command": "orchestration worker-release", "path": ["orchestration", "worker-release"], "flags": ["help", "json", "pairing-code", "environment", "dispatch", "retry-request"] },
+    { "command": "orchestration worker-start", "path": ["orchestration", "worker-start"], "flags": ["help", "json", "pairing-code", "environment", "task", "spec", "task-title", "deps", "parent", "on", "worktree", "name", "repo", "base-branch", "display-name", "comment", "setup", "agent", "model", "effort", "terminal", "retry-of", "timeout-ms", "run", "from", "retry-request"] },
+    { "command": "worktree list", "path": ["worktree", "list"], "flags": ["help", "json", "pairing-code", "environment", "repo", "limit"] },
+    { "command": "worktree rm", "path": ["worktree", "rm"], "flags": ["help", "json", "pairing-code", "environment", "worktree", "force", "run-hooks", "allow-failed-archive-hook"] },
+    { "command": "worktree show", "path": ["worktree", "show"], "flags": ["help", "json", "pairing-code", "environment", "worktree"] }
+  ]
+}

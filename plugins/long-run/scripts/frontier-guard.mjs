@@ -6,7 +6,8 @@
  *                                                           이 세션이 그 맵을 민다고 선언(주인이 된다). `--no-ticket-limit`
  *                                                           은 닫은 티켓 수로 인계를 되밀지 않는다(코디네이터 맵) —
  *                                                           같은 맵을 다시 claim 하면 물려받고, `--ticket-limit` 으로만 다시 켠다
- *   node frontier-guard.mjs wave-begin <runId> <티켓>=<dispatch>...   워커에게 넘긴 티켓을 적는다(정산 전까지 기다리라고 되민다)
+ *   node frontier-guard.mjs wave-begin <runId> <티켓>=<dispatch>[=<worktreeId>]...
+ *                                                           워커에게 넘긴 티켓을 적는다(정산 전까지 기다리라고 되민다)
  *   node frontier-guard.mjs wave-settle <티켓>              정산한 티켓을 웨이브에서 뺀다(마지막이면 웨이브가 끝난다)
  *   node frontier-guard.mjs clear                           선언 해제(맵을 놓을 때. 인계할 때는 지우지 않는다)
  *   node frontier-guard.mjs epic                            이 worktree 에 선언된 맵 id 한 줄(없으면 빈 출력)
@@ -279,6 +280,6 @@ if (command === 'claim') {
   }
   process.exit(0);
 } else {
-  console.error('usage: node frontier-guard.mjs <claim <epic> [--no-ticket-limit|--ticket-limit]|wave-begin <runId> <티켓>=<dispatch>...|wave-settle <티켓>|clear|epic|wave|move <경로>|status [--session <id>] [트랜스크립트]|--hook>');
+  console.error('usage: node frontier-guard.mjs <claim <epic> [--no-ticket-limit|--ticket-limit]|wave-begin <runId> <티켓>=<dispatch>[=<worktreeId>]...|wave-settle <티켓>|clear|epic|wave|move <경로>|status [--session <id>] [트랜스크립트]|--hook>');
   process.exit(1);
 }

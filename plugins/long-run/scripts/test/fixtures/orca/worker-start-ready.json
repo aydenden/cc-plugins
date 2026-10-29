@@ -1,0 +1,56 @@
+{
+  "id": "249e7109-a43a-40b5-8817-9e616cac3f0b",
+  "ok": true,
+  "result": {
+    "runId": "run_fb4934954c3b",
+    "taskId": "task_0c57bb04032e",
+    "dispatchId": "ctx_e669745663fb",
+    "state": "ready",
+    "stage": "input_accepted",
+    "turnStart": "observed",
+    "setup": {
+      "requested": "not_applicable",
+      "effective": "not_applicable",
+      "source": "existing_worktree",
+      "hookFound": false,
+      "startupPolicy": "start-immediately",
+      "state": "not_applicable"
+    },
+    "launch": {
+      "requested": { "agent": "claude", "model": "claude-haiku-5-5", "effort": null },
+      "effective": { "agent": "claude", "model": "claude-haiku-5-5", "effort": null }
+    },
+    "mode": {
+      "mode": "terminal",
+      "preferred": "terminal",
+      "reason": "user_default",
+      "detail": "Started a terminal agent worker, the default for new agent tabs in your settings."
+    },
+    "timeoutMs": 60000,
+    "effects": [
+      { "kind": "worktree", "action": "reused", "id": "a11de280-7955-44a0-a6aa-0dc4628ab0b8::C:/dev/cc-plugins" },
+      { "kind": "setup", "action": "not_applicable", "state": "not_applicable" },
+      { "kind": "terminal", "role": "agent", "action": "created", "id": "term_d80009ea-bb98-4c23-bc4b-6c86e7617cbd", "surface": "visible" },
+      { "kind": "dispatch_input", "role": "agent", "id": "term_d80009ea-bb98-4c23-bc4b-6c86e7617cbd", "state": "accepted" }
+    ],
+    "prompt": {
+      "requestId": "f9defc54-e44d-445f-96a6-d7436325586a",
+      "stages": ["input_accepted", "turn_started"],
+      "provider": "claude",
+      "observation": "supported",
+      "processIncarnation": "7e2e0647-5bb6-4371-9d14-82aa8cc89ed9",
+      "generation": 77,
+      "baselineWorkingSequence": 0,
+      "baselineExplicitWorkingStartedAt": null,
+      "baselinePermissionSequence": 0
+    },
+    "residualResources": [],
+    "mutation": {
+      "requestId": "f9defc54-e44d-445f-96a6-d7436325586a",
+      "replayed": false
+    }
+  },
+  "_meta": {
+    "runtimeId": "35409841-1e8d-4315-93db-245d502f8c71"
+  }
+}

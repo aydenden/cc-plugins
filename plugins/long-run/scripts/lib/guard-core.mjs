@@ -291,21 +291,24 @@ export function settleWave(marker, ticketId) {
 }
 
 /**
- * `wave-begin <runId> <티켓>=<dispatch>...` 의 인자.
+ * `wave-begin <runId> <티켓>=<dispatch>[=<worktreeId>]...` 의 인자. 셋째 칸은 정산이 지울 하위 worktree 다 —
+ * orca worktree id(`<repo>::<경로>`)에는 `=` 가 없어 구분자로 쓸 수 있다.
  *
  * @param {string[]} args
- * @returns {{runId: string, tickets: {id: string, dispatchId: string}[]} | {error: string}}
+ * @returns {{runId: string, tickets: {id: string, dispatchId: string, worktreeId?: string}[]} | {error: string}}
  */
 export function parseWaveArgs(args) {
   const [runId, ...pairs] = args;
-  if (!runId) return { error: 'runId 가 없다 — wave-begin <runId> <티켓>=<dispatch>...' };
+  if (!runId) return { error: 'runId 가 없다 — wave-begin <runId> <티켓>=<dispatch>[=<worktreeId>]...' };
   if (pairs.length === 0) return { error: '티켓이 없다 — <티켓>=<dispatch> 를 하나 이상 준다' };
   const tickets = [];
   for (const pair of pairs) {
-    const [id, dispatchId, extra] = pair.split('=');
-    if (!id || !dispatchId || extra !== undefined) return { error: `${pair} 는 <티켓>=<dispatch> 꼴이 아니다` };
+    const [id, dispatchId, worktreeId, extra] = pair.split('=');
+    if (!id || !dispatchId || worktreeId === '' || extra !== undefined) {
+      return { error: `${pair} 는 <티켓>=<dispatch>[=<worktreeId>] 꼴이 아니다` };
+    }
     if (tickets.some((t) => t.id === id)) return { error: `${id} 가 중복됐다` };
-    tickets.push({ id, dispatchId });
+    tickets.push(worktreeId ? { id, dispatchId, worktreeId } : { id, dispatchId });
   }
   return { runId, tickets };
 }

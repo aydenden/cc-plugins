@@ -119,8 +119,12 @@ node scripts/frontier-guard.mjs status [--session <id>] [트랜스크립트]
 node scripts/frontier-guard.mjs epic
 node scripts/frontier-guard.mjs move <worktree 경로>
 # 워커에게 넘긴 티켓을 적는다(정산 전까지 가드가 보고를 기다리라고 되민다) / 정산한 티켓을 뺀다
-node scripts/frontier-guard.mjs wave-begin <runId> <티켓>=<dispatch>...
+node scripts/frontier-guard.mjs wave-begin <runId> <티켓>=<dispatch>[=<worktreeId>]...
 node scripts/frontier-guard.mjs wave-settle <티켓>
+
+# 승인받은 티켓마다 base 안에 하위 worktree(wave-<티켓>)를 orca 로 만들어 워커를 띄우고 wave-begin 까지 한다.
+# --dry-run 은 orca 를 부르지 않고 승인에 보일 계획 JSON 만 낸다. 시작 전에 orca 명령 스키마를 대조한다
+node scripts/wave.mjs start <티켓>... [--run <runId>] [--base-branch <ref>] [--model <id>] [--dry-run]
 
 # 인계 문서 경로 할당 → 문서를 쓴 뒤 → 넘기고 빠진다
 node scripts/handoff.mjs allocate --slug <슬러그>

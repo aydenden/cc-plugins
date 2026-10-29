@@ -1,0 +1,22 @@
+{
+  "id": "431fe96d-b816-4eee-ada6-21473d99eeb2",
+  "ok": true,
+  "result": {
+    "run": {
+      "id": "run_fb4934954c3b",
+      "objective": "nis-zk8x.16 실측: 진행 웨이브를 다른 코디네이터 터미널이 run-use 로 이어받는가",
+      "coordinator_handle": "term_54ce9a72-689a-4a08-86fc-ba25da95721f",
+      "consumer_generation": 1,
+      "legacy": 0,
+      "created_at": "2026-10-29T05:57:06Z",
+      "updated_at": "2026-10-29T05:57:06Z"
+    },
+    "mutation": {
+      "requestId": "8db7b2f4-898f-4244-bb5e-d1b754acbb19",
+      "replayed": false
+    }
+  },
+  "_meta": {
+    "runtimeId": "35409841-1e8d-4315-93db-245d502f8c71"
+  }
+}

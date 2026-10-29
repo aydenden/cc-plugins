@@ -529,6 +529,13 @@ test('웨이브 인자는 <runId> <티켓>=<dispatch>... 꼴이다 — 틀린 �
   assert.match(parseWaveArgs(['run_1', 'map.9=a', 'map.9=b']).error, /중복/);
 });
 
+test('웨이브 인자의 셋째 칸은 정산이 지울 worktree id 다 — orca id 의 :: 와 드라이브 콜론을 그대로 싣는다', () => {
+  assert.deepEqual(parseWaveArgs(['run_1', 'map.9=ctx_a=repo::C:/base/wave-map-9']).tickets, [
+    { id: 'map.9', dispatchId: 'ctx_a', worktreeId: 'repo::C:/base/wave-map-9' },
+  ]);
+  assert.match(parseWaveArgs(['run_1', 'map.9=ctx_a=w=x']).error, /map\.9/);
+});
+
 test('🚨 웨이브가 돌고 있으면 그 티켓을 claim 하라고 하지 않고, 워커의 보고를 기다리라고 되민다', () => {
   const verdict = decide({ ...base, marker: waving });
   assert.equal(verdict.block, true);
