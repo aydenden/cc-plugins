@@ -151,7 +151,8 @@ bd create -t task --parent {맵id} --deps discovered-from:{현재id} --title "{�
 
 `bd ready` 에 **서로 다른 파일을 건드리는 티켓이 둘 이상**이면 워커에게 나눠 맡길 수 있다. 같은 파일을
 건드리는 티켓은 병합에서 충돌하므로 같은 웨이브에 넣지 않는다. **기본 폭은 1** — 웨이브를 쓰지 않고 위
-절차대로 한 티켓씩 민다. 웨이브는 코디네이터 맵(3단계의 `--no-ticket-limit`)에서 쓴다.
+절차대로 한 티켓씩 민다. 웨이브를 매번 돌려 한 세션이 티켓을 여러 건 닫는 맵이면 3단계의
+`--no-ticket-limit` 으로 선언한다.
 
 🚨 **웨이브 폭·티켓 목록은 계획을 사용자에게 보이고 승인받은 뒤에 실행한다.** 팬아웃은 명시 승인 사항이다.
 `--dry-run` 은 orca 를 부르지 않고 승인에 보일 계획(JSON)만 낸다:
@@ -170,10 +171,12 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/wave.mjs" start {티켓}... --dry-run
 **대기**는 foreground sleep 이 아니라 우편함 대기다:
 
 ```bash
-orca orchestration check --wait --timeout-ms 900000 --json
+orca orchestration check --run {runId} [--ack {직전 deliveryId}] --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json
 ```
 
-워커의 `worker_done`·질문·에스컬레이션이 여기로 온다. 타임아웃이면 다시 부른다.
+워커의 `worker_done`·질문·에스컬레이션이 여기로 온다. `runId` 는 `start` 결과에 있다. 받은 배치는
+`--ack` 하기 전까지 다시 온다 — 다음 대기에 직전 `deliveryId` 를 `--ack` 로 실어 넘긴다. `--types` 에 없는
+이름(예: `ask`)은 `invalid_argument` 로 거부된다. 타임아웃이면 다시 부른다.
 
 **정산**은 티켓 하나씩이다. 먼저 판정만 받는다:
 
