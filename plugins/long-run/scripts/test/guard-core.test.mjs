@@ -10,9 +10,12 @@ import {
   contextTokensOf,
   countClosedSince,
   decide,
+  handoffClosedOf,
   isDelegatedToMod,
   ownership,
   readTranscriptTail,
+  STOP_PLACE_LIST,
+  ticketLimitOf,
 } from '../lib/guard-core.mjs';
 
 const marker = { epic: 'map-abcd' };
@@ -400,4 +403,47 @@ test('대기뿐이면 두 건을 닫았어도 인계가 아니라 질문 보고�
   const verdict = decide({ ...base, frontier: frontierOf([], ['map-abcd.3']), closedSinceSession: 2 });
   assert.match(verdict.reason, /모아 보고/);
   assert.doesNotMatch(verdict.reason, HANDING_OFF);
+});
+
+// --- 맵 단위로 끈 티켓 수 축: 코디네이터가 웨이브마다 여러 건을 닫는 맵 ---
+
+test('문턱은 마커가 정한다 — 옵션 없는 claim 은 2건, 끈 맵은 축이 없다', () => {
+  assert.equal(handoffClosedOf({ epic: 'map-abcd' }), HANDOFF_CLOSED_TICKETS);
+  assert.equal(handoffClosedOf({ epic: 'map-abcd', ticketLimit: false }), null);
+  assert.equal(handoffClosedOf(null), HANDOFF_CLOSED_TICKETS);
+});
+
+test('🚨 티켓 수 축을 끈 맵은 몇 건을 닫아도 그 축으로 넘기지 않는다', () => {
+  const verdict = decide({ ...base, closedSinceSession: 7, handoffClosed: null });
+  assert.doesNotMatch(verdict.reason, HANDING_OFF);
+  assert.match(verdict.reason, /하고 이어간다/);
+  assert.doesNotMatch(verdict.reason, /티켓 2건을 닫았다/);
+  assert.match(verdict.reason, /컨텍스트 50% 초과/);
+});
+
+test('끈 맵도 컨텍스트 50% 에서는 넘긴다 — 남는 축은 그것 하나다', () => {
+  const verdict = decide({ ...base, contextTokens: 600_000, closedSinceSession: 7, handoffClosed: null });
+  assert.match(verdict.reason, HANDING_OFF);
+});
+
+test('🚨 같은 맵을 다시 claim 하면 끈 축을 물려받는다 — 인계받은 세션이 옵션을 빠뜨려도 2건 되밂이 살아나지 않는다', () => {
+  const off = { epic: 'map-abcd', ticketLimit: false };
+  assert.equal(ticketLimitOf(off, 'map-abcd', []), false);
+  assert.equal(ticketLimitOf(off, 'map-abcd', ['--ticket-limit']), true);
+  assert.equal(ticketLimitOf(off, 'map-other', []), true);
+  assert.equal(ticketLimitOf(null, 'map-abcd', ['--no-ticket-limit']), false);
+  assert.equal(ticketLimitOf({ epic: 'map-abcd' }, 'map-abcd', []), true);
+});
+
+test('🚨 끈 맵에서 계측까지 죽으면 남은 축이 없다고 말한다 — 헌장의 대체 규칙으로 스스로 판정한다', () => {
+  const verdict = decide({ ...base, measured: false, closedSinceSession: 7, handoffClosed: null });
+  assert.match(verdict.reason, /계측 불가/);
+  assert.match(verdict.reason, /티켓 수 축을 껐다/);
+  assert.match(verdict.reason, /헌장/);
+});
+
+test('끈 맵의 멈춰도 되는 자리는 컨텍스트 축만 말한다 — 기본 문구는 헌장과 같은 그대로다', () => {
+  assert.match(STOP_PLACE_LIST('50%')[1], /티켓 2건을 닫았다 또는 컨텍스트 50% 초과/);
+  assert.doesNotMatch(STOP_PLACE_LIST('50%', null)[1], /티켓/);
+  assert.match(STOP_PLACE_LIST('50%', null)[1], /컨텍스트 50% 초과/);
 });

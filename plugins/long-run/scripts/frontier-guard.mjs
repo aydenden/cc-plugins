@@ -2,7 +2,10 @@
 /**
  * 프론티어 가드 — 진입점. 실측(파일·프로세스·stdin)만 여기 있고 판정은 `lib/guard-core.mjs` 가 한다.
  *
- *   node frontier-guard.mjs claim <epic>                    이 세션이 그 맵을 민다고 선언(주인이 된다)
+ *   node frontier-guard.mjs claim <epic> [--no-ticket-limit|--ticket-limit]
+ *                                                           이 세션이 그 맵을 민다고 선언(주인이 된다). `--no-ticket-limit`
+ *                                                           은 닫은 티켓 수로 인계를 되밀지 않는다(코디네이터 맵) —
+ *                                                           같은 맵을 다시 claim 하면 물려받고, `--ticket-limit` 으로만 다시 켠다
  *   node frontier-guard.mjs clear                           선언 해제(맵을 놓을 때. 인계할 때는 지우지 않는다)
  *   node frontier-guard.mjs epic                            이 worktree 에 선언된 맵 id 한 줄(없으면 빈 출력)
  *   node frontier-guard.mjs move <경로>                     선언을 다른 worktree 로 옮긴다(주인은 비운다)
@@ -27,9 +30,12 @@ import {
   contextTokensOf,
   countClosedSince,
   decide,
+  HANDOFF_RATIO,
+  handoffClosedOf,
   isDelegatedToMod,
   ownership,
   readTranscriptTail,
+  ticketLimitOf,
 } from './lib/guard-core.mjs';
 import { repoKeyOf, repoRootOf, stateRoot } from './lib/state-root.mjs';
 
@@ -163,8 +169,16 @@ if (command === 'claim') {
   // 주인 칸을 비우고 새 토큰의 해시만 남긴다 — 앞 주인은 이 순간 풀리고, 토큰 줄이 이 세션의
   // 트랜스크립트에 남아 다음 Stop 에서 이 세션이 주인이 된다(`ownership`).
   const token = newClaimToken();
-  writeMarker(MARKER, { epic: argument, worktree: repoRootOf(), claimedAt: new Date().toISOString(), claimHash: claimHashOf(token) });
+  const ticketLimit = ticketLimitOf(readJson(MARKER), argument, process.argv.slice(4));
+  writeMarker(MARKER, {
+    epic: argument,
+    worktree: repoRootOf(),
+    claimedAt: new Date().toISOString(),
+    claimHash: claimHashOf(token),
+    ...(ticketLimit ? {} : { ticketLimit: false }),
+  });
   console.log(`[frontier-guard] ${argument} 를 미는 세션으로 선언했다. 맵이 닫힐 때까지 이 세션의 멈춤만 막는다 — 같은 worktree 의 다른 세션은 판정되지 않는다.`);
+  if (!ticketLimit) console.log('[frontier-guard] 이 맵은 닫은 티켓 수로 인계를 되밀지 않는다 — 컨텍스트 축만 본다.');
   console.log(`[frontier-guard] 마커: ${MARKER}`);
   console.log(claimTokenLine(token));
 } else if (command === 'epic') {
@@ -211,9 +225,19 @@ if (command === 'claim') {
     owner = own.owner ? true : marker?.session?.id ? false : null;
   }
   const closedSinceSession = marker?.epic ? closedSinceOf(marker.epic, marker.session?.since, process.cwd()) : null;
-  const verdict = decide({ marker, ...measured, ...read, owner: owner !== false && owner !== null, closedSinceSession, stopHookActive: false });
+  const handoffClosed = handoffClosedOf(marker);
+  const verdict = decide({
+    marker,
+    ...measured,
+    ...read,
+    owner: owner !== false && owner !== null,
+    closedSinceSession,
+    handoffClosed,
+    stopHookActive: false,
+  });
+  const handoff = { closedTickets: handoffClosed, ratio: HANDOFF_RATIO };
   console.log(
-    JSON.stringify({ markerPath: MARKER, worktree: repoRootOf(), marker, owner, ...read, ...measured, closedSinceSession, verdict }, null, 2)
+    JSON.stringify({ markerPath: MARKER, worktree: repoRootOf(), marker, owner, ...read, ...measured, closedSinceSession, handoff, verdict }, null, 2)
   );
 } else if (command === '--hook') {
   try {
@@ -235,6 +259,7 @@ if (command === 'claim') {
       marker,
       ...measure(input.transcript_path),
       closedSinceSession: closedSinceOf(marker.epic, since, cwd),
+      handoffClosed: handoffClosedOf(marker),
       ...readFrontier(marker.epic, cwd),
       stopHookActive: input.stop_hook_active === true,
       isStopEvent: isStopEvent(input),
@@ -246,6 +271,6 @@ if (command === 'claim') {
   }
   process.exit(0);
 } else {
-  console.error('usage: node frontier-guard.mjs <claim <epic>|clear|epic|move <경로>|status [--session <id>] [트랜스크립트]|--hook>');
+  console.error('usage: node frontier-guard.mjs <claim <epic> [--no-ticket-limit|--ticket-limit]|clear|epic|move <경로>|status [--session <id>] [트랜스크립트]|--hook>');
   process.exit(1);
 }

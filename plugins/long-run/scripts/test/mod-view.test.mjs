@@ -170,6 +170,23 @@ test('주인인데 닫은 수를 모르면 모른다고 그린다', () => {
   );
 });
 
+// 코디네이터 맵은 티켓 수 축을 껐다 — 문턱이 없는 값에 문턱을 그리면 «인계할 때» 가 거짓으로 뜬다.
+const coordinator = { ...claimed, marker: { epic: 'map-abcd', ticketLimit: false }, owner: true };
+
+test('티켓 수 축을 끈 맵은 닫은 수만 그리고 그 수로 인계할 때를 붙이지 않는다', () => {
+  assert.equal(
+    statusLine({ ...coordinator, closedSinceSession: 5 }, usageAt(100_000)),
+    '🧭 [결제 모듈 이전] · 밀기 2 · 막힘 0 · 질문 0 · 닫음 5 · 컨텍스트 10%/50%'
+  );
+});
+
+test('티켓 수 축을 끈 맵은 닫은 수로 되밀지 않고 컨텍스트로만 넘긴다', () => {
+  const pushing = stopVerdict({ status: { ...coordinator, closedSinceSession: 5 }, usage: usageAt(100_000), stopHookActive: false });
+  assert.doesNotMatch(pushing.reason, HANDING_OFF);
+  const full = stopVerdict({ status: { ...coordinator, closedSinceSession: 5 }, usage: usageAt(600_000), stopHookActive: false });
+  assert.match(full.reason, HANDING_OFF);
+});
+
 // 상태줄의 숫자는 status 가 bd 를 여러 번 불러 낸다. 그래서 맵의 티켓이나 선언을 움직인 명령 뒤에만 다시 그린다.
 test('맵의 티켓이나 선언을 움직이는 셸 명령만 상태줄을 다시 그리게 한다', () => {
   for (const command of ['bd close map-abcd.9 --reason "x"', 'bd update map-abcd.9 --claim', 'bd create -t task --parent map-abcd', 'bd reopen map-abcd.9', 'node "/p/scripts/frontier-guard.mjs" claim map-abcd']) {

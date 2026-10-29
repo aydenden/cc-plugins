@@ -9,7 +9,7 @@
  * `node:` import 를 두지 않는다. 이 파일은 hooks module 이 import 하므로 mod 의 실행 환경에서 돌아야 한다.
  */
 
-import { HANDOFF_CLOSED_TICKETS, HANDOFF_RATIO, HANDOFF_SKILL, contextLimitOf, decide } from './guard-core.mjs';
+import { HANDOFF_RATIO, HANDOFF_SKILL, contextLimitOf, decide, handoffClosedOf } from './guard-core.mjs';
 
 /**
  * `frontier-guard.mjs status` 의 stdout 을 읽는다. 못 읽으면 null(«모름»)이고, 가드는 모를 때 통과시킨다.
@@ -82,12 +82,15 @@ export function statusLine(status, usage) {
   const { pushable = [], blocked = [], questions = [] } = status.frontier ?? {};
   parts.push(`밀기 ${count(pushable)}`, `막힘 ${count(blocked)}`, `질문 ${count(questions)}`);
   const closed = status.closedSinceSession;
+  const limit = handoffClosedOf(status.marker);
+  // 축을 끈 맵은 문턱 없이 센 값만 그린다 — 없는 문턱을 그리면 «인계할 때» 가 거짓으로 뜬다.
+  const threshold = limit == null ? '' : `/${limit}`;
   // 주인인데 못 셌으면 세션이 스스로 세야 한다 — 칸을 지우면 그 사실이 안 보인다.
-  if (typeof closed === 'number') parts.push(`닫음 ${closed}/${HANDOFF_CLOSED_TICKETS}`);
-  else if (status.owner === true) parts.push(`닫음 ?/${HANDOFF_CLOSED_TICKETS}`);
+  if (typeof closed === 'number') parts.push(`닫음 ${closed}${threshold}`);
+  else if (status.owner === true && limit != null) parts.push(`닫음 ?${threshold}`);
   const percent = usage?.context?.percent;
   parts.push(`컨텍스트 ${typeof percent === 'number' ? `${percent}%` : '?'}/${HANDOFF_RATIO * 100}%`);
-  const due = (typeof closed === 'number' && closed >= HANDOFF_CLOSED_TICKETS) || (typeof percent === 'number' && percent >= HANDOFF_RATIO * 100);
+  const due = (limit != null && typeof closed === 'number' && closed >= limit) || (typeof percent === 'number' && percent >= HANDOFF_RATIO * 100);
   if (due) parts.push('인계할 때');
   return parts.join(' · ');
 }
@@ -110,6 +113,7 @@ export function stopVerdict({ status, usage, stopHookActive }) {
     epicOpen: status?.epicOpen !== false,
     owner: status?.owner === undefined || status.owner === true,
     closedSinceSession: status?.closedSinceSession ?? null,
+    handoffClosed: handoffClosedOf(status?.marker),
     stopHookActive,
   });
 }

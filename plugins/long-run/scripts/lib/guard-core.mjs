@@ -39,6 +39,35 @@ export const HANDOFF_RATIO = 0.5;
  */
 export const HANDOFF_CLOSED_TICKETS = 2;
 
+/**
+ * 그 맵의 티켓 수 문턱. `claim --no-ticket-limit` 으로 선언한 맵(`ticketLimit: false`)은 `null` — 축이 없다.
+ *
+ * 코디네이터가 웨이브마다 워커의 티켓을 여러 건 닫는 맵에서는 «티켓 하나 = 세션의 40~50%» 산수가
+ * 성립하지 않는다(코디네이터는 판정만 한다). 그 맵에서는 컨텍스트 축 하나만 남는다.
+ *
+ * @param {{ticketLimit?: boolean} | null} marker
+ * @returns {number | null}
+ */
+export function handoffClosedOf(marker) {
+  return marker?.ticketLimit === false ? null : HANDOFF_CLOSED_TICKETS;
+}
+
+/**
+ * 새로 쓰는 마커의 티켓 수 축. 같은 맵의 마커가 축을 껐으면 물려받는다 — 인계받은 세션은 프롬프트의
+ * `claim <맵>` 을 그대로 부르므로, 옵션을 다시 붙이라고 기대하면 2건 되밂이 조용히 살아난다.
+ * 다시 켤 때만 `--ticket-limit` 을 준다.
+ *
+ * @param {{epic?: string, ticketLimit?: boolean} | null} existing 지금 이 worktree 의 마커
+ * @param {string} epic claim 하는 맵
+ * @param {string[]} flags claim 뒤의 인자
+ * @returns {boolean} 축이 켜져 있으면 `true`
+ */
+export function ticketLimitOf(existing, epic, flags) {
+  if (flags.includes('--ticket-limit')) return true;
+  if (flags.includes('--no-ticket-limit')) return false;
+  return !(existing?.epic === epic && existing.ticketLimit === false);
+}
+
 /** 인계를 지시할 때 부를 스킬. 문구를 여기 한 곳에 둬서 스킬 이름이 바뀔 때 갈라지지 않게 한다. */
 export const HANDOFF_SKILL = '/long-run:session-handoff';
 
@@ -66,15 +95,17 @@ const EXTERNAL_WRITES = '이슈 트래커·문서·push·외부 시스템';
  * 「묻지 않는다」로 되밀면 되돌리기 비싼 선택을 에이전트가 혼자 확정한다. 그래서 질문은 티켓으로
  * 주차하고, 무엇이 그 답을 기다리는지는 문장이 아니라 `bd dep` 으로 적는다 — 가드가 읽을 수 있는
  * 것은 데이터뿐이다. 갈림길과 국소 선택을 가르는 기준은 헌장이 소유한다.
+ *
+ * `handoffClosed` 가 `null` 인 맵(`handoffClosedOf`)은 인계 자리를 컨텍스트로만 말한다 — 헌장이 대조하는 것은 기본 문구다.
  */
-export const STOP_PLACE_LIST = (pct) => [
+export const STOP_PLACE_LIST = (pct, handoffClosed = HANDOFF_CLOSED_TICKETS) => [
   `맵을 닫았다`,
-  `이 세션이 티켓 ${HANDOFF_CLOSED_TICKETS}건을 닫았다 또는 컨텍스트 ${pct} 초과(그때는 \`${HANDOFF_SKILL}\`)`,
+  `${handoffClosed == null ? '' : `이 세션이 티켓 ${handoffClosed}건을 닫았다 또는 `}컨텍스트 ${pct} 초과(그때는 \`${HANDOFF_SKILL}\`)`,
   `승인이 필요한 바깥 쓰기(${EXTERNAL_WRITES})`,
   `주차한 질문에 막혀 밀 수 있는 티켓이 없을 때`,
 ];
 
-const STOP_PLACES = (pct) => `${STOP_PLACE_LIST(pct).join(' · ')}. ${PARKING_RULE}`;
+const STOP_PLACES = (pct, handoffClosed) => `${STOP_PLACE_LIST(pct, handoffClosed).join(' · ')}. ${PARKING_RULE}`;
 
 /** 갈림길에서 하는 일. 헌장의 같은 문단과 낱말까지 맞춘다. */
 export const PARKING_RULE =
@@ -217,8 +248,8 @@ export function countClosedSince(rows, since) {
  *   measured?: boolean,
  *   closedSinceSession?: number | null,
  *   handoffRatio?: number,
- *   handoffClosed?: number,
- * }} input `frontier` 가 null 이면 «모름» 이다 — bd 를 못 읽었다는 뜻이지 비었다는 뜻이 아니다.
+ *   handoffClosed?: number | null,
+ * }} input `handoffClosed` 가 `null` 이면 티켓 수 축이 없는 맵이다(`handoffClosedOf`). `frontier` 가 null 이면 «모름» 이다 — bd 를 못 읽었다는 뜻이지 비었다는 뜻이 아니다.
  *   `owner` 를 주지 않으면 주인 자리에서 본 판정이다. `measured` 가 거짓이면 `contextTokens` 는
  *   «못 쟀다» 는 뜻이지 «비었다» 가 아니다. `closedSinceSession` 의 `null` 도 «모름» 이라 문턱을 넘은 것으로 읽지 않는다.
  * @returns {{block: boolean, reason?: string, clear?: boolean, ratio: number}}
@@ -287,7 +318,7 @@ export function decide({
   });
 
   // 🚨 1차 축이다 — 계측기가 죽어도 서고, 창 크기가 바뀌어도 뜻이 안 변한다(머리말).
-  if (closedSinceSession != null && closedSinceSession >= handoffClosed) {
+  if (handoffClosed != null && closedSinceSession != null && closedSinceSession >= handoffClosed) {
     return handoff(`이 세션이 ${closedSinceSession}건을 닫았다(문턱 ${handoffClosed}건 — 티켓 하나가 세션의 40~50% 다).`);
   }
   if (measured && ratio >= handoffRatio) {
@@ -313,10 +344,15 @@ export function decide({
   const gauge = measured
     ? `컨텍스트는 ${pct} 라 아직 넘길 자리가 아니다`
     : `🚨 컨텍스트는 **계측 불가**다(잰 값이 없다) — 그 값으로 판정하지 않는다`;
+  // 끈 맵에서 계측까지 죽으면 남은 축이 없다 — 0% 를 여유로 읽지 않도록 헌장의 대체 규칙을 가리킨다.
   const counted =
-    closedSinceSession == null
-      ? `그리고 닫은 티켓 수도 모른다(bd 가 답을 못 했다) — 이 세션이 claim 뒤 닫은 수를 스스로 세어 판정한다`
-      : `잣대는 이 세션이 닫은 티켓 수다: 지금 ${closedSinceSession}/${handoffClosed}건`;
+    handoffClosed == null
+      ? measured
+        ? `이 맵은 티켓 수 축을 껐다(닫은 ${closedSinceSession ?? '?'}건) — 컨텍스트만 본다`
+        : `그리고 이 맵은 티켓 수 축을 껐다 — 남은 축이 없으니 헌장의 대체 규칙(인계 시점)으로 스스로 판정한다`
+      : closedSinceSession == null
+        ? `그리고 닫은 티켓 수도 모른다(bd 가 답을 못 했다) — 이 세션이 claim 뒤 닫은 수를 스스로 세어 판정한다`
+        : `잣대는 이 세션이 닫은 티켓 수다: 지금 ${closedSinceSession}/${handoffClosed}건`;
   const waitingParts = [questions.length && `질문 ${questions.length}건`, blocked.length && `막힌 티켓 ${blocked.length}건`].filter(Boolean);
   const parked = waitingParts.length ? `${waitingParts.join('·')}은 답을 기다리므로 건드리지 않는다. ` : '';
   return {
@@ -326,7 +362,7 @@ export function decide({
       `${marker.epic} 의 프론티어가 ${pushable.length}건 남았다(${pushable.join(', ')}). ${parked}` +
       `**곧장 다음 티켓을 \`bd update <id> --claim\` 하고 이어간다 — «다음으로 갈까요?» 라고 묻지 않는다.** ` +
       `${gauge}. ${counted}. 멈춰도 되는 자리는 넷뿐이다: ` +
-      `${STOP_PLACES(`${Math.round(handoffRatio * 100)}%`)}. ` +
+      `${STOP_PLACES(`${Math.round(handoffRatio * 100)}%`, handoffClosed)}. ` +
       `그 넷이 아니면 보고는 작업 사이가 아니라 세션 끝에 한 번 한다.`,
   };
 }

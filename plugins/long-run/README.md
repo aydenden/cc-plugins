@@ -110,6 +110,9 @@ mod 는 마커 경로와 프론티어를 직접 계산하지 않고 `frontier-gu
 ```bash
 # 이 세션이 그 맵을 민다고 선언 / 해제 / 지금 판정 보기
 node scripts/frontier-guard.mjs claim <epic>
+# 코디네이터 맵: 닫은 티켓 수 축을 끈다(재claim 이 물려받는다) / 다시 켠다
+node scripts/frontier-guard.mjs claim <epic> --no-ticket-limit
+node scripts/frontier-guard.mjs claim <epic> --ticket-limit
 node scripts/frontier-guard.mjs clear
 node scripts/frontier-guard.mjs status [--session <id>] [트랜스크립트]
 # 이 worktree 의 맵 id / 선언을 다른 worktree 로 옮기기(주인은 비운다 — 그곳에서 claim 해야 선다)
