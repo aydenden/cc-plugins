@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  ADVISORY_RATIO,
   CAPS,
   DEFAULTS,
   RECALL_CAPS,
@@ -38,26 +39,59 @@ const plainFiles = ['MEMORY.md', 'auth.md', 'build.md'];
 
 test('예산과 항목 상한은 하드캡에서 유도된다', () => {
   const limits = deriveLimits(cfg({}));
-  assert.equal(limits.bytes, Math.round(CAPS.bytes * 0.9));
-  assert.equal(limits.lines, Math.round(CAPS.lines * 0.9));
+  const h = DEFAULTS.headroom;
+  assert.equal(limits.bytes, Math.round(CAPS.bytes * h));
+  assert.equal(limits.lines, Math.round(CAPS.lines * h));
   assert.equal(limits.entryBytes, Math.round((limits.bytes / limits.lines) * DEFAULTS.entrySlack));
-  assert.equal(limits.topicBytes, Math.round(RECALL_CAPS.bytes * 0.9));
-  assert.equal(limits.topicLines, Math.round(RECALL_CAPS.lines * 0.9));
+  assert.equal(limits.topicBytes, Math.round(RECALL_CAPS.bytes * h));
+  assert.equal(limits.topicLines, Math.round(RECALL_CAPS.lines * h));
+});
+
+test('기본 예산은 claude 압축 권고 발동선 아래다', () => {
+  const limits = deriveLimits(cfg({}));
+  assert.ok(limits.bytes < CAPS.bytes * ADVISORY_RATIO);
+  assert.ok(limits.lines < CAPS.lines * ADVISORY_RATIO);
+});
+
+test('headroom 은 발동선을 넘길 수 없다', () => {
+  assert.equal(cfg({ headroom: 0.95 }).headroom, ADVISORY_RATIO);
+  const limits = deriveLimits(cfg({ headroom: 1 }));
+  assert.ok(limits.lines <= CAPS.lines * ADVISORY_RATIO);
 });
 
 test('headroom 을 조이면 세 한도가 함께 내려간다', () => {
   const tight = deriveLimits(cfg({ headroom: 0.5 }));
-  const loose = deriveLimits(cfg({ headroom: 0.9 }));
+  const loose = deriveLimits(cfg({ headroom: 0.8 }));
   assert.ok(tight.bytes < loose.bytes);
   assert.ok(tight.lines < loose.lines);
   assert.equal(tight.entryBytes, loose.entryBytes); // 비율이 같으므로 항목 상한은 유지된다
 });
 
+test('예산과 항목 상한을 절대값으로 줄 수 있다 — 바이트·줄이 비율 하나에 묶이지 않는다', () => {
+  const limits = deriveLimits(cfg({ budget: { bytes: 15000, lines: 155 }, entryMaxBytes: 120 }));
+  assert.equal(limits.bytes, 15000);
+  assert.equal(limits.lines, 155);
+  assert.equal(limits.entryBytes, 120);
+});
+
+test('절대 예산의 한 축만 주면 다른 축은 headroom 으로 유도된다', () => {
+  const limits = deriveLimits(cfg({ budget: { lines: 155 } }));
+  assert.equal(limits.lines, 155);
+  assert.equal(limits.bytes, Math.round(CAPS.bytes * DEFAULTS.headroom));
+});
+
+test('절대 예산도 발동선을 넘길 수 없다', () => {
+  const limits = deriveLimits(cfg({ budget: { bytes: 24000, lines: 190 } }));
+  assert.equal(limits.bytes, CAPS.bytes * ADVISORY_RATIO);
+  assert.equal(limits.lines, CAPS.lines * ADVISORY_RATIO);
+});
+
 test('범위 밖 설정은 기본값으로 되돌린다', () => {
-  assert.equal(cfg({ headroom: 5 }).headroom, 1);
   assert.equal(cfg({ headroom: 'x' }).headroom, DEFAULTS.headroom);
   assert.equal(cfg({ section: { min: 9, max: 2 } }).section, null);
   assert.equal(cfg(null).staleDays, DEFAULTS.staleDays);
+  assert.equal(cfg({ budget: { bytes: 'x' } }).budget, null);
+  assert.equal(cfg({ entryMaxBytes: -5 }).entryMaxBytes, null);
 });
 
 // --- 파싱 ---
@@ -272,8 +306,9 @@ test('같은 크기로 갈아끼우는 write 는 통과한다 — 1-in-1-out 이
 });
 
 test('한도를 넘겨 키우는 write 는 막는다', () => {
-  const near = `- ${'a'.repeat(100)}\n`.repeat(220); // 22,440B — 예산(22,500B) 바로 아래
-  const r = guardWrite({ tool: 'Edit', oldText: near, old_string: '', new_string: `- ${'b'.repeat(100)}\n` }, { config: cfg({}) });
+  const config = cfg({ budget: { bytes: 10200, lines: 150 } });
+  const near = `- ${'a'.repeat(100)}\n`.repeat(100); // 10,200B — 예산에 딱 닿는다
+  const r = guardWrite({ tool: 'Edit', oldText: near, old_string: '', new_string: `- ${'b'.repeat(100)}\n` }, { config });
   assert.equal(r.blocked, true);
   assert.ok(r.reasons.some((x) => x.includes('크기')));
 });

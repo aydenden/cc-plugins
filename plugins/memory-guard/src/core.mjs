@@ -12,12 +12,19 @@
  * - 관례: 섹션 크기, 토픽 선행 작성 강제. 프로젝트가 `.memory-guard.json` 으로
  *   선언할 때만 켠다 → 데이터로 둔다.
  *
- * 한도는 절대 상수가 아니라 하드캡에서 유도한다. 캡만이 사실이고 예산은 그로부터
- * 나온 여유분이다.
+ * 한도는 기본적으로 하드캡에서 유도한다. 캡과 압축 권고 발동선만이 사실이고 예산은
+ * 그 아래 남긴 여유분이다. 프로젝트가 절대값을 주면 그것을 쓰되 발동선은 못 넘는다.
  */
 
 /** claude 실행파일에 박힌 하드캡. 넘으면 인덱스가 잘려서 로드된다. */
 export const CAPS = { bytes: 25000, lines: 200 };
+
+/**
+ * claude 가 인덱스 압축 권고를 띄우기 시작하는 하드캡 대비 비율(실행파일 실측).
+ * 문구가 권하는 목표(0.7)가 아니라 발동선이다 — 목표를 예산으로 잡으면 필요 없는
+ * 지식까지 버리게 된다. 예산은 어떤 설정으로도 이 선을 넘지 않는다.
+ */
+export const ADVISORY_RATIO = 0.8;
 
 /**
  * CC 리콜이 토픽 파일 하나에서 보여주는 한도(claude 실행파일 상수, 2.1.270 확인).
@@ -26,10 +33,17 @@ export const CAPS = { bytes: 25000, lines: 200 };
 export const RECALL_CAPS = { bytes: 4096, lines: 200 };
 
 export const DEFAULTS = {
-  /** 하드캡 대비 예산 비율. 남는 10% 가 "세션 도중 몇 줄 더 써도 캡에 안 닿는" 여유다. */
-  headroom: 0.9,
+  /** 하드캡 대비 예산 비율. 발동선(0.8)과의 차이가 "세션 도중 몇 줄 더 써도 권고가 안 뜨는" 여유다. */
+  headroom: 0.75,
   /** 항목 상한 = 평균 허용 줄 × 이 배수. 평균보다 길어도 되지만 몇 배까지냐를 정한다. */
   entrySlack: 1.4,
+  /**
+   * `{bytes?,lines?}` 절대 예산. 준 축은 headroom 유도를 대신한다 — 실사용 줄당 바이트가
+   * 캡의 비율(125B)과 다르면 한 비율로 묶인 두 축 중 하나는 닿지 않는 허수가 된다.
+   */
+  budget: null,
+  /** 항목 상한 절대값(B). 주면 entrySlack 유도를 대신한다. */
+  entryMaxBytes: null,
   staleDays: 90,
   /** `{min,max}` 를 주면 섹션 크기 검사가 켜진다. 프로젝트 관례라 기본은 꺼짐. */
   section: null,
@@ -56,6 +70,15 @@ const clamp = (v, lo, hi, fallback) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
 
 /**
+ * 절대값 설정의 하한. 하한으로 끌어올리지 않고 무시하는 이유: 오타(`-5`, `0`)를 하한으로
+ * 올리면 모든 write 가 막힌다. 무시하면 유도값으로 돌아갈 뿐이다.
+ */
+const ABSOLUTE_FLOOR = { bytes: 1000, lines: 10, entryBytes: 20 };
+
+const absolute = (v, lo, hi) =>
+  typeof v === 'number' && Number.isFinite(v) && v >= lo ? Math.min(hi, Math.round(v)) : null;
+
+/**
  * 사용자 설정을 기본값과 합친다. 범위를 벗어난 값은 조용히 되돌린다 —
  * 설정 오타 하나로 가드가 전부 꺼지거나 모든 write 가 막히면 안 된다.
  *
@@ -71,9 +94,19 @@ export function resolveConfig(raw = {}) {
           max: clamp(src.section.max, 1, 100, 8),
         }
       : null;
+  const ceiling = advisoryLimits();
+  const budget =
+    src.budget && typeof src.budget === 'object'
+      ? {
+          bytes: absolute(src.budget.bytes, ABSOLUTE_FLOOR.bytes, ceiling.bytes),
+          lines: absolute(src.budget.lines, ABSOLUTE_FLOOR.lines, ceiling.lines),
+        }
+      : null;
   return {
-    headroom: clamp(src.headroom, 0.3, 1, DEFAULTS.headroom),
+    headroom: clamp(src.headroom, 0.3, ADVISORY_RATIO, DEFAULTS.headroom),
     entrySlack: clamp(src.entrySlack, 1, 10, DEFAULTS.entrySlack),
+    budget: budget && (budget.bytes !== null || budget.lines !== null) ? budget : null,
+    entryMaxBytes: absolute(src.entryMaxBytes, ABSOLUTE_FLOOR.entryBytes, CAPS.bytes),
     staleDays: clamp(src.staleDays, 1, 3650, DEFAULTS.staleDays),
     section: section && section.min <= section.max ? section : null,
     requireTopicFirst: src.requireTopicFirst === true,
@@ -81,20 +114,27 @@ export function resolveConfig(raw = {}) {
   };
 }
 
+/** 압축 권고가 뜨는 크기 — 어떤 예산도 넘지 못하는 천장. */
+const advisoryLimits = () => ({
+  bytes: Math.floor(CAPS.bytes * ADVISORY_RATIO),
+  lines: Math.floor(CAPS.lines * ADVISORY_RATIO),
+});
+
 /**
- * 예산과 항목 상한을 하드캡에서 유도한다.
+ * 예산과 항목 상한을 정한다. 절대값이 있으면 그것을, 없으면 하드캡에서 유도한다.
  *
- * 항목 상한이 "평균 허용 줄 × slack" 인 이유: 절대 문자 수로 두면 축이 어긋난다.
- * 250자 상한은 한글에서 최대 750B 로, 줄당 평균 허용치의 6배인데도 통과했다 —
- * 크기 캡이 항상 먼저 걸려 한 번도 구속하지 않는 죽은 규칙이었다.
+ * 항목 상한의 축이 문자가 아니라 바이트인 이유: 250자 상한은 한글에서 최대 750B 로,
+ * 줄당 평균 허용치의 6배인데도 통과했다 — 크기 캡이 항상 먼저 걸려 한 번도 구속하지
+ * 않는 죽은 규칙이었다.
  */
 export function deriveLimits(config = DEFAULTS) {
-  const bytes = Math.round(CAPS.bytes * config.headroom);
-  const lines = Math.round(CAPS.lines * config.headroom);
+  const ceiling = advisoryLimits();
+  const bytes = config.budget?.bytes ?? Math.min(ceiling.bytes, Math.round(CAPS.bytes * config.headroom));
+  const lines = config.budget?.lines ?? Math.min(ceiling.lines, Math.round(CAPS.lines * config.headroom));
   return {
     bytes,
     lines,
-    entryBytes: Math.round((bytes / lines) * config.entrySlack),
+    entryBytes: config.entryMaxBytes ?? Math.round((bytes / lines) * config.entrySlack),
     topicBytes: Math.round(RECALL_CAPS.bytes * config.headroom),
     topicLines: Math.round(RECALL_CAPS.lines * config.headroom),
   };
