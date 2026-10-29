@@ -177,6 +177,7 @@ const ENTRY = /^\s*[-*]\s+/;
 const HEADING = /^(#{2,6})\s+(.*)$/;
 const MD_LINK = /\]\(\s*([^)\s#]+\.md)(?:#[^)]*)?\s*\)/g;
 const WIKI_LINK = /\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]/g;
+const HEADING_FILE = /^(\S+\.md)(?=\s|$)/;
 
 /** 본문에서 내부 md 링크와 wikilink 를 뽑는다. 외부·절대 경로는 우리 소관이 아니다. */
 export function extractLinks(text) {
@@ -194,8 +195,9 @@ export function extractLinks(text) {
 /**
  * 인덱스를 항목·섹션·링크로 나눈다.
  *
- * 섹션의 토픽 식별자는 헤더 안의 md 링크를 먼저 쓰고, 없으면 헤더 문구를 쓴다.
- * 특정 헤더 포맷을 요구하지 않으므로 어느 인덱스에도 붙는다.
+ * 섹션의 토픽 식별자는 헤더 안의 md 링크를 먼저 쓰고, 없으면 헤더가 파일명으로 시작할 때
+ * 그 파일명(`plainFile`), 그것도 아니면 헤더 문구를 쓴다. 특정 헤더 포맷을 요구하지 않으므로
+ * 어느 인덱스에도 붙는다.
  */
 export function parseIndex(text) {
   const lines = splitLines(text);
@@ -208,8 +210,11 @@ export function parseIndex(text) {
     if (heading) {
       const title = heading[2].trim();
       const inHeader = extractLinks(title);
+      const linked = inHeader.md[0] ?? inHeader.wiki[0];
+      const plainFile = linked ? null : (HEADING_FILE.exec(title)?.[1] ?? null);
       sections.push({
-        topic: inHeader.md[0] ?? inHeader.wiki[0] ?? title,
+        topic: linked ?? plainFile ?? title,
+        plainFile,
         title,
         line,
         entries: [],
@@ -316,6 +321,19 @@ export function auditIndex(text, opts = {}) {
   for (const name of parsed.links.wiki) {
     if (!linkResolves(name, ctx)) {
       findings.push(finding('broken-wikilink', `${INDEX_BASENAME} -> [[${name}]] — 대상 파일이 없다`, { target: name }));
+    }
+  }
+
+  // 헤더가 링크 대신 파일명을 평문으로 적는 인덱스에서는 이것이 "토픽 먼저" 의 유일한 검사다.
+  // 링크로 적힌 헤더는 위의 broken-link 가 이미 잡는다.
+  for (const section of parsed.sections) {
+    if (section.plainFile && !linkResolves(section.plainFile, ctx)) {
+      findings.push(
+        finding('missing-topic', `${section.plainFile} — 섹션 헤더가 가리키는 토픽 파일이 없다. 토픽 파일을 먼저 쓴다`, {
+          line: section.line,
+          target: section.plainFile,
+        }),
+      );
     }
   }
 
@@ -631,6 +649,7 @@ export function renderCheck(memoryDir, findings) {
   out.push('  - missing-description   : 이 파일이 답하는 질문을 한 줄 description 으로 단다');
   out.push('  - section-too-big       : 병합·정리가 먼저, 그래도 크면 독립 사실 파일로');
   out.push('  - broken-link/wikilink  : 링크를 고치거나 죽은 참조를 지운다');
+  out.push('  - missing-topic         : 헤더가 가리키는 토픽 파일을 쓰거나, 그 섹션을 맞는 토픽으로 옮긴다');
   out.push('  - orphan-topic          : 인덱스에 한 줄로 올리거나, 가치가 없으면 지운다');
   out.push('  - stale-date            : 근거를 확인하고 유지 / 갱신 / 삭제');
   out.push('  CC 는 하위 폴더까지 메모리로 읽는다 — archive/ 로 옮겨도 리콜 후보에서 빠지지 않는다.');

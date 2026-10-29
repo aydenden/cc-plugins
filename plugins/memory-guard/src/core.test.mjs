@@ -112,6 +112,14 @@ test('헤더 포맷을 가정하지 않는다 — 링크가 있으면 토픽, �
   assert.equal(parsed.sections[0].entries.length, 1);
 });
 
+test('헤더가 링크 없이 파일명으로 시작하면 그 파일명이 토픽이다', () => {
+  const parsed = parseIndex(['## auth.md — 로그인', '- a', '## auth.md는 아니다', '- b'].join('\n'));
+  assert.deepEqual(
+    parsed.sections.map((s) => s.topic),
+    ['auth.md', 'auth.md는 아니다'],
+  );
+});
+
 test('링크 추출은 내부 md 링크와 wikilink 만 본다', () => {
   const links = extractLinks('[a](a.md) [b](https://x/b.md) [c](/abs/c.md) [[slug]] [[s|별칭]]');
   assert.deepEqual(links.md, ['a.md']);
@@ -228,6 +236,27 @@ test('같은 토픽을 두 섹션이 가리키면 중복이다', () => {
   const text = ['## [a](auth.md)', '- 1', '- 2', '## [a2](auth.md)', '- 3', '- 4'].join('\n');
   const r = auditIndex(text, { files: plainFiles, config: cfg({ section: { min: 1, max: 8 } }) });
   assert.ok(kinds(r).includes('duplicate-topic'));
+});
+
+test('헤더에 파일명만 적는 인덱스도 같은 파일명의 두 섹션을 중복으로 잡는다', () => {
+  const text = ['## auth.md — 로그인', '- 1', '## auth.md — 다른 설명', '- 2'].join('\n');
+  const r = auditIndex(text, { files: plainFiles, config: cfg({ section: { min: 1, max: 8 } }) });
+  assert.ok(kinds(r).includes('duplicate-topic'));
+});
+
+test('헤더가 평문으로 가리키는 토픽 파일이 없으면 잡는다 — 토픽 먼저', () => {
+  const text = ['## auth.md — 로그인', '- a', '## gone.md — 아직 없음', '- b', '## 그냥 제목', '- c'].join('\n');
+  const r = auditIndex(text, { files: plainFiles, config: cfg({}) });
+  assert.deepEqual(
+    r.findings.filter((f) => f.kind === 'missing-topic').map((f) => f.target),
+    ['gone.md'],
+  );
+});
+
+test('헤더 링크가 깨진 섹션은 broken-link 로만 한 번 잡는다', () => {
+  const r = auditIndex('## [g](gone.md)\n- a', { files: plainFiles, config: cfg({}) });
+  assert.equal(r.findings.filter((f) => f.kind === 'missing-topic').length, 0);
+  assert.ok(kinds(r).includes('broken-link'));
 });
 
 test('build.md 가 인덱스에 없으면 고아로만 잡히고 링크는 멀쩡하다', () => {
