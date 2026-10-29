@@ -1,0 +1,47 @@
+{
+  "id": "e46a279f-fccf-4c56-be2a-f9b23b0762aa",
+  "ok": true,
+  "result": {
+    "dispatch": {
+      "id": "ctx_e669745663fb",
+      "runId": "run_fb4934954c3b",
+      "taskId": "task_0c57bb04032e",
+      "status": "completed",
+      "failureCount": 0,
+      "lastFailure": null,
+      "completedAt": "2026-10-29T05:59:53.261Z"
+    },
+    "worker": {
+      "dispatchId": "ctx_e669745663fb",
+      "state": "succeeded",
+      "stage": "settled",
+      "worktreeId": "a11de280-7955-44a0-a6aa-0dc4628ab0b8::C:/dev/cc-plugins",
+      "agentTerminalHandle": "term_d80009ea-bb98-4c23-bc4b-6c86e7617cbd"
+    },
+    "projection": {
+      "dispatchId": "ctx_e669745663fb",
+      "runId": "run_fb4934954c3b",
+      "workspace": { "id": "a11de280-7955-44a0-a6aa-0dc4628ab0b8::C:/dev/cc-plugins", "kind": "folder_or_worktree" },
+      "stage": { "worker": "succeeded", "dispatch": "completed", "detail": "settled", "activity": "unknown" },
+      "outcome": "succeeded",
+      "liveness": { "verdict": "exited", "source": "resource_release" },
+      "resource": {
+        "state": "released",
+        "id": "wtr_0f15ea6c7522",
+        "ownerDispatchId": "ctx_e669745663fb",
+        "releaseState": "released",
+        "terminalState": "released"
+      },
+      "nextAction": { "kind": "none", "argv": [] }
+    },
+    "terminal": {
+      "handle": "term_d80009ea-bb98-4c23-bc4b-6c86e7617cbd",
+      "worktreeId": "a11de280-7955-44a0-a6aa-0dc4628ab0b8::C:/dev/cc-plugins",
+      "worktreePath": "C:/dev/cc-plugins",
+      "branch": "refs/heads/main"
+    }
+  },
+  "_meta": {
+    "runtimeId": "35409841-1e8d-4315-93db-245d502f8c71"
+  }
+}

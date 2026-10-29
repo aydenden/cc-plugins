@@ -34,11 +34,16 @@ test('wave 는 정산 안 된 웨이브의 Run id 한 줄을 내고, 웨이브�
   assert.equal(guard('claim', 'map-x').code, 0);
   assert.equal(guard('wave').out, '');
 
-  assert.equal(guard('wave-begin', 'run_abc', 'map-x.1=ctx_1', 'map-x.2=ctx_2').code, 0);
+  assert.equal(guard('wave-begin', 'run_abc', 'map-x.1=ctx_1=repo::C:/b/wave-1', 'map-x.2=ctx_2').code, 0);
   assert.equal(guard('wave').out, 'run_abc');
+  assert.deepEqual(JSON.parse(guard('wave', '--json').out).tickets, [
+    { id: 'map-x.1', dispatchId: 'ctx_1', worktreeId: 'repo::C:/b/wave-1' },
+    { id: 'map-x.2', dispatchId: 'ctx_2' },
+  ]);
 
   guard('wave-settle', 'map-x.1');
   assert.equal(guard('wave').out, 'run_abc');
   guard('wave-settle', 'map-x.2');
   assert.equal(guard('wave').out, '');
+  assert.equal(guard('wave', '--json').out, '');
 });

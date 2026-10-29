@@ -15,6 +15,7 @@ export const REQUIRED_CAPABILITIES = {
   'orchestration run-create': ['objective'],
   'orchestration worker-start': ['spec', 'task-title', 'worktree', 'name', 'base-branch', 'agent', 'model', 'run'],
   'orchestration check': ['wait', 'types', 'timeout-ms', 'ack'],
+  'orchestration worker-show': ['dispatch'],
   'orchestration worker-release': ['dispatch'],
   'orchestration worker-list': ['run', 'terminal-state'],
   'worktree show': ['worktree'],

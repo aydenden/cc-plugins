@@ -1,7 +1,8 @@
 {
   "schemaVersion": 1,
-  "commandCount": 8,
+  "commandCount": 9,
   "commands": [
+    { "command": "orchestration worker-show", "path": ["orchestration", "worker-show"], "flags": ["help", "json", "pairing-code", "environment", "dispatch"] },
     { "command": "orchestration worker-list", "path": ["orchestration", "worker-list"], "flags": ["help", "json", "pairing-code", "environment", "run", "terminal-state", "include-remote", "cursor", "limit"] },
     { "command": "orchestration check", "path": ["orchestration", "check"], "flags": ["help", "json", "pairing-code", "environment", "terminal", "run", "ack", "unread", "peek", "all", "types", "format", "wait", "timeout-ms", "retry-request"] },
     { "command": "orchestration run-create", "path": ["orchestration", "run-create"], "flags": ["help", "json", "pairing-code", "environment", "objective", "from", "retry-request"] },

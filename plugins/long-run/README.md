@@ -125,6 +125,9 @@ node scripts/frontier-guard.mjs wave-settle <티켓>
 # 승인받은 티켓마다 base 안에 하위 worktree(wave-<티켓>)를 orca 로 만들어 워커를 띄우고 wave-begin 까지 한다.
 # --dry-run 은 orca 를 부르지 않고 승인에 보일 계획 JSON 만 낸다. 시작 전에 orca 명령 스키마를 대조한다
 node scripts/wave.mjs start <티켓>... [--run <runId>] [--base-branch <ref>] [--model <id>] [--dry-run]
+# 워커 하나의 판정(merge·park·wait·refuse)을 worker-show 영수증·시험 병합으로 낸다. 코디네이터가 그 worktree 에서
+# 검증한 뒤 --apply 로 병합·release·worktree rm·wave-settle 을 한다(검증 실패면 --apply --park — worktree 는 남긴다)
+node scripts/wave.mjs settle <티켓> [--apply] [--park] [--message <병합 메시지>]
 
 # 인계 문서 경로 할당 → 문서를 쓴 뒤 → 넘기고 빠진다
 node scripts/handoff.mjs allocate --slug <슬러그>
