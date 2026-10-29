@@ -9,7 +9,7 @@
  * `node:` import 를 두지 않는다. 이 파일은 hooks module 이 import 하므로 mod 의 실행 환경에서 돌아야 한다.
  */
 
-import { HANDOFF_RATIO, HANDOFF_SKILL, contextLimitOf, decide, handoffClosedOf } from './guard-core.mjs';
+import { HANDOFF_RATIO, HANDOFF_SKILL, contextLimitOf, decide, handoffClosedOf, pendingWave } from './guard-core.mjs';
 
 /**
  * `frontier-guard.mjs status` 의 stdout 을 읽는다. 못 읽으면 null(«모름»)이고, 가드는 모를 때 통과시킨다.
@@ -81,6 +81,8 @@ export function statusLine(status, usage) {
   const count = (ids) => (status.frontier ? ids.length : '?');
   const { pushable = [], blocked = [], questions = [] } = status.frontier ?? {};
   parts.push(`밀기 ${count(pushable)}`, `막힘 ${count(blocked)}`, `질문 ${count(questions)}`);
+  const inFlight = pendingWave(status.marker).length;
+  if (inFlight) parts.push(`웨이브 ${inFlight}건 대기`);
   const closed = status.closedSinceSession;
   const limit = handoffClosedOf(status.marker);
   // 축을 끈 맵은 문턱 없이 센 값만 그린다 — 없는 문턱을 그리면 «인계할 때» 가 거짓으로 뜬다.

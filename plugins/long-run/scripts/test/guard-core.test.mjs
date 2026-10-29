@@ -5,6 +5,7 @@ import {
   HANDOFF_CLOSED_TICKETS,
   HANDOFF_RATIO,
   MOD_FLAG,
+  beginWave,
   classifyFrontier,
   contextLimitOf,
   contextTokensOf,
@@ -14,9 +15,13 @@ import {
   handoffClosedOf,
   isDelegatedToMod,
   ownership,
+  parseWaveArgs,
+  pendingWave,
   readTranscriptTail,
+  settleWave,
   STOP_PLACE_LIST,
   ticketLimitOf,
+  waveCarriedBy,
 } from '../lib/guard-core.mjs';
 
 const marker = { epic: 'map-abcd' };
@@ -478,4 +483,79 @@ test('끈 맵의 멈춰도 되는 자리는 컨텍스트 축만 말한다 — �
   assert.match(STOP_PLACE_LIST('50%')[1], /티켓 2건을 닫았다 또는 컨텍스트 50% 초과/);
   assert.doesNotMatch(STOP_PLACE_LIST('50%', null)[1], /티켓/);
   assert.match(STOP_PLACE_LIST('50%', null)[1], /컨텍스트 50% 초과/);
+});
+
+// --- 웨이브 ---
+
+const waving = beginWave(marker, {
+  runId: 'run_1',
+  startedAt: '2026-10-29T06:00:00.000Z',
+  tickets: [
+    { id: 'map-abcd.9', dispatchId: 'ctx_a', worktree: 'id:repo::C:/w/a' },
+    { id: 'map-abcd.11', dispatchId: 'ctx_b' },
+  ],
+});
+
+test('웨이브를 시작하면 마커에 run 과 티켓별 dispatch 가 실리고, 원래 마커 칸은 그대로다', () => {
+  const withOwner = { ...marker, session: { id: 's1', since: 'x' }, ticketLimit: false };
+  const next = beginWave(withOwner, { runId: 'run_1', startedAt: 't', tickets: [{ id: 'a', dispatchId: 'd', branch: 'b' }] });
+  assert.deepEqual(next.session, withOwner.session);
+  assert.equal(next.ticketLimit, false);
+  assert.deepEqual(next.wave, { runId: 'run_1', startedAt: 't', tickets: [{ id: 'a', dispatchId: 'd', branch: 'b' }] });
+  assert.equal(withOwner.wave, undefined);
+});
+
+test('정산한 티켓은 웨이브에서 빠지고, 마지막 티켓이 빠지면 웨이브 칸이 사라진다', () => {
+  const one = settleWave(waving, 'map-abcd.9');
+  assert.deepEqual(pendingWave(one).map((t) => t.id), ['map-abcd.11']);
+  assert.equal(one.wave.runId, 'run_1');
+  const none = settleWave(one, 'map-abcd.11');
+  assert.equal('wave' in none, false);
+  assert.deepEqual(pendingWave(none), []);
+  assert.equal(settleWave(marker, 'x'), marker);
+});
+
+test('웨이브 인자는 <runId> <티켓>=<dispatch>... 꼴이다 — 틀린 꼴은 이유와 함께 거른다', () => {
+  assert.deepEqual(parseWaveArgs(['run_1', 'map.9=ctx_a', 'map.11=ctx_b']), {
+    runId: 'run_1',
+    tickets: [
+      { id: 'map.9', dispatchId: 'ctx_a' },
+      { id: 'map.11', dispatchId: 'ctx_b' },
+    ],
+  });
+  assert.match(parseWaveArgs([]).error, /runId/);
+  assert.match(parseWaveArgs(['run_1']).error, /티켓/);
+  assert.match(parseWaveArgs(['run_1', 'map.9']).error, /map\.9/);
+  assert.match(parseWaveArgs(['run_1', 'map.9=a', 'map.9=b']).error, /중복/);
+});
+
+test('🚨 웨이브가 돌고 있으면 그 티켓을 claim 하라고 하지 않고, 워커의 보고를 기다리라고 되민다', () => {
+  const verdict = decide({ ...base, marker: waving });
+  assert.equal(verdict.block, true);
+  assert.match(verdict.reason, /check --wait/);
+  assert.match(verdict.reason, /run_1/);
+  assert.match(verdict.reason, /map-abcd\.9/);
+  assert.match(verdict.reason, /wave-settle/);
+  assert.doesNotMatch(verdict.reason, /bd update <id> --claim/);
+});
+
+test('웨이브는 bd 를 못 읽어도 마커만으로 기다리라고 말한다 — 워커가 도는 동안 가드가 사라지면 안 된다', () => {
+  assert.equal(decide({ ...base, marker: waving, frontier: null }).block, true);
+});
+
+test('웨이브가 돌아도 두 번째 멈춤과 주인 아닌 세션은 통과시킨다', () => {
+  assert.equal(decide({ ...base, marker: waving, stopHookActive: true }).block, false);
+  assert.equal(decide({ ...base, marker: waving, owner: false }).block, false);
+});
+
+test('🚨 같은 맵을 다시 claim 해도 웨이브를 물려받는다 — 인계받은 코디네이터가 나간 워커를 잃으면 안 된다', () => {
+  assert.deepEqual(waveCarriedBy(waving, 'map-abcd'), { wave: waving.wave });
+  assert.deepEqual(waveCarriedBy(waving, 'map-other'), {});
+  assert.deepEqual(waveCarriedBy(marker, 'map-abcd'), {});
+  assert.deepEqual(waveCarriedBy(null, 'map-abcd'), {});
+});
+
+test('웨이브가 끝나면 평소 판정으로 돌아간다', () => {
+  const settled = settleWave(settleWave(waving, 'map-abcd.9'), 'map-abcd.11');
+  assert.match(decide({ ...base, marker: settled }).reason, /bd update <id> --claim/);
 });

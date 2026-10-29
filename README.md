@@ -91,7 +91,7 @@ wf는 세션 안에 끼어들지 않는다. wf가 설계해 만든 플러그인�
 - 캡처는 사용자가 부르지만(커맨드), 적재 규칙은 볼트에 쓸 때마다 적용되고(스킬), 정비와 커밋은 자동으로 돈다(설정 훅). 그래서 확장점 셋을 다 쓴다
 - 볼트의 규칙은 플러그인이 아니라 볼트 루트의 `SCHEMA.md`가 갖는다
 
-### [long-run](./plugins/long-run) · v0.6.0
+### [long-run](./plugins/long-run) · v0.7.0
 **여러 세션에 걸치는 작업을 끝까지 민다.** 목표를 맵([bd](https://github.com/steveyegge/beads)의 epic)으로 세우고, 맵이 열린 채 멈추려는 세션을 한 번 되민다.
 
 ![long-run이 상태줄에 띄운 맵 상태](./docs/images/long-run.png)

@@ -118,6 +118,9 @@ node scripts/frontier-guard.mjs status [--session <id>] [트랜스크립트]
 # 이 worktree 의 맵 id / 선언을 다른 worktree 로 옮기기(주인은 비운다 — 그곳에서 claim 해야 선다)
 node scripts/frontier-guard.mjs epic
 node scripts/frontier-guard.mjs move <worktree 경로>
+# 워커에게 넘긴 티켓을 적는다(정산 전까지 가드가 보고를 기다리라고 되민다) / 정산한 티켓을 뺀다
+node scripts/frontier-guard.mjs wave-begin <runId> <티켓>=<dispatch>...
+node scripts/frontier-guard.mjs wave-settle <티켓>
 
 # 인계 문서 경로 할당 → 문서를 쓴 뒤 → 넘기고 빠진다
 node scripts/handoff.mjs allocate --slug <슬러그>

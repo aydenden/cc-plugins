@@ -14,6 +14,7 @@
  * | 컨텍스트가 얼마나 찼는가 | 세션이 잰 값(mod), 없으면 트랜스크립트의 마지막 `usage`. 못 재면 «계측 불가» |
  * | 프론티어에 지금 밀 수 있는 것이 있는가 | 열린 자식(`bd list --parent`)을 `bd ready` 와 `human` 라벨로 가른 것. 못 읽으면 «모름» |
  * | 맵이 닫혔는가 | `bd show <epic>` 의 status — 프론티어가 빈 것만으로는 선언을 지우지 않는다 |
+ * | 워커에게 나간 웨이브가 있는가 | 마커의 `wave`(`wave-begin` 이 쓴다). 있으면 다른 축보다 먼저 «보고를 기다리라» 로 되민다 |
  *
  * 🚨 **같은 worktree 안에서는 주인 세션 하나만 판정된다**(`ownership`). 맵이 도는 worktree 에서
  * 다른 일로 연 세션까지 «프론티어를 밀라» 로 되밀리면 안 된다. 주인은 마커의 `session.id` 이고,
@@ -249,6 +250,79 @@ export function countClosedSince(rows, since) {
   return rows.filter((r) => r?.status === 'closed' && Date.parse(r.closed_at) >= from).length;
 }
 
+// --- 웨이브 ---
+
+/**
+ * 웨이브를 연 마커. 코디네이터가 티켓을 하위 worktree 워커에 넘긴 뒤, 그 티켓들은 bd 에서 이 세션이
+ * claim 한 채(in_progress)로 남는다 — 가드가 그것을 «밀 수 있는 것» 으로 읽어 다시 claim 하라고 되밀지
+ * 않게, 무엇이 누구에게 나가 있는지를 마커에 적는다. 워커 세션은 하위 worktree 라 마커 키가 달라
+ * 이 가드에 판정되지 않으므로, 가드가 볼 것은 코디네이터뿐이다.
+ *
+ * @param {object} marker 지금 마커. 고치지 않고 새 객체를 돌려준다
+ * @param {{runId: string, startedAt: string, tickets: {id: string, dispatchId: string}[]}} wave
+ *   티켓 행의 다른 칸(worktree·branch 등)은 그대로 싣는다 — 정산하는 쪽이 읽는다
+ * @returns {object}
+ */
+export function beginWave(marker, { runId, startedAt, tickets }) {
+  return { ...marker, wave: { runId, startedAt, tickets: tickets.map((t) => ({ ...t })) } };
+}
+
+/**
+ * 새로 쓰는 마커가 물려받을 웨이브. claim 은 마커를 새로 쓰는데, 같은 맵의 인계에서 웨이브를 버리면
+ * 나간 워커의 보고를 아무도 기다리지 않는다. 다른 맵이면 물려받지 않는다.
+ *
+ * @returns {{wave?: object}} 마커에 펼쳐 넣을 칸
+ */
+export const waveCarriedBy = (existing, epic) => (existing?.epic === epic && pendingWave(existing).length ? { wave: existing.wave } : {});
+
+/** 아직 정산하지 않은 웨이브 티켓. 웨이브가 없으면 빈 배열. */
+export const pendingWave = (marker) => (Array.isArray(marker?.wave?.tickets) ? marker.wave.tickets : []);
+
+/**
+ * 그 티켓을 웨이브에서 뺀다. 마지막 티켓이 빠지면 웨이브 칸을 지운다 — 빈 웨이브를 남기면 «기다릴 것이
+ * 없는데 기다리라» 가 된다. 웨이브에 없는 티켓이면 마커를 그대로 돌려준다.
+ */
+export function settleWave(marker, ticketId) {
+  const tickets = pendingWave(marker);
+  if (!tickets.some((t) => t.id === ticketId)) return marker;
+  const rest = tickets.filter((t) => t.id !== ticketId);
+  const { wave, ...without } = marker;
+  return rest.length ? { ...without, wave: { ...wave, tickets: rest } } : without;
+}
+
+/**
+ * `wave-begin <runId> <티켓>=<dispatch>...` 의 인자.
+ *
+ * @param {string[]} args
+ * @returns {{runId: string, tickets: {id: string, dispatchId: string}[]} | {error: string}}
+ */
+export function parseWaveArgs(args) {
+  const [runId, ...pairs] = args;
+  if (!runId) return { error: 'runId 가 없다 — wave-begin <runId> <티켓>=<dispatch>...' };
+  if (pairs.length === 0) return { error: '티켓이 없다 — <티켓>=<dispatch> 를 하나 이상 준다' };
+  const tickets = [];
+  for (const pair of pairs) {
+    const [id, dispatchId, extra] = pair.split('=');
+    if (!id || !dispatchId || extra !== undefined) return { error: `${pair} 는 <티켓>=<dispatch> 꼴이 아니다` };
+    if (tickets.some((t) => t.id === id)) return { error: `${id} 가 중복됐다` };
+    tickets.push({ id, dispatchId });
+  }
+  return { runId, tickets };
+}
+
+/** 웨이브가 도는 동안의 되밂. 워커의 보고를 받고 정산하는 길만 말한다. */
+function waveReason(epic, wave, tickets) {
+  const list = tickets.map((t) => `${t.id}→${t.dispatchId}`).join(', ');
+  return (
+    `${epic} 의 웨이브(${wave.runId})가 돌고 있다 — 워커에게 나간 티켓 ${tickets.length}건(${list}). ` +
+    `**그 티켓을 다시 claim 하지 않고 워커의 보고를 기다린다**: ` +
+    `\`orca orchestration check --wait --types worker_done,escalation,question --timeout-ms 900000 --json\`. ` +
+    `빈 결과·시한 초과는 실패가 아니라 다시 기다릴 자리다. 질문에는 답하고, worker_done 은 기대한 dispatch 와 대조해 ` +
+    `검증·병합·release 한 뒤 \`frontier-guard.mjs wave-settle <티켓>\` 으로 웨이브에서 뺀다. ` +
+    `웨이브가 비면 평소처럼 다음 티켓을 민다.`
+  );
+}
+
 /**
  * 멈춰도 되는가.
  *
@@ -296,6 +370,9 @@ export function decide({
   if (!marker?.epic) return { block: false, ratio };
   // 같은 worktree 의 다른 세션이다(`ownership`) — 막지도, 주인의 선언을 지우지도 않는다.
   if (!owner) return { block: false, ratio };
+  // 웨이브는 마커가 말하므로 bd 를 못 읽어도 선다 — 워커가 도는 동안 코디네이터가 떠나면 보고를 받을 이가 없다.
+  const inFlight = pendingWave(marker);
+  if (inFlight.length) return { block: true, ratio, reason: waveReason(marker.epic, marker.wave, inFlight) };
   // 모를 때는 통과시키되 선언을 남긴다 — 지우면 bd 가 잠깐 죽은 것만으로 가드가 사라진다.
   if (!frontier) return { block: false, ratio };
 

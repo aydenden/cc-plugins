@@ -39,6 +39,11 @@ test('선언한 세션은 맵·프론티어·컨텍스트를 한 줄로 본다',
 });
 
 // id 는 사람이 모른다 — 제목을 그리고, 터미널 한 줄에 들도록 자른다. 한글은 바이트가 아니라 글자로 센다.
+test('웨이브가 돌면 워커에게 나간 티켓 수를 프론티어 뒤에 붙인다', () => {
+  const waving = { ...claimed, marker: { epic: 'map-abcd', wave: { runId: 'run_1', tickets: [{ id: 'map-abcd.9', dispatchId: 'ctx_a' }] } } };
+  assert.equal(statusLine(waving, usageAt(420_000)), '🧭 [결제 모듈 이전] · 밀기 2 · 막힘 0 · 질문 0 · 웨이브 1건 대기 · 컨텍스트 42%/50%');
+});
+
 test('맵 제목은 20자, 잡은 티켓 제목은 40자에서 자른다', () => {
   const status = {
     ...claimed,
