@@ -47,7 +47,7 @@ import {
   ticketLimitOf,
   waveCarriedBy,
 } from './lib/guard-core.mjs';
-import { readMap } from './lib/read-map.mjs';
+import { BD_TIMEOUT_MS, readMap } from './lib/read-map.mjs';
 import { repoKeyOf, repoRootOf, stateRoot } from './lib/state-root.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -81,13 +81,13 @@ const writeMarker = (path, body) => {
  * 그 저장소의 DB 를 찾는다.
  *
  * 🚨 본문이 통째로 실려 오므로 기본 1MB 버퍼로는 맵이 자라면서 조용히 터진다 — 그 실패는 «모름» 으로
- * 떨어져 가드가 말없이 사라지는 꼴이 된다. 조회는 동시에 도므로 timeout 하나가 훅 예산(20초) 안에 든다.
+ * 떨어져 가드가 말없이 사라지는 꼴이 된다. 시한은 `BD_TIMEOUT_MS` 가 훅 예산에 맞춰 소유한다.
  */
 const bdRunner = (cwd) => async (args) => {
   const { stdout } = await execFileAsync('bd', [...args, '--json'], {
     cwd,
     encoding: 'utf8',
-    timeout: 10_000,
+    timeout: BD_TIMEOUT_MS,
     maxBuffer: 64 * 1024 * 1024,
   });
   return JSON.parse(stdout);

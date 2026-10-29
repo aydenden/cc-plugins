@@ -4,6 +4,14 @@
  */
 import { classifyFrontier } from './guard-core.mjs';
 
+/**
+ * bd 조회 하나의 시한. 셋이 동시에 뜨므로 한 판의 시간은 가장 느린 하나이고, 이 시한 하나가 Stop 훅
+ * 예산(`hooks.json` 의 20초)에서 시작·판정 몫 3초를 뺀 자리를 다 쓴다. 🚨 embedded dolt 의 bd 는 동시
+ * 조회끼리 서로를 늦춰 한 판이 13초까지 간다 — 예산의 절반으로 자르면 목록 조회가 늘 죽어 가드가 말없이
+ * «모름» 이 된다.
+ */
+export const BD_TIMEOUT_MS = 17_000;
+
 /** 읽지 못한 맵. 🚨 빈 프론티어가 아니라 «모름» 이고, 맵은 열린 것으로 둔다 — 닫혔다고 읽으면 선언이 지워진다. */
 const UNREAD = { frontier: null, epicOpen: true, epicTitle: null, claimed: null };
 

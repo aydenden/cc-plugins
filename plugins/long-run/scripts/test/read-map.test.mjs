@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { openChildrenOf, readMap } from '../lib/read-map.mjs';
+import { readFileSync } from 'node:fs';
+
+import { BD_TIMEOUT_MS, openChildrenOf, readMap } from '../lib/read-map.mjs';
 
 const EPIC = 'map-abcd';
 const ROWS = {
@@ -91,6 +93,13 @@ test('닫힌 맵은 epicOpen 이 거짓이다', async () => {
   const reading = readMap(EPIC, runner.run);
   await settleAll(runner);
   assert.equal((await reading).epicOpen, false);
+});
+
+test('bd 조회 시한은 Stop 훅 예산을 거의 다 쓰되 넘지 않는다 — 동시 조회는 서로를 늦춘다', () => {
+  const hooks = JSON.parse(readFileSync(new URL('../../hooks/hooks.json', import.meta.url), 'utf8'));
+  const budgetMs = hooks.hooks.Stop[0].hooks[0].timeout * 1000;
+  assert.ok(BD_TIMEOUT_MS <= budgetMs - 2000, '시한 뒤에도 판정·출력할 여유가 남아야 한다');
+  assert.ok(BD_TIMEOUT_MS >= budgetMs * 0.75, '동시 조회 한 판이 13초를 넘는 bd 에서 시한이 판정을 먼저 죽인다');
 });
 
 test('열린 자식은 닫힌 것만 뺀다 — bd list 의 기본 필터와 같은 범위다', () => {
