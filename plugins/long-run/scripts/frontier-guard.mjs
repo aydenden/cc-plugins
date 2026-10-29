@@ -29,6 +29,7 @@ import {
   contextLimitOf,
   contextTokensOf,
   countClosedSince,
+  countingSince,
   decide,
   HANDOFF_RATIO,
   handoffClosedOf,
@@ -125,7 +126,7 @@ const isStopEvent = (input) => {
 };
 
 /**
- * 이 세션이 주인이 된 뒤 닫은 자식의 수. 기준 시각이 없거나 bd 가 답을 못 하면 `null`(모름)이다.
+ * 이 세션이 claim 한 뒤 닫은 자식의 수(`countingSince`). 기준 시각이 없거나 bd 가 답을 못 하면 `null`(모름)이다.
  * 🚨 `--limit 0` 이 없으면 bd 가 50건에서 자른다 — 잘린 목록은 틀린 닫은 수다.
  */
 function closedSinceOf(epic, since, cwd) {
@@ -224,7 +225,7 @@ if (command === 'claim') {
     const own = ownership(marker, sessionId, new Date().toISOString(), (hash) => provesClaim(readText(transcript), hash));
     owner = own.owner ? true : marker?.session?.id ? false : null;
   }
-  const closedSinceSession = marker?.epic ? closedSinceOf(marker.epic, marker.session?.since, process.cwd()) : null;
+  const closedSinceSession = marker?.epic ? closedSinceOf(marker.epic, countingSince(marker), process.cwd()) : null;
   const handoffClosed = handoffClosedOf(marker);
   const verdict = decide({
     marker,

@@ -9,6 +9,7 @@ import {
   contextLimitOf,
   contextTokensOf,
   countClosedSince,
+  countingSince,
   decide,
   handoffClosedOf,
   isDelegatedToMod,
@@ -282,8 +283,39 @@ test('주인이 적힌 마커는 그 세션만 주인이다 — 기준 시각은
 
 test('주인이 비었으면 claim 을 증명한 세션이 주인이 된다', () => {
   const claimed = { epic: 'map-abcd', claimHash: 'h' };
-  assert.deepEqual(ownership(claimed, 's1', NOW, always), { owner: true, since: NOW, changed: true });
+  assert.equal(ownership(claimed, 's1', NOW, always).owner, true);
   assert.deepEqual(ownership(claimed, 's2', NOW, never), { owner: false, since: null, changed: false });
+});
+
+const CLAIMED_AT = '2026-10-21T08:30:00.000Z';
+const freshClaim = { epic: 'map-abcd', claimedAt: CLAIMED_AT, claimHash: 'h' };
+
+test('🚨 claim 을 증명한 세션은 claim 한 시각부터 센다 — 첫 멈춤 전에 닫은 티켓이 빠지지 않는다', () => {
+  assert.deepEqual(ownership(freshClaim, 's1', NOW, always), { owner: true, since: CLAIMED_AT, changed: true });
+});
+
+test('claim 시각이 없거나 깨졌으면 주인이 된 시각부터 센다', () => {
+  assert.equal(ownership({ epic: 'map-abcd', claimHash: 'h' }, 's1', NOW, always).since, NOW);
+  assert.equal(ownership({ ...freshClaim, claimedAt: '모름' }, 's1', NOW, always).since, NOW);
+});
+
+// --- 세는 기준: 주인이 적히기 전에도 status 가 센다 ---
+
+test('주인이 적혔으면 그 기준 시각이다', () => {
+  assert.equal(countingSince({ ...freshClaim, session: { id: 's1', since: NOW } }), NOW);
+});
+
+test('🚨 claim 직후 주인이 아직 안 적혔어도 claim 시각으로 센다 — 인계받은 세션 첫 턴 내내 «닫음 모름» 이던 자리다', () => {
+  assert.equal(countingSince(freshClaim), CLAIMED_AT);
+});
+
+test('인계로 옮겨진 마커의 claim 시각은 앞 세션의 것이라 기준이 못 된다', () => {
+  assert.equal(countingSince({ ...freshClaim, claimHash: null }), null);
+});
+
+test('마커가 없거나 토큰 이전의 마커면 기준이 없다', () => {
+  assert.equal(countingSince(null), null);
+  assert.equal(countingSince({ epic: 'map-abcd', claimedAt: CLAIMED_AT }), null);
 });
 
 // 트랜스크립트를 통째로 읽는 일이라 주인이 정해진 뒤에는 턴마다 하지 않는다.

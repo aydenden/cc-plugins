@@ -10,7 +10,7 @@
  * | 축 | 근거 |
  * |---|---|
  * | 이 세션이 미는 맵이 있는가 | 마커 파일(`claim` 이 쓴다). 없으면 가드는 아무것도 안 한다 |
- * | 이 세션이 몇 건을 닫았나 | 주인이 된 시각 이후 `closed_at` 된 자식. **인계의 1차 축이다** |
+ * | 이 세션이 몇 건을 닫았나 | 이 세션이 claim 한 시각(`countingSince`) 이후 `closed_at` 된 자식. **인계의 1차 축이다** |
  * | 컨텍스트가 얼마나 찼는가 | 세션이 잰 값(mod), 없으면 트랜스크립트의 마지막 `usage`. 못 재면 «계측 불가» |
  * | 프론티어에 지금 밀 수 있는 것이 있는가 | 열린 자식(`bd list --parent`)을 `bd ready` 와 `human` 라벨로 가른 것. 못 읽으면 «모름» |
  * | 맵이 닫혔는가 | `bd show <epic>` 의 status — 프론티어가 빈 것만으로는 선언을 지우지 않는다 |
@@ -197,8 +197,10 @@ export function classifyFrontier({ children, ready }) {
  * | `claimHash: null` | 다른 worktree 로 옮겨져 새 claim 을 기다린다 — 아무도 주인이 아니다 |
  * | 둘 다 없음 | 토큰 이전의 마커다. 처음 멈추는 세션이 주인이 된다 — 진행 중인 맵을 끊지 않으려는 것이다 |
  *
- * 🚨 **기준 시각은 `claimedAt` 이 아니라 주인이 된 시각이다.** 인계 뒤 앞 세션의 시각으로 세면 새
- * 세션이 앞 세션의 몫까지 떠안는다. Stop 은 턴마다 도니까 그 시각은 사실상 claim 한 턴이다.
+ * 🚨 **기준 시각은 이 세션이 claim 한 시각이다**(`countingSince`). 증명된 claim 의 `claimedAt` 은 그
+ * claim 이 쓴 값이라 이 세션의 것이다 — 첫 Stop 의 시각으로 세면 인계받은 세션이 첫 턴에 닫은 티켓이
+ * 통째로 빠진다. 앞 세션의 시각(옮겨진 마커·토큰 이전의 마커)으로는 세지 않는다 — 새 세션이 앞 세션의
+ * 몫까지 떠안는다.
  *
  * @param {{epic: string, session?: {id: string, since?: string}, claimHash?: string | null} | null} marker
  * @param {string | undefined} sessionId 훅 입력의 세션 id
@@ -214,7 +216,21 @@ export function ownership(marker, sessionId, now, proves) {
     return marker.session.id === sessionId ? { owner: true, since: marker.session.since ?? null, changed: false } : none;
   }
   if (!('claimHash' in marker)) return { owner: true, since: now, changed: true };
-  return marker.claimHash && proves(marker.claimHash) ? { owner: true, since: now, changed: true } : none;
+  return marker.claimHash && proves(marker.claimHash) ? { owner: true, since: countingSince(marker) ?? now, changed: true } : none;
+}
+
+/**
+ * 닫은 티켓을 세는 기준 시각. 주인이 적혔으면 그 시각이고, 아직이면 이 마커를 쓴 claim 의 시각이다
+ * — 주인은 첫 Stop 에서야 적히므로 그 전에 `status` 가 세지 못하던 자리다(`ownership` 의 🚨).
+ * 옮겨진 마커(`claimHash: null`)와 토큰 이전의 마커는 `claimedAt` 이 앞 세션의 것이라 `null` 이다.
+ *
+ * @param {{session?: {since?: string}, claimHash?: string | null, claimedAt?: string} | null} marker
+ * @returns {string | null}
+ */
+export function countingSince(marker) {
+  if (marker?.session?.since) return marker.session.since;
+  if (!marker?.claimHash || Number.isNaN(Date.parse(marker.claimedAt))) return null;
+  return marker.claimedAt;
 }
 
 /**
@@ -222,7 +238,7 @@ export function ownership(marker, sessionId, now, proves) {
  * 되미는 축이 조용히 사라진다.
  *
  * @param {{status?: string, closed_at?: string}[] | null} rows `bd list --parent <epic> --status closed` 의 행
- * @param {string | null} since 주인이 된 시각(ISO)
+ * @param {string | null} since 세는 기준 시각(ISO, `countingSince`)
  * @returns {number | null}
  */
 export function countClosedSince(rows, since) {
