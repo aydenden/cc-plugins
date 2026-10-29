@@ -1,6 +1,6 @@
 # long-run
 
-여러 세션에 걸치는 작업을 끝까지 민다.
+여러 세션에 걸치는 작업을 끝까지 민다. 병렬 웨이브도 지원한다 — base worktree 의 코디네이터가 사용자가 승인한 폭·티켓 목록대로 ready 티켓을 orca 하위 worktree 워커에 나눠 돌린다(`wave.mjs start`). 워커는 bd 를 쓰지 않고, 코디네이터가 결과를 검증한 뒤 base 에 순차 병합·정리한다(`wave.mjs settle`).
 
 ![map-run 중 상태줄: 맵 제목 · 밀기 · 막힘 · 질문 · 컨텍스트](../../docs/images/long-run.png)
 

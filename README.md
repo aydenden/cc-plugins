@@ -10,7 +10,7 @@ npm 등 서드파티 패키지를 하나도 받지 않는다. 실행에는 `node
 | [statusline](./plugins/statusline) | 프롬프트 아래에 모델·git·컨텍스트·사용량을 띄운다 | 남은 컨텍스트와 사용량을 늘 보고 싶을 때 | Claude Code v2.1.287+ |
 | [memory-guard](./plugins/memory-guard) | 세션마다 로드되는 메모리가 비대해지고 낡는 것을 막는다 | 메모리가 잘려서 지식이 사라질 때 | 없음 |
 | [llm-wiki](./plugins/llm-wiki) | 조사한 내용을 [Obsidian](https://obsidian.md) 노트 폴더(볼트)에 쌓고 다시 찾는다 | 조사한 것을 다음 작업에서 다시 쓰고 싶을 때 | Obsidian 볼트 |
-| [long-run](./plugins/long-run) | 며칠 걸리는 작업을 세션이 바뀌어도 끝까지 민다 | 세션이 «다음으로 갈까요?»에서 멈출 때 | [bd](https://github.com/steveyegge/beads)(CLI 이슈 트래커), [orca](https://www.onorca.dev/)(Claude 세션을 worktree·터미널 탭으로 띄우는 도구) |
+| [long-run](./plugins/long-run) | 며칠 걸리는 작업을 세션이 바뀌어도, 여러 워커로 나눠서도 끝까지 민다 | 세션이 «다음으로 갈까요?»에서 멈출 때 | [bd](https://github.com/steveyegge/beads)(CLI 이슈 트래커), [orca](https://www.onorca.dev/)(Claude 세션을 worktree·터미널 탭으로 띄우는 도구) |
 | [wf](./plugins/wf) | 작업 흐름을 설명하면 그에 맞는 워크플로우 플러그인을 설계한다 | 같은 진행 방식을 매번 처음부터 설명할 때 | `bd`, 플러그인 [long-run](./plugins/long-run)·[plugin-dev](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/plugin-dev)·[beads](https://github.com/steveyegge/beads) |
 
 설정 없이 바로 붙는 것은 위의 둘(statusline, memory-guard)이다.
@@ -113,6 +113,7 @@ wf는 세션 안에 끼어들지 않는다. wf가 설계해 만든 플러그인�
 - 방향을 바꾸는 질문을 만나면 멈추지 않고 질문을 티켓으로 남긴 뒤, 그 질문과 무관한 티켓을 계속 진행한다
 - 남은 티켓이 0개여도 바로 끝내지 않는다. 다 한 것인지 티켓을 안 만든 것인지 모르므로, 새 컨텍스트의 서브에이전트가 완료 조건을 검증한 뒤에 맵을 닫는다
 - 세션은 [orca](https://www.onorca.dev/) 탭으로 넘긴다
+- 밀 수 있는 티켓이 여럿이면 병렬 웨이브로 나눠 돌릴 수 있다. base worktree의 코디네이터가 사용자가 승인한 폭·티켓 목록대로 orca 하위 worktree 워커에 티켓을 하나씩 넘기고(`wave.mjs start`), 워커는 bd를 쓰지 않는다. 결과는 코디네이터가 검증한 뒤 base에 순차 병합하고 worktree를 정리한다(`wave.mjs settle`). 병합과 bd 갱신을 한 곳에서만 하므로 워커끼리 DB를 두고 다투지 않는다
 
 ### [wf](./plugins/wf) · v0.8.0
 **작업 흐름을 설명하면 그에 맞는 워크플로우 플러그인을 설계한다.**
