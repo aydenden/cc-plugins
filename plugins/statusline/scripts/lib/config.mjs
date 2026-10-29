@@ -15,6 +15,17 @@ export const CONFIG_VERSION = 1;
 /** 홈 기준 설정 파일 경로. */
 export const CONFIG_RELATIVE_PATH = '.claude/statusline/settings.json';
 
+/**
+ * 홈 디렉터리. Windows 에는 `HOME` 이 없어 `USERPROFILE` 로 물러선다 — 없으면 경로가 `undefined/…` 가 된다.
+ *
+ * @param {string | undefined} home `HOME`
+ * @param {string | undefined} userProfile `USERPROFILE`
+ * @returns {string | undefined}
+ */
+export function homeFromEnv(home, userProfile) {
+  return home || userProfile || undefined;
+}
+
 /** 홈 기준 ccstatusline 설정 파일 경로 (`/sl import` 가 읽는다). */
 export const CCSTATUSLINE_RELATIVE_PATH = '.config/ccstatusline/settings.json';
 

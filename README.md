@@ -62,7 +62,7 @@ wf는 세션 안에 끼어들지 않는다. wf가 설계해 만든 플러그인�
 
 ## 플러그인
 
-### [statusline](./plugins/statusline) · v0.1.0
+### [statusline](./plugins/statusline) · v0.1.1
 **mod로 그리는 상태줄.** 외부 도구 없이 프롬프트 아래에 모델·git·컨텍스트·사용량을 띄운다.
 
 [ccstatusline](https://github.com/sirmalloc/ccstatusline)처럼 `statusLine` 설정으로 도는 상태줄은 다시 그릴 때마다

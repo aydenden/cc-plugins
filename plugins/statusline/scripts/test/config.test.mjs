@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DEFAULT_CONFIG, fromCcstatusline, normalizeConfig } from '../lib/config.mjs';
+import { DEFAULT_CONFIG, fromCcstatusline, homeFromEnv, normalizeConfig } from '../lib/config.mjs';
+
+test('홈은 HOME 을 먼저 쓰고, 없거나 비면 Windows 의 USERPROFILE 로 물러선다', () => {
+  assert.equal(homeFromEnv('/home/me', 'C:\\Users\\me'), '/home/me');
+  assert.equal(homeFromEnv(undefined, 'C:\\Users\\me'), 'C:\\Users\\me');
+  assert.equal(homeFromEnv('', 'C:\\Users\\me'), 'C:\\Users\\me');
+  assert.equal(homeFromEnv(undefined, undefined), undefined);
+});
 
 test('기본 설정은 다듬어도 문제가 없다', () => {
   const { config, problems } = normalizeConfig(DEFAULT_CONFIG);

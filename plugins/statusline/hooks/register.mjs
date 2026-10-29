@@ -14,7 +14,7 @@
  */
 
 import { COMMAND_NAME, USAGE, applyEdit, describeConfig, describeWidgets, parseCommand } from '../scripts/lib/command.mjs';
-import { CCSTATUSLINE_RELATIVE_PATH, CONFIG_RELATIVE_PATH, DEFAULT_CONFIG, fromCcstatusline, normalizeConfig } from '../scripts/lib/config.mjs';
+import { CCSTATUSLINE_RELATIVE_PATH, CONFIG_RELATIVE_PATH, DEFAULT_CONFIG, fromCcstatusline, homeFromEnv, normalizeConfig } from '../scripts/lib/config.mjs';
 import { activeItems, buildRows, neededSources } from '../scripts/lib/layout.mjs';
 import { parseGitStatus, parseJjLog, parsePullRequest, parseRemotes, parseShortstat, parseVmStat, parseWorktree } from '../scripts/lib/parse-git.mjs';
 import { addUsage, parseUsageApi, projectSlug, summarizeTranscript, usageOf } from '../scripts/lib/parse-transcript.mjs';
@@ -41,7 +41,7 @@ let ticker = null;
 // --- Config ---
 
 async function homeDir($) {
-  home ??= await $.env.get('HOME');
+  home ??= homeFromEnv(await $.env.get('HOME'), await $.env.get('USERPROFILE'));
   snap.home = home;
   return home;
 }
@@ -81,10 +81,8 @@ async function reloadIfChanged($) {
 }
 
 async function saveConfig($, config) {
-  const path = await configPath($);
-  const made = await $.process.run(['mkdir', '-p', path.slice(0, path.lastIndexOf('/'))]);
-  if (made.exitCode !== 0) throw new Error(`설정 폴더를 만들지 못했다: ${made.stderr.trim()}`);
-  await $.fs.write(path, `${JSON.stringify(config, null, 2)}\n`);
+  // `$.fs.write` 가 상위 폴더까지 만든다 — `mkdir` 실행파일은 Windows 에 없다.
+  await $.fs.write(await configPath($), `${JSON.stringify(config, null, 2)}\n`);
   await loadConfig($);
 }
 
