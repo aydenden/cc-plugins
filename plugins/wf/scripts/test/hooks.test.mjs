@@ -137,7 +137,7 @@ test('🚨 a spec that cannot be read blocks the close and says why, instead of 
   const { context } = project(t, { '.claude/wf.spec.jsonc': '{ "schema": 1, }' });
   const result = preClose(closing('bd close abc-1'), context);
   assert.equal(result.exitCode, 2);
-  assert.match(result.stderr, /\.claude\/wf\.spec\.jsonc/);
+  assert.match(result.stderr, /\.claude[\\/]wf\.spec\.jsonc/);
   assert.match(result.stderr, /trailing comma/);
 });
 
