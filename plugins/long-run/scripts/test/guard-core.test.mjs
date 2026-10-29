@@ -358,7 +358,7 @@ test('owner 를 주지 않으면 주인 자리에서 본 판정이다', () => {
 
 const HANDING_OFF = /session-handoff 로 넘긴다/;
 
-// `bd list --parent <epic> --status closed --json` 의 행 그대로다.
+// `bd list --parent <epic> --all --json` 의 행 그대로다.
 test('기준 시각 이후 닫힌 자식만 센다 — 앞 세션이 닫은 것은 이 세션 몫이 아니다', () => {
   const rows = [
     { id: 'a', status: 'closed', closed_at: '2026-10-21T07:59:59Z' },

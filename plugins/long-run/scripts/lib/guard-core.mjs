@@ -237,7 +237,7 @@ export function countingSince(marker) {
  * 기준 시각 이후 닫힌 자식의 수. 셀 수 없으면 `null`(모름) — 0 으로 떨어뜨리면 「안 닫았다」가 돼
  * 되미는 축이 조용히 사라진다.
  *
- * @param {{status?: string, closed_at?: string}[] | null} rows `bd list --parent <epic> --status closed` 의 행
+ * @param {{status?: string, closed_at?: string}[] | null} rows 맵의 자식 행(`readMap` 의 `children`). 닫힌 것만 센다
  * @param {string | null} since 세는 기준 시각(ISO, `countingSince`)
  * @returns {number | null}
  */

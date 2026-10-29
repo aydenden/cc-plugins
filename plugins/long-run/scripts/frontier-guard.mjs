@@ -19,13 +19,13 @@
  * 🚨 훅 모드는 **절대 실패로 죽지 않는다.** 가드가 터지면 막는 것이 아니라 조용히 통과시킨다 —
  * 세션을 못 끝내게 만드는 쪽이 훨씬 나쁜 고장이다.
  */
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { promisify } from 'node:util';
 
 import { claimHashOf, claimTokenLine, newClaimToken, provesClaim } from './lib/claim.mjs';
 import {
-  classifyFrontier,
   contextLimitOf,
   contextTokensOf,
   countClosedSince,
@@ -38,7 +38,10 @@ import {
   readTranscriptTail,
   ticketLimitOf,
 } from './lib/guard-core.mjs';
+import { readMap } from './lib/read-map.mjs';
 import { repoKeyOf, repoRootOf, stateRoot } from './lib/state-root.mjs';
+
+const execFileAsync = promisify(execFile);
 
 /** 그 위치가 속한 worktree 의 마커 경로. 훅은 세션의 `cwd` 로 부른다 — 이 프로세스의 cwd 가 아니다. */
 const markerPathFor = (cwd) => join(stateRoot(), 'frontier-guard', `${repoKeyOf(repoRootOf(cwd))}.json`);
@@ -65,52 +68,23 @@ const writeMarker = (path, body) => {
 };
 
 /**
- * bd 의 JSON 출력. 실패는 던지고, 부르는 쪽이 «모름» 으로 바꾼다. bd 는 그 worktree 에서 돌아야
+ * bd 의 JSON 출력. 실패는 reject 하고, `readMap` 이 «모름» 으로 바꾼다. bd 는 그 worktree 에서 돌아야
  * 그 저장소의 DB 를 찾는다.
  *
  * 🚨 본문이 통째로 실려 오므로 기본 1MB 버퍼로는 맵이 자라면서 조용히 터진다 — 그 실패는 «모름» 으로
- * 떨어져 가드가 말없이 사라지는 꼴이 된다. timeout 은 훅 예산(20초) 안에 bd 호출 넷이 들어가게 둔다.
+ * 떨어져 가드가 말없이 사라지는 꼴이 된다. 조회는 동시에 도므로 timeout 하나가 훅 예산(20초) 안에 든다.
  */
-const bdJson = (args, cwd) =>
-  JSON.parse(
-    execFileSync('bd', [...args, '--json'], {
-      cwd,
-      encoding: 'utf8',
-      timeout: 5_000,
-      maxBuffer: 64 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-  );
+const bdRunner = (cwd) => async (args) => {
+  const { stdout } = await execFileAsync('bd', [...args, '--json'], {
+    cwd,
+    encoding: 'utf8',
+    timeout: 10_000,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return JSON.parse(stdout);
+};
 
-/**
- * 맵의 프론티어와 맵이 아직 열려 있는지.
- *
- * 🚨 bd 가 없거나 느리거나 맵을 못 찾으면 **빈 프론티어가 아니라 «모름»**(`frontier: null`)이다. 둘을
- * 같게 읽으면 bd 가 잠깐 죽은 것만으로 가드가 선언을 지운다. `bd list --parent` 는 없는 맵에도 빈
- * 배열을 exit 0 으로 내므로(실측), 맵이 있는지는 `bd show` 가 먼저 가른다.
- *
- * `epicTitle` 과 `claimed`(지금 잡혀 있는 in_progress 자식)는 상태줄이 그린다 — 사람은 id 를 모르므로
- * 제목을 싣는다. 이미 받은 `bd show`·`bd list` 행에 있어 호출을 늘리지 않는다.
- *
- * @returns {{frontier: ReturnType<typeof classifyFrontier> | null, epicOpen: boolean, epicTitle: string | null, claimed: {id: string, title: string | null}[] | null}}
- */
-function readFrontier(epic, cwd) {
-  try {
-    const [map] = [bdJson(['show', epic], cwd)].flat();
-    if (!map?.status) return { frontier: null, epicOpen: true, epicTitle: null, claimed: null };
-    // 기본 목록은 닫힌 티켓을 빼고 50건에서 자른다 — 잘린 프론티어는 틀린 프론티어다.
-    const children = bdJson(['list', '--parent', epic, '--limit', '0'], cwd);
-    const ready = bdJson(['ready', '--parent', epic, '--limit', '0'], cwd);
-    return {
-      frontier: classifyFrontier({ children, ready }),
-      epicOpen: map.status !== 'closed',
-      epicTitle: map.title ?? null,
-      claimed: children.filter((c) => c.status === 'in_progress').map((c) => ({ id: c.id, title: c.title ?? null })),
-    };
-  } catch {
-    return { frontier: null, epicOpen: true, epicTitle: null, claimed: null };
-  }
-}
+const UNREAD_MAP = { frontier: null, epicOpen: true, epicTitle: null, claimed: null, children: null };
 
 /**
  * Stop 이벤트인가.
@@ -124,19 +98,6 @@ const isStopEvent = (input) => {
   if (typeof name === 'string') return name === 'Stop';
   return input?.tool_name === undefined;
 };
-
-/**
- * 이 세션이 claim 한 뒤 닫은 자식의 수(`countingSince`). 기준 시각이 없거나 bd 가 답을 못 하면 `null`(모름)이다.
- * 🚨 `--limit 0` 이 없으면 bd 가 50건에서 자른다 — 잘린 목록은 틀린 닫은 수다.
- */
-function closedSinceOf(epic, since, cwd) {
-  if (!since) return null;
-  try {
-    return countClosedSince(bdJson(['list', '--parent', epic, '--status', 'closed', '--limit', '0'], cwd), since);
-  } catch {
-    return null;
-  }
-}
 
 /**
  * 트랜스크립트에서 점유를 잰다.
@@ -216,7 +177,7 @@ if (command === 'claim') {
   const sessionId = at >= 0 ? rest[at + 1] : undefined;
   const transcript = rest.find((_, i) => at < 0 || (i !== at && i !== at + 1));
   const marker = readJson(MARKER);
-  const read = marker?.epic ? readFrontier(marker.epic, process.cwd()) : { frontier: null, epicOpen: true, epicTitle: null, claimed: null };
+  const { children, ...read } = marker?.epic ? await readMap(marker.epic, bdRunner(process.cwd())) : UNREAD_MAP;
   // 잴 근거가 없으면 «안 쟀다» 다 — 0 을 여유로 읽히게 두지 않는다.
   const measured = transcript ? measure(transcript) : { contextTokens: 0, contextLimit: contextLimitOf(null), measured: false };
   // 세션 id 가 없으면 주인 자리에서 본 판정이다. 있으면 참·거짓, 아무도 주인이 아니면 null(주인 미정).
@@ -225,7 +186,7 @@ if (command === 'claim') {
     const own = ownership(marker, sessionId, new Date().toISOString(), (hash) => provesClaim(readText(transcript), hash));
     owner = own.owner ? true : marker?.session?.id ? false : null;
   }
-  const closedSinceSession = marker?.epic ? closedSinceOf(marker.epic, countingSince(marker), process.cwd()) : null;
+  const closedSinceSession = countClosedSince(children, countingSince(marker));
   const handoffClosed = handoffClosedOf(marker);
   const verdict = decide({
     marker,
@@ -256,12 +217,13 @@ if (command === 'claim') {
     if (isDelegatedToMod(input)) process.exit(0);
     // 주인이 아닌 세션은 bd 도 트랜스크립트 점유도 안 본다 — 같은 worktree 에서 연 다른 세션이다.
     if (!owner) process.exit(0);
+    const { children, ...read } = await readMap(marker.epic, bdRunner(cwd));
     const verdict = decide({
       marker,
       ...measure(input.transcript_path),
-      closedSinceSession: closedSinceOf(marker.epic, since, cwd),
+      closedSinceSession: countClosedSince(children, since),
       handoffClosed: handoffClosedOf(marker),
-      ...readFrontier(marker.epic, cwd),
+      ...read,
       stopHookActive: input.stop_hook_active === true,
       isStopEvent: isStopEvent(input),
     });

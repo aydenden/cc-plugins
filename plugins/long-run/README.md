@@ -182,6 +182,6 @@ claude plugin validate .
 
 순수 로직만 테스트한다. 프론티어 분류·주인·판정(`lib/guard-core.mjs`), claim 토큰(`lib/claim.mjs`), 헌장과 가드의 문구 일치
 (`test/charter-wording.test.mjs`), mod 의 입력 조립과 상태줄 문구(`lib/mod-view.mjs`),
-문서 메타 대조와 §0 검사(`lib/doc-meta.mjs`), 인계 프롬프트(`lib/handoff-prompt.mjs`), 경로·키 계산(`lib/handoff-path.mjs`). orca·bd 호출은 실측 대상이라
-테스트하지 않는다. `hooks/register.mjs` 는 배선뿐이라 `claude plugin validate` 가 읽어 내는 hooks·calls
+문서 메타 대조와 §0 검사(`lib/doc-meta.mjs`), 인계 프롬프트(`lib/handoff-prompt.mjs`), 경로·키 계산(`lib/handoff-path.mjs`), bd 조회의 동시성과 «모름» 처리(`lib/read-map.mjs` — bd 는 스텁으로
+갈아 끼운다). orca·bd 자체의 동작은 실측 대상이라 테스트하지 않는다. `hooks/register.mjs` 는 배선뿐이라 `claude plugin validate` 가 읽어 내는 hooks·calls
 목록으로 확인한다.
