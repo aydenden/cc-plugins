@@ -21,6 +21,7 @@ import {
   parseIndex,
   planWrite,
   renderCheck,
+  renderPostWrite,
   resolveConfig,
   splitLines,
 } from './core.mjs';
@@ -360,6 +361,28 @@ test('점검 안내는 archive/ 를 숨김 수단으로 권하지 않고 새 지
   assert.match(text, /topic-cap/);
   assert.match(text, /missing-description/);
   assert.match(text, /하위 폴더/);
+});
+
+// --- 쓰기 직후 구조 점검 ---
+
+test('쓰기 직후 점검은 지적이 없으면 아무것도 내지 않는다', () => {
+  const report = auditIndex(plainIndex, { files: plainFiles, config: cfg({}) });
+  assert.equal(renderPostWrite(report), null);
+});
+
+test('쓰기 직후 점검은 구조 지적을 차단 아닌 경고로 낸다', () => {
+  const report = auditIndex(plainIndex, { files: [...plainFiles, 'lonely.md'], config: cfg({}) });
+  const text = renderPostWrite(report);
+  assert.match(text, /차단 아님/);
+  assert.match(text, /\[orphan-topic\] lonely\.md/);
+});
+
+test('쓰기 직후 점검도 반복 지적은 접는다', () => {
+  const long = `- ${'a'.repeat(300)}`;
+  const report = auditIndex([long, long, long].join('\n'), { files: ['MEMORY.md'], config: cfg({}) });
+  const text = renderPostWrite(report);
+  assert.equal(text.match(/\[entry-too-long\]/g).length, 1);
+  assert.match(text, /3건/);
 });
 
 test('인덱스가 아닌 도구는 판정 대상이 아니다', () => {

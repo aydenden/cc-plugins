@@ -1,5 +1,5 @@
 {
-  "description": "Guard CC auto memory: block writes that bloat MEMORY.md past its derived budget (PreToolUse), and run a once-a-day stale/broken-link/orphan check (SessionStart).",
+  "description": "Guard CC auto memory: block writes that bloat MEMORY.md past its budget (PreToolUse), warn about index structure right after a memory write (PostToolUse, non-blocking), and run a once-a-day stale/broken-link/orphan check (SessionStart).",
   "hooks": {
     "PreToolUse": [
       {
@@ -9,6 +9,18 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/index-guard.mjs\"",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-write-check.mjs\"",
+            "timeout": 10
           }
         ]
       }

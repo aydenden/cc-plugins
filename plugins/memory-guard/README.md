@@ -19,7 +19,7 @@ claude --plugin-dir ./plugins/memory-guard
 
 > 훅은 세션 시작 시 로드된다. 설정 변경 후에는 Claude Code를 재시작해야 적용된다.
 >
-> 낡은 항목 점검(②)의 `asyncRewake`는 비교적 최신 Claude Code 훅 기능이다. 미지원 버전에서는 조용히 무시되거나 동기 실행될 수 있다(인덱스 차단 훅 ①은 영향 없음).
+> 낡은 항목 점검(③)의 `asyncRewake`는 비교적 최신 Claude Code 훅 기능이다. 미지원 버전에서는 조용히 무시되거나 동기 실행될 수 있다(인덱스 차단 훅 ①은 영향 없음).
 
 ## 메모리 경로 자동 인식
 
@@ -76,7 +76,15 @@ claude --plugin-dir ./plugins/memory-guard
 - **같은 크기로 갈아끼우는 쓰기도 통과한다.** 예산에 닿은 뒤에는 "하나를 빼야 하나를 넣는다"가 별도 규칙 없이 성립한다.
 - Edit는 바이트 델타(`old - len(old_string) + len(new_string)`)로 결과 크기를 정확히 계산한다.
 
-### ② `hooks/memory-check.mjs`: 하루 1회 낡은 항목·비대 점검 (SessionStart, asyncRewake)
+### ② `hooks/post-write-check.mjs`: 메모리 쓰기 직후 인덱스 점검 (PostToolUse, 차단 아님)
+
+메모리 디렉터리 최상위의 `.md`(인덱스·토픽)에 `Write|Edit`가 끝나면 그 자리에서 인덱스를 감사한다. 고아 토픽·깨진 링크·섹션 크기·예산 같은 구조 위반을 하루 1회 점검까지 기다리지 않고, 다음 항목이 그 위에 쌓이기 전에 알린다.
+
+- 지적은 `exit 0` + `additionalContext`로 모델에게만 간다. 아무것도 막지 않는다(①과 같은 이유로, 포맷 추론 판정은 차단하지 않는다).
+- 메모리 밖 쓰기, 인덱스가 없는 디렉터리, 지적 없음은 출력 없이 통과한다. 무관한 세션의 컨텍스트를 더럽히지 않는다.
+- 반복 지적(긴 항목 등)은 ③과 같이 종류당 한 줄로 접는다.
+
+### ③ `hooks/memory-check.mjs`: 하루 1회 낡은 항목·비대 점검 (SessionStart, asyncRewake)
 
 새 세션(`source=startup`) 시작 시, 그 세션 프로젝트의 메모리를 결정적으로(무료, LLM 없이) 점검한다.
 
@@ -121,21 +129,24 @@ plugins/memory-guard/
 ├── hooks/
 │   ├── hooks.json
 │   ├── index-guard.mjs            # PreToolUse → MEMORY.md 쓰기 차단
+│   ├── post-write-check.mjs       # PostToolUse → 메모리 쓰기 직후 구조 경고
+│   ├── post-write-check.test.mjs
 │   └── memory-check.mjs           # SessionStart → 하루 1회 점검
 ├── src/
 │   ├── core.mjs                   # 순수 판정 로직 — 상수·한도의 정본
 │   ├── core.test.mjs
-│   └── fs-adapter.mjs             # 경로 해석·설정 로드·락 (I/O)
+│   ├── fs-adapter.mjs             # 경로 해석·설정 로드·락 (I/O)
+│   └── fs-adapter.test.mjs
 └── README.md
 ```
 
 판정(`core.mjs`)은 파일시스템을 만지지 않고, I/O 는 `fs-adapter.mjs` 한 곳에 모인다.
-두 훅은 이 둘만 조합하므로 같은 한도가 두 경로에서 갈라지지 않는다.
+세 훅은 이 둘만 조합하므로 같은 한도가 여러 경로에서 갈라지지 않는다.
 
 ## 테스트
 
 ```bash
-node --test plugins/memory-guard/src/core.test.mjs
+node --test "plugins/memory-guard/**/*.test.mjs"
 ```
 
-판정 로직은 파일시스템을 만지지 않으므로 인덱스 본문과 파일 목록을 문자열/배열로 스텁한다.
+판정 로직은 파일시스템을 만지지 않으므로 인덱스 본문과 파일 목록을 문자열/배열로 스텁한다. 경로 판정과 훅 출력만 임시 디렉터리로 확인한다.

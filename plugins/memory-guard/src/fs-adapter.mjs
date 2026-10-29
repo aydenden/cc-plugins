@@ -68,6 +68,21 @@ export function memoryDirForIndex(filePath) {
   return null;
 }
 
+/**
+ * 이 파일이 메모리 디렉터리 최상위의 `.md` 인가. 맞으면 메모리 디렉터리를, 아니면 null.
+ *
+ * `memoryDirForIndex` 와 달리 인덱스가 이미 있어야 한다 — 쓰기 직후 점검은 인덱스를
+ * 감사하는 일이라 인덱스가 없으면 볼 것이 없다. 하위 디렉터리는 점검 대상이 아니므로
+ * 직속 부모만 본다.
+ */
+export function memoryDirForFile(filePath) {
+  if (!filePath || !filePath.endsWith('.md')) return null;
+  const dir = path.dirname(filePath);
+  if (!existsSync(path.join(dir, INDEX_BASENAME))) return null;
+  if (path.basename(dir) === 'memory' || existsSync(path.join(dir, CONFIG_BASENAME))) return dir;
+  return null;
+}
+
 /** cwd 의 CC 설정에서 `autoMemoryDirectory` 를 읽는다. local 이 우선한다. */
 function autoMemoryDirectory(cwd) {
   for (const name of ['settings.local.json', 'settings.json']) {

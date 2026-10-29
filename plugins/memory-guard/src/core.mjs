@@ -605,6 +605,22 @@ export function foldFindings(findings, max = 10) {
   return out;
 }
 
+/**
+ * 메모리 쓰기 직후의 인덱스 점검 경고. 지적이 없으면 null — 조용한 통과가 기본이다.
+ *
+ * 하루 1회 점검을 기다리지 않고 쓴 그 자리에서 알리는 이유: 구조 위반(고아·섹션 크기·
+ * 깨진 링크)은 다음 항목이 그 위에 쌓이기 전에 고치는 것이 가장 싸다.
+ *
+ * @param {{bytes:number, lines:number, findings:Array}} report `auditIndex` 결과
+ */
+export function renderPostWrite(report) {
+  if (report.findings.length === 0) return null;
+  const out = [`[memory-guard] 메모리 쓰기 후 인덱스 점검 — ${report.bytes}B / ${report.lines}줄 (차단 아님):`];
+  for (const f of foldFindings(report.findings)) out.push(`  [${f.kind}] ${f.message}`);
+  out.push('지금 쓴 내용이 원인이면 이어서 고친다. 원래 있던 지적이면 하루 1회 점검에서 처리해도 된다.');
+  return out.join('\n');
+}
+
 /** SessionStart 점검 결과 메시지. 자동 삭제하지 않는다 — 의미 판단은 에이전트가 한다. */
 export function renderCheck(memoryDir, findings) {
   const out = [`[memory-guard] 메모리 점검에서 손봐야 할 항목을 찾았다 (${memoryDir}):`];
