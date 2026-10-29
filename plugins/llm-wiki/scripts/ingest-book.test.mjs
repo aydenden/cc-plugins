@@ -23,6 +23,8 @@ import { splitChapters, classifyHeading, checkText, fixText, slugify, stripFront
 
 const SCRIPT = fileURLToPath(new URL('./ingest-book.mjs', import.meta.url));
 const SEP = '-'.repeat(48);
+// The CLI's ENV gate refuses any non-macOS host before it parses arguments or spawns marker.
+const MACOS_CLI = { skip: process.platform !== 'darwin' && 'ingest-book CLI runs on macOS only' };
 
 /** marker markdown as produced with --paginate_output (page ids are 0-indexed). */
 const MARKER_MD = `
@@ -351,7 +353,7 @@ test('llamaServerCheck: required unless an external inference server stands in f
   assert.match(mute.detail, /version unknown/);
 });
 
-test('CLI queue: each converted book records the llama.cpp build that read it', () => {
+test('CLI queue: each converted book records the llama.cpp build that read it', MACOS_CLI, () => {
   const root = tmpdir('ingest-book-llama-');
   const books = path.join(root, 'books');
   fs.mkdirSync(books);
@@ -422,7 +424,7 @@ test('suryaGuardWarning: silence only when the guard reported that it patched su
   assert.equal(suryaGuardWarning({ SURYA_GUARD: 'off' }, null), null);
 });
 
-test('CLI queue: marker runs under the surya guard and a guard that never loaded is reported', () => {
+test('CLI queue: marker runs under the surya guard and a guard that never loaded is reported', MACOS_CLI, () => {
   const root = tmpdir('ingest-book-guard-');
   const books = path.join(root, 'books');
   fs.mkdirSync(books);
@@ -477,7 +479,7 @@ test('laneFlagText: a known lane names its flags, an unrecorded one says so', ()
   assert.match(laneFlagText('fast'), /레인 미기록/);
 });
 
-test('convert: the IgnoreTextProcessor kill switch reaches marker itself, not just the toc', () => {
+test('convert: the IgnoreTextProcessor kill switch reaches marker itself, not just the toc', MACOS_CLI, () => {
   const root = tmpdir('ingest-book-flags-');
   const pdf = path.join(root, 'book.pdf');
   fs.writeFileSync(pdf, '%PDF-1.4\n');
@@ -503,7 +505,7 @@ test('convert: the IgnoreTextProcessor kill switch reaches marker itself, not ju
   assert.deepEqual(argv.slice(argv.indexOf('--mode'), argv.indexOf('--mode') + 3), ['--mode', 'balanced', '--force_ocr']);
 });
 
-test('CLI convert: an unknown lane is refused before marker is invoked', () => {
+test('CLI convert: an unknown lane is refused before marker is invoked', MACOS_CLI, () => {
   const root = tmpdir('ingest-book-lane-');
   const pdf = path.join(root, 'book.pdf');
   fs.writeFileSync(pdf, '%PDF-1.4\n');
@@ -513,7 +515,7 @@ test('CLI convert: an unknown lane is refused before marker is invoked', () => {
   assert.match(res.stderr, /unknown --lane fast/);
 });
 
-test('CLI queue: refuses a missing --books instead of scanning the cwd', () => {
+test('CLI queue: refuses a missing --books instead of scanning the cwd', MACOS_CLI, () => {
   const missing = run(['queue']);
   assert.equal(missing.code, 2);
   assert.match(missing.stderr, /--books DIR is required/);
