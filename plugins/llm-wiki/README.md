@@ -99,7 +99,7 @@ contradictions: [page-slug]
 |--------|--------------|------|
 | `/llm-wiki:capture <URL 또는 제목>` | Ingest | raw/ 캡처(sha256 dedup)까지 담당하고, 적재는 wiki-schema 스킬 절차에 위임 |
 | `/llm-wiki:recall <키워드>` | Query | Grep 전수검색 → 후보 합성 → 가치 있으면 queries/에 파일링 |
-| `/llm-wiki:research <주제>` | Ingest(research) | 서브에이전트 1개가 채널 라우팅·조사·`raw/` 원문 확보 → 메인이 wiki-schema 절차로 적재 |
+| `/llm-wiki:research <주제>` | Ingest(research) | 메인이 하위 질문을 세우고, 서브에이전트가 라운드마다 하나씩 열린 질문을 조사·`raw/` 원문 확보 → 메인이 얕은 지점을 판정해 없어질 때까지 반복 → wiki-schema 절차로 적재 |
 | `/llm-wiki:setup-channels` | — | 선택 계층 채널(gh·Reddit·X·YouTube) 진단·설치. **옵트인**이라 한 번도 안 돌려도 리서치는 필수 계층으로 완주한다 |
 
 Lint 커맨드는 없다. 정비도 커밋도 아래 훅이 log 기록 직후 자동으로 돌린다.
