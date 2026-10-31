@@ -36,9 +36,9 @@ claude 를 띄우고, 인계 문서 하나로 소유권을 넘긴 뒤, 이 세�
 `orca` 가 PATH 에 있어야 한다. `--close-self` 는 이 세션이 Orca 터미널에서 돌고 있을 때만 동작한다
 (`ORCA_TERMINAL_HANDLE`). bd 를 쓰는 작업이면 `--bd` 로 진행 정본을 가리킨다.
 
-본문 합성을 위임할 `handoff` 스킬이 있어야 한다. 없으면 사용자에게 `/setup-matt-pocock-skills` 를
-알리고, 그 세션에서는 템플릿만으로 쓴 뒤 **그 사실을 보고한다** — 대화 압축·비밀 삭제 판단이 빠진
-문서라고 적는다.
+본문 합성을 맡길 `handoff` 스킬의 파일이 있어야 한다(찾는 순서는 2단계). 없으면 사용자에게
+`/setup-matt-pocock-skills` 를 알리고, 그 세션에서는 템플릿만으로 쓴 뒤 **그 사실을 보고한다** — 대화
+압축·비밀 삭제 판단이 빠진 문서라고 적는다.
 
 ## 절차
 
@@ -70,8 +70,12 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/handoff.mjs" allocate --slug {슬러그}
 번호를 올려 쌓고 덮어쓰지 않는다 — 정돈이 아니라 **인계 사슬을 남기기 위해서다.** 3차 인계 세션이
 1차에서 뭘 확정했는지 되짚을 수 있어야 한다.
 
-그다음 `handoff` 스킬을 호출하고, 그것이 합성한 본문에 `references/handoff-doc.md` 의 계약을 씌워 위
-경로에 Write 한다. 두 가지를 **덮어써야 한다**:
+그다음 `handoff` 스킬의 `SKILL.md` 를 **Read 로 읽어 그 지시대로 합성한다.** 🚨 Skill 도구로 부르지 않는다 —
+`disable-model-invocation: true` 라 모델은 호출할 수 없다. 찾는 순서는 지금 worktree 의
+`.claude/skills/handoff/SKILL.md`, `~/.claude/skills/handoff/SKILL.md`, `~/.agents/skills/handoff/SKILL.md` 이고
+먼저 있는 것을 쓴다(전제의 「없으면」은 셋 다 없을 때다). 지시의 «인자» 자리에는 다음 세션이 할 일을 넣는다.
+
+합성한 본문에 `references/handoff-doc.md` 의 계약을 씌워 위 경로에 Write 한다. 두 가지를 **덮어써야 한다**:
 
 - 🚨 **저장 위치.** `handoff` 는 OS 임시 디렉터리에 쓴다. 여기서는 위에서 받은 경로다 — 임시 디렉터리는
   청소되고 번호도 안 붙어서 인계 사슬이 남지 않는다.

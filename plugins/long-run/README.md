@@ -26,7 +26,8 @@
 - Node.js 18+ (내장 모듈만 쓴다. 런타임 의존성 0)
 - 상태줄과 mod 판정은 Claude Code v2.1.287 이상. 그보다 낮으면 Stop hook 만으로 동작한다
 - 인계는 이 세션이 Orca 터미널에서 돌고 있을 때 자기 탭을 닫는다(`ORCA_TERMINAL_HANDLE`)
-- `handoff` 스킬: 인계 문서 본문 합성을 위임한다. 없으면 `/setup-matt-pocock-skills` 로 설치한다.
+- `handoff` 스킬: 인계 문서 본문 합성의 지시문이다. 모델이 호출할 수 없는 스킬이라(`disable-model-invocation`)
+  전역 설치본의 `SKILL.md` 를 읽어 따른다. 없으면 `/setup-matt-pocock-skills` 로 설치한다.
   `references/handoff-doc.md` 만으로도 문서는 쓸 수 있지만, 그때는 대화 압축·비밀 삭제 판단이 빠진다
 - `wayfinder` 스킬: 선행 계획 맵이 필요할 때만. 없으면 완료 조건을 사용자와 직접 합의한다
 
