@@ -1,6 +1,8 @@
 {
-  "description": "long-run 의 mod(상태줄·Stop 판정)와 Stop hook. 저장소가 아니라 플러그인에 달려 있어 어느 repo·worktree 에서 연 세션에도 따라온다 — 긴 작업이 실제로 도는 곳이 worktree 이므로 프로젝트 훅으로는 닿지 않는다. mod 가 뜨면 Stop 훅은 mod 의 표지를 보고 빠지고, mod 가 안 뜨는 환경에서는 Stop 훅이 혼자 판정한다. 맵을 선언하지 않은 세션에는 아무 일도 하지 않는다.",
-  "modules": ["./register.mjs"],
+  "description": "long-run 의 mod(상태줄·Stop 판정)와 훅. 저장소가 아니라 플러그인에 달려 있어 어느 repo·worktree 에서 연 세션에도 따라온다 — 긴 작업이 실제로 도는 곳이 worktree 이므로 프로젝트 훅으로는 닿지 않는다. mod 가 뜨면 Stop 훅은 mod 의 표지를 보고 빠지고, mod 가 안 뜨는 환경에서는 Stop 훅이 혼자 판정한다. PreToolUse 는 사람의 답을 기다리는 동안 진행을 거부하고, UserPromptSubmit 은 사람의 말을 영수증으로 남기며, PostToolUse 는 맵을 움직인 명령 뒤 게이트 스냅샷을 고친다. 영수증 말고는 맵을 선언하지 않은 세션에 아무 일도 하지 않는다.",
+  "modules": [
+    "./register.mjs"
+  ],
   "hooks": {
     "Stop": [
       {
@@ -10,6 +12,42 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/frontier-guard.mjs\" --hook",
             "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/frontier-guard.mjs\" --gate",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/frontier-guard.mjs\" --refresh",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/frontier-guard.mjs\" --receipt",
+            "timeout": 10
           }
         ]
       }

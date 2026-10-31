@@ -2,7 +2,7 @@
  * 맵 하나를 읽는 데 드는 bd 조회 전부. bd 를 부르는 일은 주입받은 `run` 이 하고 여기는 무엇을 언제
  * 부르고 어떻게 가르는지만 안다 — 동시성을 bd 없이 잴 수 있게.
  */
-import { classifyFrontier } from './guard-core.mjs';
+import { classifyFrontier, DELEGATED_LABEL } from './guard-core.mjs';
 
 /**
  * bd 조회 하나의 시한. 셋이 동시에 뜨므로 한 판의 시간은 가장 느린 하나이고, 이 시한 하나가 Stop 훅
@@ -13,7 +13,7 @@ import { classifyFrontier } from './guard-core.mjs';
 export const BD_TIMEOUT_MS = 17_000;
 
 /** 읽지 못한 맵. 🚨 빈 프론티어가 아니라 «모름» 이고, 맵은 열린 것으로 둔다 — 닫혔다고 읽으면 선언이 지워진다. */
-const UNREAD = { frontier: null, epicOpen: true, epicTitle: null, claimed: null };
+const UNREAD = { frontier: null, epicOpen: true, epicTitle: null, claimed: null, delegated: null };
 
 /**
  * 맵의 모든 직계 자식(`bd list --all`)에서 열린 것만 — bd list 의 기본 필터와 같은 범위다. 상태별로 bd 를
@@ -54,6 +54,7 @@ export async function readMap(epic, run) {
     epicOpen: map.status !== 'closed',
     epicTitle: map.title ?? null,
     claimed: open.filter((c) => c.status === 'in_progress').map((c) => ({ id: c.id, title: c.title ?? null })),
+    delegated: children.filter((c) => c.labels?.includes(DELEGATED_LABEL)).length,
     children,
   };
 }

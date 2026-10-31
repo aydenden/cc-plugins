@@ -9,7 +9,7 @@
  * `node:` import 를 두지 않는다. 이 파일은 hooks module 이 import 하므로 mod 의 실행 환경에서 돌아야 한다.
  */
 
-import { HANDOFF_RATIO, HANDOFF_SKILL, contextLimitOf, decide, handoffClosedOf, pendingWave } from './guard-core.mjs';
+import { HANDOFF_RATIO, HANDOFF_SKILL, handoffClosedOf, pendingWave } from './guard-core.mjs';
 
 /**
  * `frontier-guard.mjs status` 의 stdout 을 읽는다. 못 읽으면 null(«모름»)이고, 가드는 모를 때 통과시킨다.
@@ -33,14 +33,16 @@ export function parseStatus(stdout) {
   }
 }
 
-/** 세션 측정값에서 판정 입력의 컨텍스트. 측정 전이면 «못 쟀다» 로 싣는다 — 0 을 여유로 읽히게 두지 않는다. */
-function contextOf(usage) {
-  const context = usage?.context;
-  return {
-    contextTokens: context?.tokens ?? 0,
-    contextLimit: context?.window > 0 ? context.window : contextLimitOf(null),
-    measured: typeof context?.tokens === 'number',
-  };
+/**
+ * `frontier-guard.mjs judge` 에 넘길 컨텍스트 인자. 세션이 실제 창을 알려주므로 모델 이름에서 추측하지 않는다.
+ * 측정 전이면 싣지 않는다 — CLI 가 «못 쟀다» 로 판정한다. 0 을 여유로 읽히게 두지 않는다.
+ *
+ * @param {{context?: {tokens?: number, window?: number}} | null} usage
+ * @returns {string[]}
+ */
+export function judgeUsageArgs(usage) {
+  const { tokens, window } = usage?.context ?? {};
+  return typeof tokens === 'number' && window > 0 ? ['--tokens', String(tokens), '--window', String(window)] : [];
 }
 
 /** 상태줄에 그리는 맵 제목의 최대 글자 수. 한글은 터미널 두 칸이라 칸이 아니라 글자로 센다. */
@@ -83,6 +85,9 @@ export function statusLine(status, usage) {
   parts.push(`밀기 ${count(pushable)}`, `막힘 ${count(blocked)}`, `질문 ${count(questions)}`);
   const inFlight = pendingWave(status.marker).length;
   if (inFlight) parts.push(`웨이브 ${inFlight}건 대기`);
+  if (status.frontier?.unscoped?.length) parts.push(`범위 없는 질문 ${status.frontier.unscoped.length} — 맵 정지`);
+  // 위임 중이라는 사실과 에이전트가 대신 고른 수를 늘 보인다 — 사람이 돌아와 무엇을 볼지 아는 자리다.
+  if (status.marker.delegation) parts.push(`위임 답변 ${status.delegated ?? '?'}`);
   const closed = status.closedSinceSession;
   const limit = handoffClosedOf(status.marker);
   // 축을 끈 맵은 문턱 없이 센 값만 그린다 — 없는 문턱을 그리면 «인계할 때» 가 거짓으로 뜬다.
@@ -97,31 +102,8 @@ export function statusLine(status, usage) {
   return parts.join(' · ');
 }
 
-/**
- * Stop 판정. 판정 규칙은 `decide()` 그대로고, 입력만 status 출력과 세션 측정값에서 만든다.
- *
- * `status.owner` 가 null(아무도 주인이 아님)이면 주인이 아닌 것으로 본다 — Stop 에서는 node 훅이 먼저
- * 돌아 claim 을 증명한 세션을 주인으로 적으므로, 그 뒤에도 null 이면 이 세션은 claim 하지 않았다.
- * 칸이 없으면(`--session` 없이 물은 status) 주인 자리에서 본 것이다.
- *
- * @param {{status: ReturnType<typeof parseStatus>, usage: object | null, stopHookActive: boolean}} input
- * @returns {{block: boolean, reason?: string, clear?: boolean, ratio: number}}
- */
-export function stopVerdict({ status, usage, stopHookActive }) {
-  return decide({
-    marker: status?.marker ?? null,
-    ...contextOf(usage),
-    frontier: status?.frontier ?? null,
-    epicOpen: status?.epicOpen !== false,
-    owner: status?.owner === undefined || status.owner === true,
-    closedSinceSession: status?.closedSinceSession ?? null,
-    handoffClosed: handoffClosedOf(status?.marker),
-    stopHookActive,
-  });
-}
-
 /** 맵의 티켓이나 선언을 움직이는 셸 명령. status 는 bd 를 여러 번 부르므로 이것이 돈 뒤에만 상태줄을 다시 그린다. */
-const MAP_COMMAND = /\bbd\s+(update|close|create|reopen)\b|frontier-guard/;
+const MAP_COMMAND = /\bbd\s+(update|close|create|reopen|dep|human|label|delete|defer)\b|frontier-guard/;
 
 /** 그 셸 명령이 상태줄의 숫자를 바꿀 수 있는가. */
 export const movesMap = (command) => typeof command === 'string' && MAP_COMMAND.test(command);

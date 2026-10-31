@@ -54,7 +54,7 @@ test('상태별 목록은 한 번 받아 가른다 — 닫힌 자식은 프론�
   const reading = readMap(EPIC, runner.run);
   await settleAll(runner);
   const read = await reading;
-  assert.deepEqual(read.frontier, { pushable: ['map-abcd.1', 'map-abcd.2'], questions: [], blocked: [] });
+  assert.deepEqual(read.frontier, { pushable: ['map-abcd.1', 'map-abcd.2'], questions: [], blocked: [], deferred: [], unscoped: [] });
   assert.equal(read.epicOpen, true);
   assert.equal(read.epicTitle, '목적지');
   assert.deepEqual(read.claimed, [{ id: 'map-abcd.2', title: '잡은 것' }]);

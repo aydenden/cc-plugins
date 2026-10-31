@@ -9,7 +9,7 @@
 | 역할 | 무엇으로 | 왜 세션을 넘나 |
 |---|---|---|
 | 목표와 남은 티켓 | bd epic 본문(맵 헌장: 목표·완료 조건·운영 규약) | DB 에 있다. 세션이 죽어도 남는다 |
-| 멈춤 막기 | mod (`hooks/register.mjs`), 대비로 Stop hook (`scripts/frontier-guard.mjs`) | 플러그인에 달려 있어 어느 repo·worktree 에서 연 세션에도 붙는다 |
+| 멈춤 막기·질문 게이트 | mod (`hooks/register.mjs`), Stop·PreToolUse·UserPromptSubmit hook (`scripts/frontier-guard.mjs`) | 플러그인에 달려 있어 어느 repo·worktree 에서 연 세션에도 붙는다 |
 | 다음 세션으로 넘기기 | `long-run:session-handoff` | 인계 문서 하나로 소유권을 넘긴다 |
 
 ## 설치
@@ -46,34 +46,79 @@
 세션이 다음 Stop 에서 주인으로 적힌다(`lib/claim.mjs`). 같은 worktree 에서 다른 일로 연 세션은
 되밀리지 않는다.
 
-선언한 세션에서는 멈춤 시도마다 **한 번만** 되민다. 두 번째 멈춤은 무조건 통과시킨다(그러지 않으면
-세션이 영영 안 끝난다). 가드가 터지면 막는 것이 아니라 조용히 통과시킨다.
+선언한 세션에서는 멈춤을 되민 뒤 **도구를 썼으면 다시 되민다.** `stop_hook_active` 는 되민 뒤 도구를 쓰고
+다시 멈출 때도 참이라, 그 값만 보고 통과시키면 한 턴에 한 번밖에 못 민다. 되민 뒤 도구 없이 또 멈췄으면
+승인 요청이나 보고로 보고 통과시킨다. 가드가 터지면 막는 것이 아니라 조용히 통과시킨다.
 
 | 프론티어 | 되미는 말 | 마커 |
 |---|---|---|
 | 밀 수 있는 티켓이 있다 | 「곧장 다음 티켓을 claim 하라」. 이 세션이 티켓 2건을 닫았거나 컨텍스트가 창의 50% 를 넘었으면 「이어가지 말고 인계하라」 | 남긴다 |
-| 밀 수 있는 것은 없고 질문·막힌 티켓만 남았다 | 「기다리는 질문을 모아 보고하고 멈춰라」 | 남긴다. 답이 오면 이어 민다 |
+| 밀 수 있는 것은 없고 질문·막힌 티켓만 남았다 | 「기다리는 질문을 모아 보고하고 멈춰라」. 같은 묶음은 한 번만 | 남긴다. 답이 오면 이어 민다 |
 | 비었는데 맵이 열려 있다 | 「서브에이전트 하나로 완료 조건을 검증하고 맵을 닫아라」. 50% 를 넘었으면 그 일을 인계 | 남긴다 |
 | 비었고 맵이 닫혔다 | 없음 (통과) | 지운다 |
-| 모른다 (bd 를 못 읽었다) | 없음 (통과) | 남긴다 |
+| 모른다 (bd 를 못 읽었다) | 「status 로 다시 읽어라」. 또 멈추면 통과 | 남긴다 |
 
 **밀 수 있는 티켓**은 `bd ready --parent <맵>` 에 나오거나 이미 claim 된 것 중 `human` 라벨이 없는 것이다.
-`human` 라벨 티켓은 사람의 답을 기다리는 **질문**이고(`bd human list` · `bd human respond <id>`), 나머지
-열린 티켓은 **막힌 것**이다. 갈림길에서 맵 전체가 서지 않도록 질문은 티켓으로 남겨 두고, 무엇이 그 답을
-기다리는지는 `bd dep add` 로 적는다. 가드가 읽을 수 있는 것은 데이터뿐이다.
+`human` 라벨 티켓은 사람의 답을 기다리는 **질문**이고, `bd defer` 한 티켓은 자기 칸(`deferred`)에 두며, 나머지
+열린 티켓은 **막힌 것**이다. claim 됐어도 열린 맵 자식에 `blocks` 의존이 걸린 티켓은 막힌 것이다. 갈림길에서 맵
+전체가 서지 않도록 질문은 티켓으로 남겨 두고, 무엇이 그 답을 기다리는지는 `bd dep add` 로 적는다. 가드가 읽을
+수 있는 것은 데이터뿐이다.
+
+## 질문 게이트: 답이 없으면 진행하지 못한다
+
+질문의 범위는 의존이 말한다.
+
+| 질문 | 뜻 | 동작 |
+|---|---|---|
+| 기다리는 티켓이 적혔다(`dependent_count > 0`) | 뒤로 밀어도 된다 | 그 티켓만 서고 나머지가 앞으로 나온다 |
+| 기다리는 티켓이 없다(`dependent_count == 0`) | 무엇이 기다리는지 모른다 | **맵 전체가 선다.** `bd dep add` 로 범위를 적어야 풀린다 |
+
+PreToolUse 훅(`--gate`, 규칙은 `lib/gate.mjs`)이 주인 세션의 호출을 거부한다. 공식 문서상 이 거부는
+`bypassPermissions` 에서도 선다.
+
+| 호출 | 거부되는 경우 |
+|---|---|
+| `bd update <id> --claim`, `--status in_progress` | 대상이 질문이거나 막혔다 (bd 자체는 막힌 티켓도 잡아 준다) |
+| `bd ready --claim` | 밀 수 있는 것이 없거나 `--exclude-label human` 이 없다 |
+| 질문의 `bd close`·`human respond`·`human dismiss`·`delete`, `human` 라벨 제거, `--status closed` | 항상. 아래 `answer`·`delegate-answer` 로만 닫는다 |
+| 막힌 티켓의 `bd close --force` | 항상 |
+| 질문에 걸린 `bd dep remove` | 질문 이후 사람의 말이 없다 |
+| `Edit`·`Write`·`NotebookEdit`(worktree 안), `git commit`·`git push` | 밀 수 있는 티켓이 없다 (웨이브 정산 중은 제외) |
+
+**사람의 답은 영수증으로 가른다.** bd 는 누가 답했는지 모른다. UserPromptSubmit 훅(`--receipt`)이 사람이 친 말을
+worktree 별로 최근 20건 남기고(인계 프롬프트와 시스템 입력은 뺀다), `answer <질문> --quote "<원문>"` 은 그 질문
+이후의 말과 맞아야 닫힌다. 부분 인용은 8자 이상이고, 짧은 답(`a`)은 프롬프트 전체와 같아야 한다.
+사람이 다른 터미널에서 직접 `bd human respond` 를 치는 길은 그대로다.
+
+**한계.** 실수를 막는 장치이지 샌드박스가 아니다. 셸 스크립트나 `sed -i` 로 고치는 것은 잡지 못하고, 「계속해」를
+답으로 인용하는 것도 막지 못한다(인용이 bd 코멘트에 남아 감사할 수 있다). 어떤 질문을 밀어도 되는지의 판단
+자체는 에이전트가 하고, 하네스는 그 판단을 `bd dep` 으로 기록하게 할 뿐이다.
+
+## 위임: 사람이 맡기면 헌장의 목표대로 푼다
+
+| 단계 | 명령 | 강제되는 것 |
+|---|---|---|
+| 켠다 | `delegate --quote "<사람 원문>"` | 영수증에 있는 사람의 말이어야 한다. 맵 코멘트에 `[위임 시작]` 이 남고 재claim 이 물려받는다 |
+| 답한다 | `delegate-answer <질문> --choice … --cite "<헌장 원문>" --why …` | `--cite` 가 Destination·완료 조건의 원문이어야 한다. 위임을 켠 뒤 목표 절이 바뀌었으면 거부한다. 근거를 못 대는 질문은 사람 몫으로 남는다 |
+| 표시 | 자동 | 질문에 `long-run:delegated` 라벨, 코멘트에 `[위임 답변]`, 상태줄에 `위임 답변 N` |
+| 끝낸다 | `delegation-report` | 위임 답변이 있는 맵은 그 전부를 담은 보고서가 있고 close 명령에 그 경로가 실려야 닫힌다 |
+| 끈다 | `delegate --off` | 맵 코멘트에 `[위임 종료]` 가 남는다 |
+
+보고서는 `~/.claude/long-run/delegation-reports/<맵>.md` 다. 위임의 근거가 된 사람의 말, 헌장 목표, 대신 고른 것,
+결정별 이유와 그 답을 기다린 티켓(되돌리면 다시 봐야 하는 곳)을 담는다.
 
 **인계의 1차 축은 닫은 티켓 수다**(문턱 2건. 티켓 하나가 세션의 40~50%). 컨텍스트 비율은 계측이
 실패하면 0% 로 떨어지는데, 그것을 「여유」로 읽어 한 세션이 열 티켓을 닫은 선례가 있다. 그래서 못 잰
 컨텍스트는 «계측 불가» 로 따로 말하고 그 값으로 판정하지 않는다. 닫은 수는 이 세션이 claim 한 시각
 이후 `closed_at` 된 자식을 bd 에서 센다 — 주인이 첫 Stop 에서 적히기 전, 인계받은 첫 턴부터 센다.
 
-맵을 닫는 자리의 검증은 **지시일 뿐 증명이 아니다.** 가드는 검증하라고 한 번 되밀고 맵이 닫혔는지만 본다.
+맵을 닫는 자리의 검증은 **지시일 뿐 증명이 아니다.** 가드는 검증하라고 되밀고 맵이 닫혔는지만 본다.
 서브에이전트가 실제로 돌았는지, 완료 조건이 참인지는 보지 못한다.
 
 판정은 둘 중 하나가 한다. 규칙은 같다. `scripts/lib/guard-core.mjs` 의 `decide()` 이고, 그 축과 근거는
 그 파일 머리말에 있다.
 
-| | mod (`hooks/register.mjs`) | Stop hook (`frontier-guard.mjs --hook`) |
+| | mod (`hooks/register.mjs`, CLI 의 `judge` 로 묻는다) | Stop hook (`frontier-guard.mjs --hook`) |
 |---|---|---|
 | 언제 판정하나 | mod 가 뜬 세션 (Claude Code v2.1.287+) | mod 가 안 뜬 세션: 구버전, 조직 정책, `--safe-mode` |
 | 컨텍스트 | 세션이 잰 값 (`$.session.usage()`, 실제 창 크기) | 트랜스크립트 꼬리의 `usage`, 창은 모델 이름의 `[1m]` 으로 추정 |
@@ -83,13 +128,16 @@ mod 는 맵을 미는 세션이 **압축될 때**도 끼어든다. 압축은 막
 된다), 요약 지시와 압축 뒤 대화에 「새 티켓을 잡지 말고 하던 티켓까지만 가서 인계하라」를 남긴다.
 압축된 세션은 맵의 운영 규약을 잃기 때문이다. 다른 세션이 주인인 맵이면 아무것도 덧붙이지 않는다.
 
-둘이 같은 멈춤을 두 번 판정하지 않도록, mod 는 Stop 이벤트에 `long_run_mod: true` 를 실어 아래로 넘기고
-Stop hook 은 그것을 보면 빠진다(`guard-core.mjs` 의 `MOD_FLAG`). 환경변수가 아니라 이벤트에 싣는 이유는
+둘이 같은 멈춤을 두 번 판정하지 않도록, mod 는 판정을 얻은 뒤에만 Stop 이벤트에 `long_run_mod: true` 를 실어
+아래로 넘기고 Stop hook 은 그것을 보면 빠진다(`guard-core.mjs` 의 `MOD_FLAG`). 판정을 못 얻으면 표지 없이 넘겨
+Stop hook 이 판정한다. 환경변수가 아니라 이벤트에 싣는 이유는
 환경변수는 mod 가 꺼진 뒤에도 프로세스에 남아 대비까지 입을 다물게 하기 때문이다.
 
-mod 는 마커 경로와 프론티어를 직접 계산하지 않고 `frontier-guard.mjs status` 를 부른다. mod 는
-`node:` 모듈을 못 쓰므로 키 계산을 다시 짜면 같은 규칙이 두 벌이 된다. 마커 경로를 한 번 배운 뒤로는
-마커 파일이 없는 동안 `bd` 를 부르지 않는다.
+mod 는 마커 경로와 프론티어를 직접 계산하지 않고 `frontier-guard.mjs status`·`judge` 를 부른다. mod 는
+`node:` 모듈을 못 쓰므로 키 계산을 다시 짜면 같은 규칙이 두 벌이 된다. 마커가 없으면 CLI 가 `bd` 를 부르지 않는다.
+
+세션의 cwd 가 옮겨 가도(웨이브 worktree 검증 등) 가드는 이 세션이 주인인 마커를 찾아 판정하고, 맵은 마커의
+worktree 에서 읽는다.
 
 ## 상태가 사는 곳
 
@@ -98,7 +146,7 @@ mod 는 마커 경로와 프론티어를 직접 계산하지 않고 `frontier-gu
 
 | 무엇 | 기본 위치 | 환경변수 |
 |---|---|---|
-| 가드 마커·닫기 로그 | `~/.claude/long-run/` | `LONG_RUN_STATE_ROOT` |
+| 가드 마커·영수증·위임 보고서·닫기 로그 | `~/.claude/long-run/` | `LONG_RUN_STATE_ROOT` |
 | 인계 문서 | `~/.claude/handoff/<worktree 키>/<슬러그>/handoff-NN.md` | `HANDOFF_ROOT` |
 
 **키는 worktree 마다 갈린다**(`<basename>-<경로해시8>`). 머신에 하나로 두면 서로 무관한 저장소의
@@ -121,6 +169,13 @@ node scripts/frontier-guard.mjs move <worktree 경로>
 # 워커에게 넘긴 티켓을 적는다(정산 전까지 가드가 보고를 기다리라고 되민다) / 정산한 티켓을 뺀다
 node scripts/frontier-guard.mjs wave-begin <runId> <티켓>=<dispatch>[=<worktreeId>]...
 node scripts/frontier-guard.mjs wave-settle <티켓>
+
+# 사람의 답으로 질문을 닫는다 / 위임을 켜고 끈다 / 헌장 근거로 대신 답한다 / 위임 보고서를 쓴다
+node scripts/frontier-guard.mjs answer <질문> --quote <사람 원문> [--answer <뜻>]
+node scripts/frontier-guard.mjs delegate --quote <사람 원문>
+node scripts/frontier-guard.mjs delegate --off
+node scripts/frontier-guard.mjs delegate-answer <질문> --choice <고른 것> --cite <헌장 원문> --why <이유>
+node scripts/frontier-guard.mjs delegation-report [맵]
 
 # 승인받은 티켓마다 base 안에 하위 worktree(wave-<티켓>)를 orca 로 만들어 워커를 띄우고 wave-begin 까지 한다.
 # --dry-run 은 orca 를 부르지 않고 승인에 보일 계획 JSON 만 낸다. 시작 전에 orca 명령 스키마를 대조한다
@@ -190,7 +245,7 @@ node --test "scripts/test/*.test.mjs"
 claude plugin validate .
 ```
 
-순수 로직만 테스트한다. 프론티어 분류·주인·판정(`lib/guard-core.mjs`), claim 토큰(`lib/claim.mjs`), 헌장과 가드의 문구 일치
+순수 로직만 테스트한다. 프론티어 분류·주인·판정(`lib/guard-core.mjs`), 질문 게이트(`lib/gate.mjs`), 영수증·헌장 근거·위임 보고서(`lib/delegation.mjs`), claim 토큰(`lib/claim.mjs`), 헌장과 가드의 문구 일치
 (`test/charter-wording.test.mjs`), mod 의 입력 조립과 상태줄 문구(`lib/mod-view.mjs`),
 문서 메타 대조와 §0 검사(`lib/doc-meta.mjs`), 인계 프롬프트(`lib/handoff-prompt.mjs`), 경로·키 계산(`lib/handoff-path.mjs`), bd 조회의 동시성과 «모름» 처리(`lib/read-map.mjs` — bd 는 스텁으로
 갈아 끼운다). orca·bd 자체의 동작은 실측 대상이라 테스트하지 않는다. `hooks/register.mjs` 는 배선뿐이라 `claude plugin validate` 가 읽어 내는 hooks·calls

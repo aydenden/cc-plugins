@@ -142,6 +142,9 @@ main(() => {
       ? '건너뜀 — 넘기는 bd 가 이 worktree 에 선언된 맵 밖이다'
       : '해당 없음 — 이 worktree 에 선언된 맵이 없다';
 
+  // 보낸 세션을 더 밀지 않는다 — 선언이 옮겨 갔으면 이 worktree 에 적을 마커가 없어 아무 일도 안 한다.
+  if (inheritedMap({ bdId, mapEpic })) guardLine('hand-over');
+
   // 제출이 확인된 뒤에만 예약한다. 미제출은 위에서 exit 6 으로 죽으므로, 인계가 실패한 채 보낸
   // 세션만 사라지는 경우가 생기지 않는다.
   if (closePlan) scheduleSelfClose(closePlan);

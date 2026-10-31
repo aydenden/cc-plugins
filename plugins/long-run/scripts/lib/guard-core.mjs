@@ -26,9 +26,10 @@
  * 쓰고도 열 티켓을 닫은 선례가 있다. 그래서 인계의 1차 축은 **닫은 티켓 수**다: bd 는 계측기가 죽어도
  * 답할 수 있고, 창이 20만이든 100만이든 «티켓 하나 = 세션의 40~50%» 라는 산수가 그대로 선다.
  *
- * 🚨 **`stop_hook_active` 면 무조건 통과시킨다.** 그 값이 참이라는 것은 이미 이 훅 때문에 한 번
- * 되돌려 보냈다는 뜻이다. 거기서 또 막으면 세션이 영영 안 끝난다. 즉 가드의 힘은 «멈춤 시도마다
- * 한 번 되민다» 이지 «못 멈추게 한다» 가 아니다 — 그 선을 넘으면 사용자가 Ctrl+C 로만 빠져나오게 된다.
+ * 🚨 **되민 뒤 진전이 없을 때만 통과시킨다**(`stalledSincePush`). `stop_hook_active` 는 되민 뒤 도구를
+ * 여러 번 쓰고 다시 멈출 때도 참이라(실측), 그 값만 보고 통과시키면 한 턴에 한 번밖에 못 민다 — 일을
+ * 재개한 세션이 다음 티켓 앞에서 말없이 선다. 그래서 되민 뒤 **도구를 썼으면** 다시 민다. 도구 없이 또
+ * 멈췄으면 승인 요청이나 보고로 보고 놓아준다. 가드는 여전히 못 멈추게 하는 장치가 아니다.
  */
 
 /** 컨텍스트가 이만큼 차면 이어가지 말고 넘긴다. 맵 운영 규약의 «50% 에서 session-handoff». */
@@ -85,6 +86,9 @@ export const isDelegatedToMod = (input) => input?.[MOD_FLAG] === true;
 /** 사람의 답을 기다리는 질문 티켓의 라벨. bd 가 `bd human list`·`respond` 로 다루는 바로 그 라벨이다. */
 export const QUESTION_LABEL = 'human';
 
+/** 위임으로 답한 질문의 표시. 위임 보고서(`delegation.mjs`)가 이 라벨로 결정을 모은다. */
+export const DELEGATED_LABEL = 'long-run:delegated';
+
 /** 「멈춰도 되는 자리」 중 승인이 필요한 바깥 쓰기의 예시. */
 const EXTERNAL_WRITES = '이슈 트래커·문서·push·외부 시스템';
 
@@ -112,6 +116,7 @@ const STOP_PLACES = (pct, handoffClosed) => `${STOP_PLACE_LIST(pct, handoffClose
 export const PARKING_RULE =
   `목적지·완료조건을 바꾸는 갈림길(A/B)은 멈추지 않고 주차한다 — 질문을 \`bd create --labels ${QUESTION_LABEL}\` 티켓으로 만들고, ` +
   `그 답이 있어야 하는 티켓마다 \`bd dep add <티켓> <질문>\` 을 건 뒤 나머지를 민다. ` +
+  `의존이 하나도 없는 질문은 맵 전체를 세운다. ` +
   `국소 선택(A.1/A.2)은 묻지 않고 고르고 이유를 close reason 에 남긴다`;
 
 /**
@@ -133,6 +138,25 @@ export function contextLimitOf(model) {
 export function contextTokensOf(usage) {
   if (!usage) return 0;
   return (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
+}
+
+/** 트랜스크립트의 도구 호출 수. 되민 뒤 진전이 있었는지 가른다. 읽을 것이 없으면 `null`(모름). */
+export function countToolUses(text) {
+  return typeof text === 'string' ? (text.match(/"type":"tool_use"/g) ?? []).length : null;
+}
+
+/**
+ * 되민 뒤 진전 없이 또 멈췄는가. 참이면 통과시킨다(머리말).
+ *
+ * @param {boolean} stopHookActive 훅 입력의 값
+ * @param {number | null | undefined} lastPushTools 마지막으로 되밀 때의 도구 호출 수(마커)
+ * @param {number | null} toolUses 지금 도구 호출 수
+ * @returns {boolean} 어느 값이든 모르면 참 — 되돌려 보낸 쪽이 다른 플러그인일 수 있고, 모르면서 또 막지 않는다
+ */
+export function stalledSincePush(stopHookActive, lastPushTools, toolUses) {
+  if (!stopHookActive) return false;
+  if (typeof lastPushTools !== 'number' || typeof toolUses !== 'number') return true;
+  return toolUses <= lastPushTools;
 }
 
 /**
@@ -170,23 +194,49 @@ export function readTranscriptTail(text) {
  * 🚨 `bd ready --parent` 는 손자까지 준다. 자식이 하위 epic 하나뿐인 맵에서 직계만 보면, 그 epic 이
  * 열려 있는 동안 맵 전체가 «막힘» 으로 읽힌다. 그래서 ready 후손은 그대로 밀 수 있는 것으로 센다.
  *
- * @param {{children: {id: string, status?: string, labels?: string[] | null}[], ready: {id: string, labels?: string[] | null}[]}} input
+ * 🚨 **질문의 범위는 의존이 말한다.** 기다리는 티켓이 적힌 질문은 그 티켓만 세우고 나머지는 앞으로 나온다.
+ * 의존이 0 인 질문(`dependent_count === 0`)은 무엇이 기다리는지 모르는 것이라 **맵 전체를 세운다**
+ * (`unscoped`) — 밀어도 된다고 선언하는 길은 `bd dep` 뿐이다. 칸이 없는 행은 모름이라 세우지 않는다.
+ *
+ * 🚨 `bd update --claim` 은 막힌 티켓도 잡아 준다(실측). 그래서 `in_progress` 라도 열린 맵 자식에 `blocks`
+ * 의존이 걸려 있으면 막힌 것이다. 맵 밖의 차단자는 상태를 알 수 없어 세지 않는다.
+ *
+ * @param {{children: {id: string, status?: string, labels?: string[] | null, dependent_count?: number, dependencies?: {depends_on_id: string, type: string}[]}[], ready: {id: string, labels?: string[] | null, dependent_count?: number}[]}} input
  *   `children` 은 `bd list --parent <epic>` 의 닫히지 않은 행, `ready` 는 `bd ready --parent <epic>` 의 행.
- * @returns {{pushable: string[], questions: string[], blocked: string[]}}
+ * @returns {{pushable: string[], questions: string[], blocked: string[], deferred: string[], unscoped: string[]}}
  */
 export function classifyFrontier({ children, ready }) {
   const isQuestion = (row) => row.labels?.includes(QUESTION_LABEL) === true;
   const readyIds = new Set(ready.map((row) => row.id));
-  const frontier = { pushable: [], questions: [], blocked: [] };
+  const openIds = new Set(children.map((row) => row.id));
+  const waitsOnOpen = (row) => (row.dependencies ?? []).some((d) => d.type === 'blocks' && openIds.has(d.depends_on_id));
+  const frontier = { pushable: [], questions: [], blocked: [], deferred: [], unscoped: [] };
   const push = (id) => frontier.pushable.includes(id) || frontier.pushable.push(id);
+  const ask = (row) => {
+    if (frontier.questions.includes(row.id)) return;
+    frontier.questions.push(row.id);
+    if (row.dependent_count === 0) frontier.unscoped.push(row.id);
+  };
   for (const child of children) {
-    if (isQuestion(child)) frontier.questions.push(child.id);
-    else if (child.status === 'in_progress' || readyIds.has(child.id)) push(child.id);
+    if (isQuestion(child)) ask(child);
+    else if (child.status === 'deferred') frontier.deferred.push(child.id);
+    else if ((child.status === 'in_progress' && !waitsOnOpen(child)) || readyIds.has(child.id)) push(child.id);
     else frontier.blocked.push(child.id);
   }
-  for (const row of ready) if (!isQuestion(row)) push(row.id);
+  for (const row of ready) (isQuestion(row) ? ask(row) : push(row.id));
+  if (frontier.unscoped.length) {
+    frontier.blocked.push(...frontier.pushable);
+    frontier.pushable = [];
+  }
   return frontier;
 }
+
+/** 답을 기다리느라 밀 수 있는 것이 없는가 — 게이트가 쓰기를 막고, 가드가 보고를 시키는 자리다. */
+export const isWaiting = (frontier) =>
+  Boolean(frontier) && frontier.pushable.length === 0 && frontier.questions.length + frontier.blocked.length > 0;
+
+/** 같은 질문 묶음을 두 번 보고시키지 않으려고 마커에 적는 값. */
+export const waitingDigest = (frontier) => [...frontier.questions, ...frontier.blocked].sort().join(',');
 
 /**
  * 이 세션이 그 마커의 주인인가, 그리고 이 세션의 기준 시각.
@@ -275,6 +325,36 @@ export function beginWave(marker, { runId, startedAt, tickets }) {
  */
 export const waveCarriedBy = (existing, epic) => (existing?.epic === epic && pendingWave(existing).length ? { wave: existing.wave } : {});
 
+/** 새로 쓰는 마커가 물려받을 위임. 인계받은 세션의 claim 이 위임을 버리면 밤새 돌던 맵이 첫 질문에 선다. 다른 맵이면 물려받지 않는다. */
+export const delegationCarriedBy = (existing, epic) => (existing?.epic === epic && existing.delegation ? { delegation: existing.delegation } : {});
+
+/**
+ * 이 세션이 주인인 마커를 고른다. 지금 위치의 마커가 우선이고, 없으면 다른 worktree 의 마커에서 찾는다.
+ *
+ * 🚨 훅의 `cwd` 는 세션의 `cd` 를 따라간다(공식 문서). 웨이브 worktree 로 옮겨 검증하면 지금 위치의 키에는
+ * 마커가 없어 가드가 말없이 꺼진다. 다른 worktree 의 마커는 **명시적으로 이 세션의 것**일 때만 고른다 —
+ * 토큰 이전의 마커(`claimHash` 칸 없음)는 «처음 멈추는 세션» 이 주인이 되므로 여기서 그 규칙을 쓰면 남의 맵을 빼앗는다.
+ *
+ * @param {{path: string, marker: object | null}[]} entries 첫 칸이 지금 위치의 마커
+ * @param {string | undefined} sessionId
+ * @param {string} now
+ * @param {(claimHash: string) => boolean} proves
+ * @returns {{path: string, marker: object, owner: true, since: string | null, changed: boolean} | null}
+ */
+export function pickOwned(entries, sessionId, now, proves) {
+  const [here, ...others] = entries;
+  if (here) {
+    const own = ownership(here.marker, sessionId, now, proves);
+    if (own.owner) return { path: here.path, marker: here.marker, ...own };
+  }
+  for (const { path, marker } of others) {
+    if (!marker?.epic || !('claimHash' in marker || marker.session?.id)) continue;
+    const own = ownership(marker, sessionId, now, proves);
+    if (own.owner) return { path, marker, ...own };
+  }
+  return null;
+}
+
 /** 아직 정산하지 않은 웨이브 티켓. 웨이브가 없으면 빈 배열. */
 export const pendingWave = (marker) => (Array.isArray(marker?.wave?.tickets) ? marker.wave.tickets : []);
 
@@ -335,7 +415,7 @@ function waveReason(epic, wave, tickets) {
  *   contextLimit: number,
  *   frontier: ReturnType<typeof classifyFrontier> | null,
  *   epicOpen?: boolean,
- *   stopHookActive: boolean,
+ *   stalled: boolean,
  *   isStopEvent?: boolean,
  *   owner?: boolean,
  *   measured?: boolean,
@@ -353,7 +433,7 @@ export function decide({
   contextLimit,
   frontier,
   epicOpen = true,
-  stopHookActive,
+  stalled,
   isStopEvent = true,
   owner = true,
   measured = false,
@@ -367,31 +447,52 @@ export function decide({
   // 🚨 Stop 이 아닌 이벤트에서는 아무 말도 하지 않는다. 배선이 `PostToolUse` 로 들어가면 파일을
   // 고칠 때마다 판정이 터져 «작업 중» 을 «멈추려 함» 으로 오해한 잔소리가 된다(실측으로 밟았다).
   if (!isStopEvent) return { block: false, ratio };
-  // 🚨 두 번째 막음은 없다(머리말).
-  if (stopHookActive) return { block: false, ratio };
+  // 🚨 되민 뒤 진전이 없으면 놓아준다(머리말).
+  if (stalled) return { block: false, ratio };
   // 가드는 선언한 세션에만 붙는다 — 맵을 밀고 있지 않은 세션까지 막으면 못 쓰는 도구가 된다.
   if (!marker?.epic) return { block: false, ratio };
   // 같은 worktree 의 다른 세션이다(`ownership`) — 막지도, 주인의 선언을 지우지도 않는다.
   if (!owner) return { block: false, ratio };
+  // 인계를 보낸 세션이다 — 새 세션이 claim 해 마커를 새로 쓸 때까지 이 칸이 남는다. 또 밀면 맵을 두 세션이 민다.
+  if (marker.handedOffAt) return { block: false, ratio };
   // 웨이브는 마커가 말하므로 bd 를 못 읽어도 선다 — 워커가 도는 동안 코디네이터가 떠나면 보고를 받을 이가 없다.
   const inFlight = pendingWave(marker);
   if (inFlight.length) return { block: true, ratio, reason: waveReason(marker.epic, marker.wave, inFlight) };
-  // 모를 때는 통과시키되 선언을 남긴다 — 지우면 bd 가 잠깐 죽은 것만으로 가드가 사라진다.
-  if (!frontier) return { block: false, ratio };
-
-  const { pushable, questions, blocked } = frontier;
-  if (pushable.length === 0 && questions.length + blocked.length > 0) {
-    const asked = questions.length
-      ? `답을 기다리는 질문이 ${questions.length}건이다(${questions.join(', ')}).`
-      : `질문 티켓은 없는데 열린 티켓이 전부 막혀 있다 — 무엇에 막혔는지 \`bd blocked\` 로 본다.`;
-    const held = blocked.length ? ` 거기 막힌 티켓 ${blocked.length}건(${blocked.join(', ')}).` : '';
+  // 모르면 한 번 말하고 선언은 남긴다 — 말없이 통과시키면 가드가 사라진 것과 구분되지 않는다. 또 멈추면 놓아준다.
+  if (!frontier) {
     return {
       block: true,
       ratio,
       reason:
-        `${marker.epic} 에 지금 밀 수 있는 티켓이 없다. ${asked}${held} ` +
+        `${marker.epic} 의 프론티어를 bd 에서 못 읽어 이 멈춤을 판정하지 못했다. ` +
+        `\`frontier-guard.mjs status\` 로 다시 읽고, 서면 평소처럼 밀거나 멈출 자리를 판단한다. ` +
+        `계속 못 읽으면 그 사실을 보고하고 멈춘다. 🚨 마커는 지우지 않는다.`,
+    };
+  }
+
+  const { pushable, questions, blocked, unscoped = [] } = frontier;
+  if (isWaiting(frontier)) {
+    const digest = waitingDigest(frontier);
+    // 이미 보고한 묶음이다 — 사람이 답할 때까지 턴마다 같은 보고를 시키지 않는다.
+    if (marker.reportedWaiting === digest) return { block: false, ratio };
+    const asked = questions.length
+      ? `답을 기다리는 질문이 ${questions.length}건이다(${questions.join(', ')}).`
+      : `질문 티켓은 없는데 열린 티켓이 전부 막혀 있다 — 무엇에 막혔는지 \`bd blocked\` 로 본다.`;
+    const held = blocked.length ? ` 거기 막힌 티켓 ${blocked.length}건(${blocked.join(', ')}).` : '';
+    const scope = unscoped.length
+      ? ` 🚨 ${unscoped.join(', ')} 는 기다리는 티켓이 적히지 않아 맵 전체를 세웠다 — 뒤로 밀어도 되는 질문이면 \`bd dep add <티켓> <질문>\` 으로 범위를 적고 나머지를 민다.`
+      : '';
+    const delegated = marker.delegation
+      ? ` 지금은 위임 중이다 — 헌장의 Destination·완료 조건으로 판정되는 질문은 \`frontier-guard.mjs delegate-answer <질문> --choice "<고른 것>" --cite "<헌장 원문>" --why "<이유>"\` 로 답하고 민다. 헌장으로 판정되지 않는 질문만 남긴다.`
+      : '';
+    return {
+      block: true,
+      ratio,
+      reported: digest,
+      reason:
+        `${marker.epic} 에 지금 밀 수 있는 티켓이 없다. ${asked}${held}${scope}${delegated} ` +
         `**기다리는 것을 한 번에 모아 보고하고 멈춘다** — 질문마다 A/B 와 각 선택이 완료 조건에 무엇을 바꾸는지 한 줄씩. ` +
-        `답은 \`bd human respond <id>\` 로 받는다(닫히면 막힌 티켓이 풀린다). ` +
+        `🚨 사람의 답 없이 진행하지 않는다 — 쓰기와 claim 은 게이트가 막는다. 사람이 답하면 \`frontier-guard.mjs answer <질문> --quote "<사람이 친 원문>" --answer "<뜻>"\` 로 닫는다(닫히면 막힌 티켓이 풀린다). ` +
         `🚨 마커는 지우지 않는다 — 답이 오면 이 worktree 에서 이어 민다.`,
     };
   }
@@ -409,7 +510,7 @@ export function decide({
       `${why} ${marker.epic} 의 ${left} ` +
       `이 세션에서 더 밀지 않는다 — **${HANDOFF_SKILL} 로 넘긴다**(\`--bd ${marker.epic}\`). ` +
       `🚨 마커는 지우지 않는다 — worktree 당 파일 하나라 지우면 새 세션이 가드 없이 출발한다. ` +
-      `보내는 세션은 지우지 않아도 멈출 수 있다(두 번째 멈춤은 무조건 통과한다). ` +
+      `보내는 세션은 지우지 않아도 멈출 수 있다(\`handoff.mjs send\` 가 인계를 적으면 더 밀지 않는다). ` +
       `사용자에게 넘길지 묻지 않는다 — 그것이 규약이다.`,
   });
 
@@ -431,6 +532,7 @@ export function decide({
         `완료 조건을 줄마다 실제로 돌려 참/거짓과 그 출력을 받아 온다. 헌장의 「아직 규정 못 한 것」이 비었는지도 본다. ` +
         `거짓인 줄과 남은 안개는 그 자리에서 티켓으로 만든다(그러면 프론티어가 다시 찬다). ` +
         `확정된 결정을 뒤집는 지적은 반영하지 않고 \`bd create --labels ${QUESTION_LABEL}\` 질문으로 주차한다. ` +
+        (marker.delegation ? `위임으로 답한 결정이 있으면 먼저 \`frontier-guard.mjs delegation-report\` 로 보고서를 만들고, 그 경로를 close reason 에 싣고 사용자에게 알린다. ` : '') +
         `전부 참이면 \`bd close ${marker.epic} --reason "<줄마다의 관측>"\` 으로 맵을 닫는다 — 닫힌 것을 보고서야 가드가 선언을 지운다. ` +
         `맵을 접는 것이라면 \`frontier-guard.mjs clear\` 로 선언을 직접 지운다.`,
     };
@@ -450,7 +552,9 @@ export function decide({
         ? `그리고 닫은 티켓 수도 모른다(bd 가 답을 못 했다) — 이 세션이 claim 뒤 닫은 수를 스스로 세어 판정한다`
         : `잣대는 이 세션이 닫은 티켓 수다: 지금 ${closedSinceSession}/${handoffClosed}건`;
   const waitingParts = [questions.length && `질문 ${questions.length}건`, blocked.length && `막힌 티켓 ${blocked.length}건`].filter(Boolean);
-  const parked = waitingParts.length ? `${waitingParts.join('·')}은 답을 기다리므로 건드리지 않는다. ` : '';
+  const parked = waitingParts.length
+    ? `${waitingParts.join('·')}은 답을 기다리므로 건드리지 않는다${marker.delegation && questions.length ? ` — 위임 중이므로 헌장으로 판정되는 질문은 \`delegate-answer\` 로 답한다` : ''}. `
+    : '';
   return {
     block: true,
     ratio,

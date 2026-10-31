@@ -11,23 +11,27 @@ import {
   contextTokensOf,
   countClosedSince,
   countingSince,
+  countToolUses,
   decide,
+  delegationCarriedBy,
   handoffClosedOf,
   isDelegatedToMod,
   ownership,
   parseWaveArgs,
   pendingWave,
+  pickOwned,
   readTranscriptTail,
   settleWave,
+  stalledSincePush,
   STOP_PLACE_LIST,
   ticketLimitOf,
   waveCarriedBy,
 } from '../lib/guard-core.mjs';
 
 const marker = { epic: 'map-abcd' };
-const frontierOf = (pushable = [], questions = [], blocked = []) => ({ pushable, questions, blocked });
+const frontierOf = (pushable = [], questions = [], blocked = [], unscoped = []) => ({ pushable, questions, blocked, deferred: [], unscoped });
 const pushing = frontierOf(['map-abcd.9', 'map-abcd.11']);
-const base = { marker, contextTokens: 100_000, contextLimit: 1_000_000, measured: true, frontier: pushing, epicOpen: true, stopHookActive: false };
+const base = { marker, contextTokens: 100_000, contextLimit: 1_000_000, measured: true, frontier: pushing, epicOpen: true, stalled: false };
 
 test('창 크기는 모델 이름이 말한다 — [1m] 이면 백만', () => {
   assert.equal(contextLimitOf('claude-opus-5[1m]'), 1_000_000);
@@ -73,8 +77,29 @@ test('선언하지 않은 세션은 건드리지 않는다', () => {
   assert.equal(decide({ ...base, marker: null }).block, false);
 });
 
-test('🚨 stop_hook_active 면 무조건 통과 — 두 번째 막음은 세션을 영영 안 끝나게 만든다', () => {
-  assert.equal(decide({ ...base, stopHookActive: true }).block, false);
+test('되민 뒤 진전이 없으면 통과한다 — 도구 없이 또 멈춘 것은 승인 요청이나 보고다', () => {
+  assert.equal(decide({ ...base, stalled: true }).block, false);
+});
+
+// stop_hook_active 는 되민 뒤 도구를 쓰고 다시 멈출 때도 참이다(실측) — 그 값만 보면 한 턴에 한 번밖에 못 민다.
+test('🚨 되민 뒤 도구를 썼으면 다시 민다', () => {
+  assert.equal(stalledSincePush(true, 10, 12), false);
+  assert.equal(stalledSincePush(true, 10, 10), true);
+  assert.equal(stalledSincePush(false, 10, 10), false);
+});
+
+test('되민 기록이나 도구 수를 모르면 또 막지 않는다 — 되돌려 보낸 쪽이 다른 플러그인일 수 있다', () => {
+  assert.equal(stalledSincePush(true, undefined, 3), true);
+  assert.equal(stalledSincePush(true, 3, null), true);
+});
+
+test('트랜스크립트의 도구 호출을 센다', () => {
+  assert.equal(countToolUses('{"type":"tool_use"}\n{"type":"text"}\n{"type":"tool_use"}'), 2);
+  assert.equal(countToolUses(null), null);
+});
+
+test('인계를 보낸 세션은 더 밀지 않는다', () => {
+  assert.equal(decide({ ...base, marker: { ...marker, handedOffAt: 'x' } }).block, false);
 });
 
 test('프론티어가 남았으면 막고, 묻지 말고 claim 하라고 돌려준다', () => {
@@ -102,10 +127,12 @@ test('프론티어가 비고 맵이 닫혔으면 통과시키고 선언을 지�
 });
 
 // bd 가 잠깐 죽은 것을 빈 프론티어로 읽으면 선언이 사라지고, 새 세션이 가드 없이 출발한다.
-test('🚨 프론티어를 모르면 통과시키되 선언은 지우지 않는다', () => {
+test('🚨 프론티어를 모르면 말없이 통과시키지 않는다 — 한 번 말하고, 선언은 지우지 않는다', () => {
   const verdict = decide({ ...base, frontier: null });
-  assert.equal(verdict.block, false);
+  assert.equal(verdict.block, true);
+  assert.match(verdict.reason, /못 읽어/);
   assert.notEqual(verdict.clear, true);
+  assert.equal(decide({ ...base, frontier: null, stalled: true }).block, false);
 });
 
 test('컨텍스트가 절반을 넘으면 이어가지 말고 넘기라고 한다', () => {
@@ -159,7 +186,7 @@ const human = { labels: ['human'] };
 
 test('막힌 데 없는 열린 티켓은 밀 수 있다', () => {
   const frontier = classifyFrontier({ children: [row('map-abcd.1'), row('map-abcd.2')], ready: [row('map-abcd.1'), row('map-abcd.2')] });
-  assert.deepEqual(frontier, { pushable: ['map-abcd.1', 'map-abcd.2'], questions: [], blocked: [] });
+  assert.deepEqual(frontier, frontierOf(['map-abcd.1', 'map-abcd.2']));
 });
 
 // 사람이 답해야 하는 질문은 bd 의 `human` 라벨로 주차한다. `bd ready` 는 그 티켓도 내놓는다(실측) —
@@ -169,7 +196,7 @@ test('human 라벨 티켓은 질문이다 — ready 에 있어도 밀 수 있는
     children: [row('map-abcd.1'), row('map-abcd.3', human)],
     ready: [row('map-abcd.1'), row('map-abcd.3', human)],
   });
-  assert.deepEqual(frontier, { pushable: ['map-abcd.1'], questions: ['map-abcd.3'], blocked: [] });
+  assert.deepEqual(frontier, frontierOf(['map-abcd.1'], ['map-abcd.3']));
 });
 
 test('ready 에 없는 열린 티켓은 막힌 것이다', () => {
@@ -177,14 +204,14 @@ test('ready 에 없는 열린 티켓은 막힌 것이다', () => {
     children: [row('map-abcd.1'), row('map-abcd.2'), row('map-abcd.3', human)],
     ready: [row('map-abcd.1'), row('map-abcd.3', human)],
   });
-  assert.deepEqual(frontier, { pushable: ['map-abcd.1'], questions: ['map-abcd.3'], blocked: ['map-abcd.2'] });
+  assert.deepEqual(frontier, frontierOf(['map-abcd.1'], ['map-abcd.3'], ['map-abcd.2']));
 });
 
 // `bd ready` 는 in_progress 를 뺀다. 그것을 막힌 것으로 세면, 티켓을 claim 한 세션이 자기가 미는
 // 티켓 때문에 «밀 수 있는 것이 없다» 는 판정을 받는다.
 test('claim 한 티켓은 ready 에 없어도 밀 수 있는 것이다', () => {
   const frontier = classifyFrontier({ children: [row('map-abcd.1', { status: 'in_progress' })], ready: [] });
-  assert.deepEqual(frontier, { pushable: ['map-abcd.1'], questions: [], blocked: [] });
+  assert.deepEqual(frontier, frontierOf(['map-abcd.1']));
 });
 
 // 자식이 하위 epic 하나뿐인 맵에서 직계만 보면, 그 epic 이 열려 있는 동안 맵 전체가 «막힘» 으로
@@ -194,7 +221,96 @@ test('ready 로 나온 손자 티켓도 밀 수 있는 것이다 — 하위 epic
     children: [row('map-abcd.1')],
     ready: [row('map-abcd.1.1'), row('map-abcd.1.2', human)],
   });
-  assert.deepEqual(frontier, { pushable: ['map-abcd.1.1'], questions: [], blocked: ['map-abcd.1'] });
+  assert.deepEqual(frontier, frontierOf(['map-abcd.1.1'], ['map-abcd.1.2'], ['map-abcd.1']));
+});
+
+// `bd update --claim` 은 막힌 티켓도 잡아 준다(실측). 그것을 밀 수 있다고 읽으면 가드가 막힌 일을 밀라고 시킨다.
+test('🚨 claim 됐어도 열린 질문에 걸린 티켓은 막힌 것이다', () => {
+  const dep = { depends_on_id: 'q', type: 'blocks' };
+  const frontier = classifyFrontier({ children: [row('t', { status: 'in_progress', dependencies: [dep] }), row('q', { ...human, dependent_count: 1 })], ready: [row('q', human)] });
+  assert.deepEqual(frontier.pushable, []);
+  assert.deepEqual(frontier.blocked, ['t']);
+});
+
+test('discovered-from 의존은 막힌 것이 아니다', () => {
+  const frontier = classifyFrontier({ children: [row('p'), row('t', { status: 'in_progress', dependencies: [{ depends_on_id: 'p', type: 'discovered-from' }] })], ready: [row('p')] });
+  assert.deepEqual(frontier.pushable, ['p', 't']);
+});
+
+// 뒤로 민 것을 «막힘» 으로 말하면 무엇에 막혔는지 찾으러 간다.
+test('defer 한 티켓은 막힘이 아니라 자기 칸에 둔다', () => {
+  const frontier = classifyFrontier({ children: [row('d', { status: 'deferred' })], ready: [] });
+  assert.deepEqual(frontier.deferred, ['d']);
+  assert.deepEqual(frontier.blocked, []);
+});
+
+// --- 질문의 범위 ---
+
+test('기다리는 티켓이 적힌 질문은 그 티켓만 세우고 나머지는 민다', () => {
+  const frontier = classifyFrontier({
+    children: [row('q', { ...human, dependent_count: 1 }), row('t'), row('free')],
+    ready: [row('q', human), row('free')],
+  });
+  assert.deepEqual(frontier.pushable, ['free']);
+  assert.deepEqual(frontier.blocked, ['t']);
+  assert.deepEqual(frontier.unscoped, []);
+});
+
+test('🚨 의존이 0 인 질문은 맵 전체를 세운다 — 밀어도 된다는 선언은 bd dep 뿐이다', () => {
+  const frontier = classifyFrontier({
+    children: [row('q', { ...human, dependent_count: 0 }), row('free'), row('held', { status: 'in_progress' })],
+    ready: [row('q', human), row('free')],
+  });
+  assert.deepEqual(frontier.pushable, []);
+  assert.deepEqual(frontier.unscoped, ['q']);
+  assert.deepEqual(frontier.blocked.sort(), ['free', 'held']);
+  const verdict = decide({ ...base, frontier });
+  assert.match(verdict.reason, /맵 전체를 세웠다/);
+  assert.match(verdict.reason, /bd dep add/);
+});
+
+test('같은 질문 묶음은 한 번만 보고시킨다 — 사람이 답할 때까지 턴마다 되밀지 않는다', () => {
+  const frontier = frontierOf([], ['q'], ['t']);
+  const first = decide({ ...base, frontier });
+  assert.equal(first.block, true);
+  assert.equal(first.reported, 'q,t');
+  assert.equal(decide({ ...base, marker: { ...marker, reportedWaiting: 'q,t' }, frontier }).block, false);
+  assert.equal(decide({ ...base, marker: { ...marker, reportedWaiting: 'q,t' }, frontier: frontierOf([], ['q', 'q2'], ['t']) }).block, true);
+});
+
+test('위임 중이면 대기 문구가 헌장 근거로 답하는 길을 말한다', () => {
+  const reason = decide({ ...base, marker: { ...marker, delegation: { since: 'x' } }, frontier: frontierOf([], ['q']) }).reason;
+  assert.match(reason, /delegate-answer/);
+  assert.match(reason, /헌장으로 판정되지 않는/);
+  assert.match(decide({ ...base, marker: { ...marker, delegation: { since: 'x' } }, frontier: frontierOf() }).reason, /delegation-report/);
+});
+
+test('🚨 같은 맵을 다시 claim 해도 위임을 물려받고, 다른 맵은 아니다', () => {
+  const on = { epic: 'map-abcd', delegation: { since: 'x' } };
+  assert.deepEqual(delegationCarriedBy(on, 'map-abcd'), { delegation: on.delegation });
+  assert.deepEqual(delegationCarriedBy(on, 'map-other'), {});
+  assert.deepEqual(delegationCarriedBy(null, 'map-abcd'), {});
+});
+
+// --- cwd 가 옮겨 간 세션 ---
+
+test('🚨 cwd 가 웨이브 worktree 로 옮겨도 자기 맵을 찾는다', () => {
+  const here = { path: '/wave', marker: null };
+  const mine = { path: '/base', marker: { epic: 'map', session: { id: 's1', since: 't' }, claimHash: 'h' } };
+  assert.equal(pickOwned([here, mine], 's1', 'now', () => false).path, '/base');
+});
+
+test('다른 worktree 의 남의 맵은 고르지 않는다 — 토큰 이전 마커의 «처음 멈춘 세션» 규칙도 쓰지 않는다', () => {
+  const here = { path: '/here', marker: null };
+  assert.equal(pickOwned([here, { path: '/o', marker: { epic: 'map', session: { id: 's2' }, claimHash: 'h' } }], 's1', 'now', () => true), null);
+  assert.equal(pickOwned([here, { path: '/l', marker: { epic: 'map' } }], 's1', 'now', () => true), null);
+  assert.equal(pickOwned([{ path: '/l', marker: { epic: 'map' } }], 's1', 'now', () => false).path, '/l');
+});
+
+test('다른 worktree 에서 claim 해도 토큰을 증명하면 찾는다', () => {
+  const found = pickOwned([{ path: '/here', marker: null }, { path: '/c', marker: { epic: 'map', claimHash: 'h', claimedAt: '2026-10-21T08:30:00.000Z' } }], 's1', 'now', () => true);
+  assert.equal(found.changed, true);
+  assert.equal(found.path, '/c');
 });
 
 test('같은 티켓이 자식과 ready 양쪽에 있어도 한 번만 센다', () => {
@@ -212,7 +328,8 @@ test('밀 수 있는 것이 없고 질문이 남았으면 한 번 되밀어 질�
   assert.equal(verdict.block, true);
   assert.match(verdict.reason, /map-abcd\.3/);
   assert.match(verdict.reason, /모아 보고/);
-  assert.match(verdict.reason, /bd human respond/);
+  assert.match(verdict.reason, /frontier-guard\.mjs answer/);
+  assert.match(verdict.reason, /사람의 답 없이 진행하지 않는다/);
   // 밀 것이 없는데 claim 하라고 하면 질문 티켓을 집는다.
   assert.doesNotMatch(verdict.reason, /--claim/);
   // 답이 오면 같은 worktree 에서 이어 밀어야 한다.
@@ -550,8 +667,8 @@ test('웨이브는 bd 를 못 읽어도 마커만으로 기다리라고 말한�
   assert.equal(decide({ ...base, marker: waving, frontier: null }).block, true);
 });
 
-test('웨이브가 돌아도 두 번째 멈춤과 주인 아닌 세션은 통과시킨다', () => {
-  assert.equal(decide({ ...base, marker: waving, stopHookActive: true }).block, false);
+test('웨이브가 돌아도 진전 없는 멈춤과 주인 아닌 세션은 통과시킨다', () => {
+  assert.equal(decide({ ...base, marker: waving, stalled: true }).block, false);
   assert.equal(decide({ ...base, marker: waving, owner: false }).block, false);
 });
 

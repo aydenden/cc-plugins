@@ -10,16 +10,13 @@
  *
  * 🚨 `classic.Stop` 훅에 `.catch` 를 달지 않는다. 엔진의 기본 처리가 원하는 동작이다 — `next` 전에
  * 터지면 이 훅만 건너뛰어 표지 없는 Stop 이 node 훅까지 가서 판정되고, `next` 뒤에 터지면 그 결과(통과)가
- * 선다. 어느 쪽도 막는 쪽으로 고장나지 않는다.
+ * 선다. 어느 쪽도 막는 쪽으로 고장나지 않는다. 판정을 못 물었으면 표지 없이 넘겨 node 훅이 판정한다.
  *
  * @param {(event: string, ...rest: unknown[]) => unknown} on
  */
 
 import { MOD_FLAG } from '../scripts/lib/guard-core.mjs';
-import { compactNote, movesMap, parseStatus, statusLine, stopVerdict } from '../scripts/lib/mod-view.mjs';
-
-/** 이 worktree 의 마커 경로. 첫 status 에서 배운다 — 마커가 없는 동안은 bd 를 부르지 않고 파일만 본다. */
-let markerPath = null;
+import { compactNote, judgeUsageArgs, movesMap, parseStatus, statusLine } from '../scripts/lib/mod-view.mjs';
 
 /** 이 세션 자리에서 본 status. 세션 id 를 실어야 주인이 아닌 세션이 판정에서 빠진다. */
 async function readStatus($, cwd) {
@@ -28,29 +25,29 @@ async function readStatus($, cwd) {
     const sessionId = await $.session.id();
     const { exitCode, stdout } = await $.process.run(['node', cli, 'status', '--session', sessionId], cwd ? { cwd } : undefined);
     if (exitCode !== 0) return null;
-    const status = parseStatus(stdout);
-    if (status?.markerPath) markerPath = status.markerPath;
-    return status;
+    return parseStatus(stdout);
   } catch {
     return null;
   }
 }
 
-/** 선언이 없다고 확실할 때만 false. 경로를 아직 모르면 status 로 확인해야 한다. */
-async function mayBeClaimed($) {
-  if (!markerPath) return true;
+/**
+ * Stop 판정을 CLI 에 묻는다. 못 물으면 null — 호출자가 표지 없이 넘겨 node 훅이 판정하게 한다.
+ * 표지를 먼저 달고 물으면 여기서 실패한 Stop 은 아무도 판정하지 않는다.
+ */
+async function judge($, e) {
   try {
-    return await $.fs.exists(markerPath);
+    const args = ['judge', '--session', e.session_id, '--transcript', e.transcript_path, ...(e.cwd ? ['--cwd', e.cwd] : [])];
+    if (e.stop_hook_active === true) args.push('--active');
+    args.push(...judgeUsageArgs(await $.session.usage()));
+    const { exitCode, stdout } = await $.process.run(['node', `${$.plugin.root}/scripts/frontier-guard.mjs`, ...args], e.cwd ? { cwd: e.cwd } : undefined);
+    return exitCode === 0 ? parseStatus(stdout) : null;
   } catch {
-    return true;
+    return null;
   }
 }
 
 async function refreshStatusLine($, usage) {
-  if (!(await mayBeClaimed($))) {
-    $.ui.status(undefined);
-    return;
-  }
   $.ui.status(statusLine(await readStatus($), usage));
 }
 
@@ -87,10 +84,10 @@ export function register(on) {
 
   // 압축은 막지 않는다 — 창이 넘칠 때 건너뛰면 막다른 길이 된다. 요약과 압축 뒤 대화에 인계 지시만 남긴다.
   // `.catch` 를 달지 않는다 — `next` 뒤에 터지면 `.catch` 가 `next` 를 다시 불러 압축이 두 번 돈다.
-  // `next` 앞의 조회(`mayBeClaimed`·`readStatus`)는 실패를 스스로 삼킨다.
+  // `next` 앞의 조회(`readStatus`)는 실패를 스스로 삼킨다.
   on('session.compact', async ($, e, next) => {
     if (e.agentId !== undefined || e.trigger === 'precompute') return next(e);
-    const note = (await mayBeClaimed($)) ? compactNote(await readStatus($)) : undefined;
+    const note = compactNote(await readStatus($));
     if (note === undefined) return next(e);
 
     const compacted = await next({ ...e, instructions: e.instructions ? `${e.instructions}\n\n${note}` : note });
@@ -98,21 +95,13 @@ export function register(on) {
     return { ...compacted, messages: [...compacted.messages, { role: 'user', text: note, toolUses: [] }] };
   });
 
-  // node 훅이 먼저 돌아 claim 을 증명한 세션을 주인으로 적는다 — 그 뒤에 읽는 status 가 그것을 본다.
+  // 판정을 먼저 묻는다. 주인 기록·되민 기록·선언 해제는 CLI 가 한다.
   on('classic.Stop', async ($, e, next) => {
+    const verdict = await judge($, e);
+    if (verdict === null) return next(e);
     const result = await next({ ...e, [MOD_FLAG]: true });
-    if (result?.block || !(await mayBeClaimed($))) return result;
-
-    const status = await readStatus($, e.cwd);
-    const verdict = stopVerdict({
-      status,
-      usage: await $.session.usage(),
-      stopHookActive: e.stop_hook_active === true,
-    });
-    if (verdict.clear) {
-      await $.process.run(['node', `${$.plugin.root}/scripts/frontier-guard.mjs`, 'clear'], e.cwd ? { cwd: e.cwd } : undefined);
-      $.ui.status(undefined);
-    }
+    if (result?.block) return result;
+    if (verdict.clear) $.ui.status(undefined);
     return verdict.block ? { ...result, block: verdict.reason } : result;
   });
 }

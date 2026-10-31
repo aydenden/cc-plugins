@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { HANDOFF_SKILL } from '../lib/guard-core.mjs';
-import { compactNote, movesMap, parseStatus, statusLine, stopVerdict } from '../lib/mod-view.mjs';
+import { compactNote, judgeUsageArgs, movesMap, parseStatus, statusLine } from '../lib/mod-view.mjs';
 
 // `frontier-guard.mjs status` 가 내는 꼴 그대로다 — 프론티어는 분류된 id 로 실린다.
 const claimed = {
@@ -14,9 +14,6 @@ const claimed = {
   epicOpen: true,
 };
 const unclaimed = { ...claimed, marker: null, frontier: null };
-const empty = { pushable: [], questions: [], blocked: [] };
-// 되미는 문구의 「멈춰도 되는 자리」도 스킬 이름을 싣는다 — 인계 지시는 이 구절로 가른다.
-const HANDING_OFF = new RegExp(`${HANDOFF_SKILL} 로 넘긴다`);
 const usageAt = (tokens, window = 1_000_000) => ({ context: { tokens, window, percent: Math.round((tokens / window) * 100) } });
 
 // --- parseStatus ---
@@ -84,65 +81,29 @@ test('인계 문턱을 넘으면 그 사실을 붙인다', () => {
   assert.equal(statusLine(claimed, usageAt(500_000)), '🧭 [결제 모듈 이전] · 밀기 2 · 막힘 0 · 질문 0 · 컨텍스트 50%/50% · 인계할 때');
 });
 
-// --- stopVerdict ---
-
-test('프론티어가 남고 컨텍스트가 여유면 다음 티켓으로 되민다', () => {
-  const v = stopVerdict({ status: claimed, usage: usageAt(100_000), stopHookActive: false });
-  assert.equal(v.block, true);
-  assert.match(v.reason, /map-abcd\.9, map-abcd\.11/);
-  assert.doesNotMatch(v.reason, HANDING_OFF);
-});
+// --- judge 인자 ---
 
 // 창 크기를 모델 이름에서 추측하지 않는다 — 세션이 실제 창을 알려준다.
-test('창 크기는 세션이 준 값을 쓴다', () => {
-  const v = stopVerdict({ status: claimed, usage: usageAt(150_000, 200_000), stopHookActive: false });
-  assert.match(v.reason, HANDING_OFF);
+test('세션이 잰 컨텍스트를 judge 인자로 넘긴다', () => {
+  assert.deepEqual(judgeUsageArgs(usageAt(150_000, 200_000)), ['--tokens', '150000', '--window', '200000']);
 });
 
-test('프론티어가 비고 맵이 닫혔으면 통과시키고 선언을 지우라고 한다', () => {
-  const v = stopVerdict({ status: { ...claimed, frontier: empty, epicOpen: false }, usage: usageAt(100_000), stopHookActive: false });
-  assert.equal(v.block, false);
-  assert.equal(v.clear, true);
+test('🚨 측정 전이면 싣지 않는다 — 0 을 여유로 읽히게 두지 않는다', () => {
+  assert.deepEqual(judgeUsageArgs(null), []);
+  assert.deepEqual(judgeUsageArgs({ context: { window: 1_000_000 } }), []);
 });
 
-test('프론티어가 비었어도 맵이 열려 있으면 선언을 지우지 않는다', () => {
-  const v = stopVerdict({ status: { ...claimed, frontier: empty }, usage: usageAt(100_000), stopHookActive: false });
-  assert.equal(v.block, true);
-  assert.notEqual(v.clear, true);
+// --- 위임 표시 ---
+
+test('위임 중이면 대신 고른 수를 상태줄에 늘 보인다', () => {
+  const on = { ...claimed, marker: { epic: 'map-abcd', delegation: { since: 'x' } }, delegated: 3 };
+  assert.match(statusLine(on, usageAt(100_000)), /위임 답변 3/);
+  assert.doesNotMatch(statusLine(claimed, usageAt(100_000)), /위임/);
 });
 
-// status 가 bd 를 못 읽으면 frontier 를 null 로 싣는다 — 빈 프론티어로 읽으면 선언이 사라진다.
-test('🚨 프론티어를 모르면 통과시키되 선언은 지우지 않는다', () => {
-  const v = stopVerdict({ status: { ...claimed, frontier: null }, usage: usageAt(100_000), stopHookActive: false });
-  assert.equal(v.block, false);
-  assert.notEqual(v.clear, true);
-});
-
-test('두 번째 멈춤은 무조건 통과시킨다', () => {
-  assert.equal(stopVerdict({ status: claimed, usage: usageAt(100_000), stopHookActive: true }).block, false);
-});
-
-test('선언하지 않았거나 status 를 못 읽었으면 통과시킨다', () => {
-  assert.equal(stopVerdict({ status: unclaimed, usage: usageAt(100_000), stopHookActive: false }).block, false);
-  assert.equal(stopVerdict({ status: null, usage: usageAt(100_000), stopHookActive: false }).block, false);
-});
-
-// 측정 전이면 인계를 지시하지 않는다 — 다음 티켓으로 되미는 쪽이 안전하다.
-test('컨텍스트를 모르면 인계가 아니라 다음 티켓으로 되민다', () => {
-  const v = stopVerdict({ status: claimed, usage: null, stopHookActive: false });
-  assert.equal(v.block, true);
-  assert.doesNotMatch(v.reason, HANDING_OFF);
-});
-
-test('🚨 측정 전이면 되미는 문구가 계측 불가라고 말한다 — 0% 를 여유로 말하지 않는다', () => {
-  const v = stopVerdict({ status: claimed, usage: null, stopHookActive: false });
-  assert.match(v.reason, /계측 불가/);
-});
-
-// 닫은 수는 status 가 bd 에서 센다 — mod 는 그 값을 그대로 판정에 넘긴다.
-test('status 가 센 닫은 수가 문턱을 넘으면 인계로 되민다', () => {
-  const v = stopVerdict({ status: { ...claimed, closedSinceSession: 2 }, usage: usageAt(100_000), stopHookActive: false });
-  assert.match(v.reason, HANDING_OFF);
+test('범위 없는 질문이 맵을 세웠으면 그 사실을 그린다', () => {
+  const frozen = { ...claimed, frontier: { pushable: [], questions: ['q'], blocked: ['t'], unscoped: ['q'] } };
+  assert.match(statusLine(frozen, usageAt(100_000)), /범위 없는 질문 1 — 맵 정지/);
 });
 
 // --- 대기 ---
@@ -185,16 +146,9 @@ test('티켓 수 축을 끈 맵은 닫은 수만 그리고 그 수로 인계할 
   );
 });
 
-test('티켓 수 축을 끈 맵은 닫은 수로 되밀지 않고 컨텍스트로만 넘긴다', () => {
-  const pushing = stopVerdict({ status: { ...coordinator, closedSinceSession: 5 }, usage: usageAt(100_000), stopHookActive: false });
-  assert.doesNotMatch(pushing.reason, HANDING_OFF);
-  const full = stopVerdict({ status: { ...coordinator, closedSinceSession: 5 }, usage: usageAt(600_000), stopHookActive: false });
-  assert.match(full.reason, HANDING_OFF);
-});
-
 // 상태줄의 숫자는 status 가 bd 를 여러 번 불러 낸다. 그래서 맵의 티켓이나 선언을 움직인 명령 뒤에만 다시 그린다.
 test('맵의 티켓이나 선언을 움직이는 셸 명령만 상태줄을 다시 그리게 한다', () => {
-  for (const command of ['bd close map-abcd.9 --reason "x"', 'bd update map-abcd.9 --claim', 'bd create -t task --parent map-abcd', 'bd reopen map-abcd.9', 'node "/p/scripts/frontier-guard.mjs" claim map-abcd']) {
+  for (const command of ['bd close map-abcd.9 --reason "x"', 'bd update map-abcd.9 --claim', 'bd create -t task --parent map-abcd', 'bd reopen map-abcd.9', 'node "/p/scripts/frontier-guard.mjs" claim map-abcd', 'bd dep add a b', 'bd human respond q']) {
     assert.equal(movesMap(command), true, command);
   }
   for (const command of ['bd show map-abcd', 'bd ready --parent map-abcd', 'npm test']) {
@@ -226,24 +180,6 @@ test('주인이 아직 정해지지 않은 맵도 지시를 남긴다', () => {
 });
 
 // --- 주인 ---
-
-// status 는 `--session` 으로 물으면 그 세션이 주인인지 싣는다: 참·거짓, 그리고 아직 아무도 증명하지
-// 않은 null.
-test('🚨 다른 세션이 주인이면 막지 않는다', () => {
-  const v = stopVerdict({ status: { ...claimed, owner: false }, usage: usageAt(100_000), stopHookActive: false });
-  assert.equal(v.block, false);
-  assert.notEqual(v.clear, true);
-});
-
-// Stop 에서는 node 훅이 먼저 돌아 claim 을 증명한 세션을 주인으로 적는다. 그래도 null 이면 이 세션은
-// claim 을 하지 않은 것이다 — 주인 없는 마커로 아무 세션이나 되밀면 주인 판정이 무의미해진다.
-test('주인이 아직 아무도 아니면 막지 않는다', () => {
-  assert.equal(stopVerdict({ status: { ...claimed, owner: null }, usage: usageAt(100_000), stopHookActive: false }).block, false);
-});
-
-test('owner 칸이 없는 status 는 주인 자리에서 본 것이다', () => {
-  assert.equal(stopVerdict({ status: claimed, usage: usageAt(100_000), stopHookActive: false }).block, true);
-});
 
 test('다른 세션이 주인이면 상태줄이 그렇게 말한다 — 이 세션은 판정되지 않는다', () => {
   assert.equal(statusLine({ ...claimed, owner: false }, usageAt(420_000)), '🧭 [결제 모듈 이전] · 다른 세션이 주인');
