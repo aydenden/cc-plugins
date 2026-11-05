@@ -91,6 +91,7 @@ import {
   stalledSincePush,
   ticketLimitOf,
   waveCarriedBy,
+  withAskHint,
 } from './lib/guard-core.mjs';
 import { BD_TIMEOUT_MS, readMap } from './lib/read-map.mjs';
 import { repoKeyOf, repoRootOf, stateRoot } from './lib/state-root.mjs';
@@ -189,17 +190,20 @@ async function judgeStop(input, context) {
   const transcript = readText(input.transcript_path);
   const toolUses = countToolUses(transcript);
   const background = pendingBackground(transcript, Date.now());
-  const verdict = decide({
-    marker,
-    ...(context ?? measure(input.transcript_path)),
-    closedSinceSession: countClosedSince(children, since),
-    handoffClosed: handoffClosedOf(marker),
-    background,
-    toolUses,
-    ...read,
-    stalled: stalledSincePush(input.stop_hook_active === true, marker.lastPushTools, toolUses),
-    isStopEvent: isStopEvent(input),
-  });
+  const verdict = withAskHint(
+    decide({
+      marker,
+      ...(context ?? measure(input.transcript_path)),
+      closedSinceSession: countClosedSince(children, since),
+      handoffClosed: handoffClosedOf(marker),
+      background,
+      toolUses,
+      ...read,
+      stalled: stalledSincePush(input.stop_hook_active === true, marker.lastPushTools, toolUses),
+      isStopEvent: isStopEvent(input),
+    }),
+    transcript
+  );
   if (verdict.clear) {
     if (existsSync(path)) rmSync(path);
     return verdict;

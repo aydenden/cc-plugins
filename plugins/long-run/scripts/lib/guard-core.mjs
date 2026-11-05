@@ -106,7 +106,7 @@ const EXTERNAL_WRITES = '이슈 트래커·문서·push·외부 시스템';
 export const STOP_PLACE_LIST = (pct, handoffClosed = HANDOFF_CLOSED_TICKETS) => [
   `맵을 닫았다`,
   `${handoffClosed == null ? '' : `이 세션이 티켓 ${handoffClosed}건을 닫았다 또는 `}컨텍스트 ${pct} 초과(그때는 \`${HANDOFF_SKILL}\`)`,
-  `승인이 필요한 바깥 쓰기(${EXTERNAL_WRITES})`,
+  `승인이 필요한 바깥 쓰기(${EXTERNAL_WRITES}) — 묻기 전에 \`frontier-guard.mjs wait "<요지>"\``,
   `주차한 질문에 막혀 밀 수 있는 티켓이 없을 때`,
 ];
 
@@ -429,6 +429,50 @@ export const awaitMarker = (marker, since, reason) => ({ ...marker, awaiting: { 
 export function clearAwaiting(marker) {
   const { awaiting: _awaiting, ...rest } = marker;
   return rest;
+}
+
+const ASKING_TAIL = /[?？]\s*(\*\*)?\s*$|(할까요|될까요|하실래요)/;
+
+/**
+ * 마지막 응답이 사람에게 묻는 말로 끝났는가. 표지(`wait`)를 빠뜨린 멈춤을 알아보는 휴리스틱이다 —
+ * 틀려도 되미는 말에 안내 한 줄이 붙을 뿐 판정은 바뀌지 않는다.
+ *
+ * @param {string | null} text 트랜스크립트(jsonl)
+ * @returns {boolean}
+ */
+export function endsWithQuestion(text) {
+  if (typeof text !== 'string') return false;
+  const lines = text.split('\n');
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    let json;
+    try {
+      json = JSON.parse(lines[i]);
+    } catch {
+      continue;
+    }
+    if (json?.type !== 'assistant' || !Array.isArray(json.message?.content)) continue;
+    const parts = json.message.content;
+    if (parts.some((part) => part?.type === 'tool_use')) return false;
+    const said = parts.filter((part) => part?.type === 'text').map((part) => part.text).join('\n');
+    if (said.trim()) return ASKING_TAIL.test(said.slice(-300));
+  }
+  return false;
+}
+
+/**
+ * 질문으로 끝난 멈춤을 되밀 때 앞에 붙이는 안내. 뒤따르는 「묻지 않는다」 를 승인 질문까지 거두라는 말로 읽지 않게 한다.
+ *
+ * @param {ReturnType<typeof decide>} verdict
+ * @param {string | null} text 트랜스크립트(jsonl)
+ */
+export function withAskHint(verdict, text) {
+  if (!verdict.block || !endsWithQuestion(text)) return verdict;
+  return {
+    ...verdict,
+    reason:
+      `방금 사람에게 물었으면 \`frontier-guard.mjs wait "<요지>"\` 를 남기고 그대로 멈춘다 — 사람이 답할 때까지 되밀지 않는다. ` +
+      `승인이 필요한 질문이 아니었으면 아래를 따른다.\n\n${verdict.reason}`,
+  };
 }
 
 // --- 백그라운드 작업 ---

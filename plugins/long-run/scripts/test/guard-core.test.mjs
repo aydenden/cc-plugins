@@ -17,6 +17,7 @@ import {
   countToolUses,
   decide,
   delegationCarriedBy,
+  endsWithQuestion,
   handoffClosedOf,
   isDelegatedToMod,
   ownership,
@@ -32,6 +33,7 @@ import {
   STOP_PLACE_LIST,
   ticketLimitOf,
   waveCarriedBy,
+  withAskHint,
 } from '../lib/guard-core.mjs';
 
 const marker = { epic: 'map-abcd' };
@@ -138,6 +140,39 @@ test('사람이 답하면 표지가 지워지고 평소 판정으로 돌아간�
   const answered = clearAwaiting(awaitMarker(marker, 'x', 'push 승인'));
   assert.deepEqual(answered, marker);
   assert.equal(decide({ ...base, marker: answered }).block, true);
+});
+
+// --- 질문으로 끝난 멈춤 ---
+
+const said = (...content) => JSON.stringify({ type: 'assistant', message: { content } });
+const textPart = (text) => ({ type: 'text', text });
+
+test('마지막 응답이 질문으로 끝났는지 읽는다', () => {
+  assert.equal(endsWithQuestion(said(textPart('이대로 진행할까요?'))), true);
+  assert.equal(endsWithQuestion(said(textPart('**어느 쪽으로 할까요?**'))), true);
+  assert.equal(endsWithQuestion(said(textPart('두 건을 닫았습니다.'))), false);
+  assert.equal(endsWithQuestion([said(textPart('할까요?')), said(textPart('진행했습니다.'))].join('\n')), false);
+});
+
+test('도구를 부르며 끝난 응답은 질문이 아니고, 생각만 있는 줄은 건너뛴다', () => {
+  assert.equal(endsWithQuestion(said(textPart('할까요?'), { type: 'tool_use', id: 'a', name: 'Bash', input: {} })), false);
+  assert.equal(endsWithQuestion([said(textPart('할까요?')), said({ type: 'thinking', thinking: '음' })].join('\n')), true);
+  assert.equal(endsWithQuestion(null), false);
+  assert.equal(endsWithQuestion('{ 깨진 줄'), false);
+});
+
+test('🚨 질문으로 끝난 멈춤을 되밀 때는 묻지 말라는 말보다 wait 를 먼저 말한다', () => {
+  const asked = said(textPart('push 할까요?'));
+  const verdict = withAskHint(decide(base), asked);
+  assert.match(verdict.reason, /^방금 사람에게 물었으면 `frontier-guard\.mjs wait/);
+  assert.match(verdict.reason, /곧장 다음 티켓/);
+});
+
+test('되밀지 않는 판정과 질문이 아닌 멈춤은 그대로 둔다', () => {
+  const pass = { block: false, ratio: 0 };
+  assert.equal(withAskHint(pass, said(textPart('할까요?'))), pass);
+  const push = decide(base);
+  assert.equal(withAskHint(push, said(textPart('닫았습니다.'))), push);
 });
 
 // --- 백그라운드 작업 ---
