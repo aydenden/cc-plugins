@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   HANDOFF_CLOSED_TICKETS,
   HANDOFF_RATIO,
+  BACKGROUND_QUIET_TOOLS,
   MOD_FLAG,
   awaitMarker,
   beginWave,
@@ -21,6 +22,7 @@ import {
   ownership,
   parseWaveArgs,
   pauseMarker,
+  pendingBackground,
   pendingWave,
   pickOwned,
   readTranscriptTail,
@@ -136,6 +138,70 @@ test('사람이 답하면 표지가 지워지고 평소 판정으로 돌아간�
   const answered = clearAwaiting(awaitMarker(marker, 'x', 'push 승인'));
   assert.deepEqual(answered, marker);
   assert.equal(decide({ ...base, marker: answered }).block, true);
+});
+
+// --- 백그라운드 작업 ---
+
+const NOW_MS = Date.parse('2026-01-01T12:00:00Z');
+const started = (id, at = '2026-01-01T11:50:00Z', name = 'Bash') =>
+  JSON.stringify({ type: 'assistant', timestamp: at, message: { content: [{ type: 'tool_use', id, name, input: { command: 'x', run_in_background: true } }] } });
+const finished = (id, type = 'attachment') => JSON.stringify({ type, content: `<task-notification><tool-use-id>${id}</tool-use-id><status>completed</status></task-notification>` });
+
+test('완료 알림이 없는 백그라운드 호출만 돌고 있는 것이다 — 알림은 레코드 종류를 가리지 않는다', () => {
+  const lines = [started('toolu_a'), started('toolu_b', undefined, 'PowerShell'), started('toolu_c'), finished('toolu_b'), finished('toolu_c', 'queue-operation')];
+  assert.deepEqual(pendingBackground(lines.join('\n'), NOW_MS), ['toolu_a']);
+});
+
+test('포그라운드 호출은 세지 않고, 깨진 줄에 죽지 않는다', () => {
+  const foreground = JSON.stringify({ type: 'assistant', timestamp: '2026-01-01T11:50:00Z', message: { content: [{ type: 'tool_use', id: 'toolu_f', name: 'Bash', input: { command: 'x' } }] } });
+  assert.deepEqual(pendingBackground([foreground, '{ 깨진 줄 "run_in_background"', started('toolu_a')].join('\n'), NOW_MS), ['toolu_a']);
+});
+
+test('🚨 60분이 넘도록 알림이 없으면 돌고 있는 것으로 치지 않는다 — 안 끝나는 작업이 가드를 끄면 안 된다', () => {
+  assert.deepEqual(pendingBackground(started('toolu_a', '2026-01-01T10:59:00Z'), NOW_MS), []);
+  assert.deepEqual(pendingBackground(started('toolu_a', '2026-01-01T11:01:00Z'), NOW_MS), ['toolu_a']);
+});
+
+test('트랜스크립트가 없으면 돌고 있는 것이 없다 — 평소 판정으로 간다', () => {
+  assert.deepEqual(pendingBackground(null, NOW_MS), []);
+});
+
+const running = { background: ['toolu_a'], toolUses: 20 };
+
+test('🚨 백그라운드 작업이 돌면 그 묶음을 한 번 알리며, 기다릴 작업과 안 끝나는 작업의 길을 함께 말한다', () => {
+  const verdict = decide({ ...base, ...running });
+  assert.equal(verdict.block, true);
+  assert.match(verdict.reason, /완료 알림/);
+  assert.match(verdict.reason, /다음 티켓/);
+  assert.deepEqual(verdict.backgroundNotice, { digest: 'toolu_a', tools: 20 });
+});
+
+test('🚨 알린 뒤 기다리느라 도구를 조금 쓴 멈춤은 다시 되밀지 않는다', () => {
+  const told = { ...marker, backgroundNotice: { digest: 'toolu_a', tools: 20 } };
+  assert.equal(decide({ ...base, ...running, marker: told, toolUses: 22 }).block, false);
+  assert.equal(decide({ ...base, ...running, marker: told, toolUses: 20 + BACKGROUND_QUIET_TOOLS }).block, false);
+});
+
+test('🚨 알린 뒤 일을 이어 간 멈춤은 다시 판정한다 — 안 끝나는 작업 하나가 맵을 세우면 안 된다', () => {
+  const told = { ...marker, backgroundNotice: { digest: 'toolu_a', tools: 20 } };
+  const verdict = decide({ ...base, ...running, marker: told, toolUses: 21 + BACKGROUND_QUIET_TOOLS });
+  assert.equal(verdict.block, true);
+  assert.deepEqual(verdict.backgroundNotice, { digest: 'toolu_a', tools: 21 + BACKGROUND_QUIET_TOOLS });
+});
+
+test('돌고 있는 묶음이 바뀌면 다시 알리고, 다 끝나면 평소 판정이다', () => {
+  const told = { ...marker, backgroundNotice: { digest: 'toolu_a', tools: 20 } };
+  assert.equal(decide({ ...base, marker: told, background: ['toolu_a', 'toolu_b'], toolUses: 21 }).backgroundNotice.digest, 'toolu_a,toolu_b');
+  const after = decide({ ...base, marker: told, background: [], toolUses: 21 });
+  assert.equal(after.block, true);
+  assert.match(after.reason, /곧장 다음 티켓/);
+  assert.equal(after.backgroundNotice, undefined);
+});
+
+test('진전 없는 멈춤·일시정지·답 대기는 백그라운드 안내보다 먼저 통과한다', () => {
+  assert.equal(decide({ ...base, ...running, stalled: true }).block, false);
+  assert.equal(decide({ ...base, ...running, marker: pauseMarker(marker, 'x') }).block, false);
+  assert.equal(decide({ ...base, ...running, marker: awaitMarker(marker, 'x', 'y') }).block, false);
 });
 
 test('프론티어가 남았으면 막고, 묻지 말고 claim 하라고 돌려준다', () => {

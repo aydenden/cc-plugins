@@ -431,6 +431,60 @@ export function clearAwaiting(marker) {
   return rest;
 }
 
+// --- 백그라운드 작업 ---
+
+/** 이 시간이 넘도록 완료 알림이 없으면 돌고 있는 것으로 치지 않는다. 안 끝나는 작업(서버)이 가드를 영영 끄지 않게 한다. */
+export const BACKGROUND_MAX_AGE_MS = 60 * 60 * 1000;
+
+/** 안내한 뒤 이만큼의 도구 호출은 기다리는 중으로 본다. 넘으면 일을 이어 간 것이라 다시 판정한다. */
+export const BACKGROUND_QUIET_TOOLS = 5;
+
+const COMPLETION_ID = /<tool-use-id>(toolu_[A-Za-z0-9_]+)<\/tool-use-id>/g;
+
+/**
+ * 트랜스크립트에서 아직 완료 알림이 없는 백그라운드 도구 호출의 id.
+ *
+ * 🚨 완료 알림은 `user` 뿐 아니라 `attachment`·`queue-operation` 레코드로도 남는다. 그래서 레코드 종류를
+ * 가리지 않고 줄 전체에서 찾는다.
+ *
+ * @param {string | null} text 트랜스크립트(jsonl). 없으면 돌고 있는 것이 없다
+ * @param {number} now 지금(ms)
+ * @returns {string[]}
+ */
+export function pendingBackground(text, now) {
+  if (typeof text !== 'string') return [];
+  const started = new Map();
+  const finished = new Set();
+  for (const line of text.split('\n')) {
+    for (const match of line.matchAll(COMPLETION_ID)) finished.add(match[1]);
+    if (!line.includes('run_in_background')) continue;
+    let json;
+    try {
+      json = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (json?.type !== 'assistant' || !Array.isArray(json.message?.content)) continue;
+    for (const part of json.message.content) {
+      if (part?.type === 'tool_use' && part.input?.run_in_background === true) started.set(part.id, Date.parse(json.timestamp));
+    }
+  }
+  return [...started].filter(([id, at]) => !finished.has(id) && now - at <= BACKGROUND_MAX_AGE_MS).map(([id]) => id);
+}
+
+/**
+ * 돌고 있는 묶음을 어떻게 할 것인가. 완료 알림이 세션을 다시 깨우므로 기다리는 세션을 되밀면 턴만 쓴다.
+ * 그렇다고 무조건 통과시키면 알림이 영영 안 오는 작업이 세션을 말없이 세운다. 그래서 묶음마다 한 번 알려 세션이
+ * 가르게 하고, 그 뒤에 일을 이어 갔으면(도구를 많이 썼으면) 다시 판정한다.
+ *
+ * @returns {{digest: string, tools: number | null} | null} 알려야 하면 새 기록, 지금은 놓아줄 자리면 null
+ */
+function backgroundNoticeDue(notice, ids, toolUses) {
+  const digest = ids.join(',');
+  const quiet = notice?.digest === digest && typeof toolUses === 'number' && typeof notice.tools === 'number' && toolUses - notice.tools <= BACKGROUND_QUIET_TOOLS;
+  return quiet ? null : { digest, tools: toolUses };
+}
+
 /** 웨이브가 도는 동안의 되밂. 워커의 보고를 받고 정산하는 길만 말한다. */
 function waveReason(epic, wave, tickets) {
   const list = tickets.map((t) => `${t.id}→${t.dispatchId}`).join(', ');
@@ -460,7 +514,9 @@ function waveReason(epic, wave, tickets) {
  *   closedSinceSession?: number | null,
  *   handoffRatio?: number,
  *   handoffClosed?: number | null,
- * }} input `handoffClosed` 가 `null` 이면 티켓 수 축이 없는 맵이다(`handoffClosedOf`). `frontier` 가 null 이면 «모름» 이다 — bd 를 못 읽었다는 뜻이지 비었다는 뜻이 아니다.
+ *   background?: string[],
+ *   toolUses?: number | null,
+ * }} input `background` 는 돌고 있는 백그라운드 호출(`pendingBackground`), `toolUses` 는 트랜스크립트의 도구 호출 수다. `handoffClosed` 가 `null` 이면 티켓 수 축이 없는 맵이다(`handoffClosedOf`). `frontier` 가 null 이면 «모름» 이다 — bd 를 못 읽었다는 뜻이지 비었다는 뜻이 아니다.
  *   `owner` 를 주지 않으면 주인 자리에서 본 판정이다. `measured` 가 거짓이면 `contextTokens` 는
  *   «못 쟀다» 는 뜻이지 «비었다» 가 아니다. `closedSinceSession` 의 `null` 도 «모름» 이라 문턱을 넘은 것으로 읽지 않는다.
  * @returns {{block: boolean, reason?: string, clear?: boolean, ratio: number}}
@@ -478,6 +534,8 @@ export function decide({
   closedSinceSession = null,
   handoffRatio = HANDOFF_RATIO,
   handoffClosed = HANDOFF_CLOSED_TICKETS,
+  background = [],
+  toolUses = null,
 }) {
   const ratio = contextLimit > 0 ? contextTokens / contextLimit : 0;
   const pct = `${Math.round(ratio * 100)}%`;
@@ -501,6 +559,19 @@ export function decide({
   // 웨이브는 마커가 말하므로 bd 를 못 읽어도 선다 — 워커가 도는 동안 코디네이터가 떠나면 보고를 받을 이가 없다.
   const inFlight = pendingWave(marker);
   if (inFlight.length) return { block: true, ratio, reason: waveReason(marker.epic, marker.wave, inFlight) };
+  if (background.length) {
+    const backgroundNotice = backgroundNoticeDue(marker.backgroundNotice, background, toolUses);
+    if (!backgroundNotice) return { block: false, ratio };
+    return {
+      block: true,
+      ratio,
+      backgroundNotice,
+      reason:
+        `백그라운드 작업 ${background.length}건이 돌고 있다(${background.join(', ')}). ` +
+        `**결과를 기다리는 작업이면 감시 도구를 더 부르지 말고 그대로 멈춘다** — 끝나면 완료 알림이 이 세션을 다시 깨운다. ` +
+        `서버처럼 끝나지 않는 작업이면 기다리지 말고 다음 티켓을 민다.`,
+    };
+  }
   // 모르면 한 번 말하고 선언은 남긴다 — 말없이 통과시키면 가드가 사라진 것과 구분되지 않는다. 또 멈추면 놓아준다.
   if (!frontier) {
     return {

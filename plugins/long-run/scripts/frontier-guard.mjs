@@ -81,6 +81,7 @@ import {
   ownership,
   parseWaveArgs,
   pauseMarker,
+  pendingBackground,
   pendingWave,
   pickOwned,
   QUESTION_LABEL,
@@ -185,12 +186,16 @@ async function judgeStop(input, context) {
   const { children, ...read } = await readMap(found.marker.epic, bdRunner(mapCwdOf(found.marker, cwd)));
   // bd 를 읽는 동안(최대 시한까지) 사람이 일시정지할 수 있다 — 조회 전 마커로 판정하고 다시 쓰면 그 전환이 사라진다.
   const marker = readJson(path) ?? found.marker;
-  const toolUses = countToolUses(readText(input.transcript_path));
+  const transcript = readText(input.transcript_path);
+  const toolUses = countToolUses(transcript);
+  const background = pendingBackground(transcript, Date.now());
   const verdict = decide({
     marker,
     ...(context ?? measure(input.transcript_path)),
     closedSinceSession: countClosedSince(children, since),
     handoffClosed: handoffClosedOf(marker),
+    background,
+    toolUses,
     ...read,
     stalled: stalledSincePush(input.stop_hook_active === true, marker.lastPushTools, toolUses),
     isStopEvent: isStopEvent(input),
@@ -199,7 +204,9 @@ async function judgeStop(input, context) {
     if (existsSync(path)) rmSync(path);
     return verdict;
   }
-  const { reportedWaiting, ...rest } = marker;
+  const { reportedWaiting, backgroundNotice, ...rest } = marker;
+  // 돌고 있는 묶음이 사라지면 안내 기록도 지운다 — 다음 작업은 다시 알려야 한다.
+  const notice = verdict.backgroundNotice ?? (background.length ? backgroundNotice : undefined);
   // 대기가 풀리면 보고 기록을 지운다 — 같은 질문이 다시 대기가 되면 다시 보고해야 한다.
   const stillWaiting = !read.frontier || isWaiting(read.frontier);
   const reported = verdict.reported ?? (stillWaiting ? reportedWaiting : undefined);
@@ -208,6 +215,7 @@ async function judgeStop(input, context) {
     ...(read.frontier ? { gate: gateSnapshotOf(read.frontier) } : {}),
     ...(verdict.block && toolUses !== null ? { lastPushTools: toolUses } : {}),
     ...(reported ? { reportedWaiting: reported } : {}),
+    ...(notice ? { backgroundNotice: notice } : {}),
   });
   return verdict;
 }
