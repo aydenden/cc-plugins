@@ -17,6 +17,8 @@
  *                                                           헌장 목표를 근거로 대신 답하고 표시를 남긴다
  *   node frontier-guard.mjs delegation-report [맵]          위임 답변을 모아 보고서를 쓰고 경로를 낸다
  *   node frontier-guard.mjs hand-over                       인계를 보냈다고 적는다(보낸 세션을 더 밀지 않는다)
+ *   node frontier-guard.mjs pause [--session <id>]          사람이 Stop 되밀기를 잠시 끈다(세션의 pause 는 게이트가 막는다)
+ *   node frontier-guard.mjs resume [--session <id>]         다시 켠다. 재claim 도 푼다
  *   node frontier-guard.mjs clear                           선언 해제(맵을 놓을 때. 인계할 때는 지우지 않는다)
  *   node frontier-guard.mjs epic                            이 worktree 에 선언된 맵 id 한 줄(없으면 빈 출력)
  *   node frontier-guard.mjs wave [--json]                   정산 안 된 웨이브의 Run id 한 줄, --json 이면 웨이브 전체(없으면 빈 출력)
@@ -57,7 +59,7 @@ import {
   renderDelegationReport,
   spokeSince,
 } from './lib/delegation.mjs';
-import { closesEpic, denyCommand, denyWrite, needsGate } from './lib/gate.mjs';
+import { closesEpic, denyCommand, denyWrite, needsGate, PAUSE_DENIAL, pausesGuard } from './lib/gate.mjs';
 import { movesMap } from './lib/mod-view.mjs';
 import {
   beginWave,
@@ -75,10 +77,12 @@ import {
   isWaiting,
   ownership,
   parseWaveArgs,
+  pauseMarker,
   pendingWave,
   pickOwned,
   QUESTION_LABEL,
   readTranscriptTail,
+  resumeMarker,
   settleWave,
   stalledSincePush,
   ticketLimitOf,
@@ -174,8 +178,10 @@ async function judgeStop(input, context) {
   const cwd = input.cwd || process.cwd();
   const found = locateOwned(cwd, input.session_id, input.transcript_path);
   if (!found) return { block: false };
-  const { path, marker, since } = found;
-  const { children, ...read } = await readMap(marker.epic, bdRunner(mapCwdOf(marker, cwd)));
+  const { path, since } = found;
+  const { children, ...read } = await readMap(found.marker.epic, bdRunner(mapCwdOf(found.marker, cwd)));
+  // bd 를 읽는 동안(최대 시한까지) 사람이 일시정지할 수 있다 — 조회 전 마커로 판정하고 다시 쓰면 그 전환이 사라진다.
+  const marker = readJson(path) ?? found.marker;
   const toolUses = countToolUses(readText(input.transcript_path));
   const verdict = decide({
     marker,
@@ -234,9 +240,14 @@ async function gate(input) {
   const cwd = input.cwd || process.cwd();
   const isShell = input.tool_name === 'Bash' || input.tool_name === 'PowerShell';
   const command = isShell ? String(input.tool_input?.command ?? '') : '';
-  if (isShell && !needsGate(command)) return;
+  const pausing = isShell && pausesGuard(command);
+  if (isShell && !pausing && !needsGate(command)) return;
   const found = locateOwned(cwd, input.session_id, input.transcript_path);
   if (!found) return;
+  if (pausing) {
+    printDenial(PAUSE_DENIAL);
+    return;
+  }
   const { marker } = found;
   const inWave = pendingWave(marker).length > 0;
   const write = { filePath: input.tool_input?.file_path ?? input.tool_input?.notebook_path, worktree: marker.worktree, inWave };
@@ -469,6 +480,16 @@ if (command === 'claim') {
 } else if (command === 'hand-over') {
   const marker = readJson(MARKER);
   if (marker?.epic) writeMarker(MARKER, { ...marker, handedOffAt: new Date().toISOString() });
+} else if (command === 'pause' || command === 'resume') {
+  const sessionId = flagOf(process.argv.slice(3), '--session');
+  // cwd 가 옮겨 간 세션도 자기 맵을 찾는다. 주인이 아직 안 적혔으면 이 worktree 의 마커다.
+  const found = sessionId ? locateOwned(process.cwd(), sessionId) : null;
+  const path = found?.path ?? MARKER;
+  const marker = found?.marker ?? readJson(MARKER);
+  if (!marker?.epic) refuse('이 worktree 에 선언된 맵이 없다.');
+  if (sessionId && marker.session?.id && marker.session.id !== sessionId) refuse(`${marker.epic} 의 주인은 다른 세션이다 — 그 세션에서 부른다.`);
+  writeMarker(path, command === 'pause' ? pauseMarker(marker, new Date().toISOString()) : resumeMarker(marker));
+  console.log(`[frontier-guard] ${marker.epic} 의 Stop 되밀기를 ${command === 'pause' ? '일시정지했다. 질문 게이트는 그대로다' : '다시 켰다'}.`);
 } else if (command === 'judge') {
   const args = process.argv.slice(3);
   const tokens = Number(flagOf(args, '--tokens'));

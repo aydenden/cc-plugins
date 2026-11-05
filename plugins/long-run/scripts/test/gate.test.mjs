@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { bdCalls, closesEpic, denyCommand, denyWrite, needsGate, shellSegments } from '../lib/gate.mjs';
+import { bdCalls, closesEpic, denyCommand, denyWrite, needsGate, pausesGuard, shellSegments } from '../lib/gate.mjs';
 
 const frontier = { pushable: ['free'], questions: ['q'], blocked: ['t'], unscoped: [] };
 const waiting = { pushable: [], questions: ['q'], blocked: ['t'], unscoped: [] };
@@ -21,6 +21,21 @@ test('환경변수·전역 옵션·괄호를 넘어 bd 를 찾는다', () => {
 
 test('줄바꿈은 명령을 가른다', () => {
   assert.deepEqual(bdCalls('ls\nbd close q'), [['close', 'q']]);
+});
+
+test('🚨 가드 일시정지 명령을 경로·셸 꼴과 상관없이 알아본다 — 일시정지는 사람의 손이다', () => {
+  for (const c of [
+    'node frontier-guard.mjs pause',
+    'node "C:/Users/me/plugins/long-run/scripts/frontier-guard.mjs" pause --session s',
+    'node C:\\plugins\\scripts\\frontier-guard.mjs pause',
+    'cd x && node /p/frontier-guard.mjs pause',
+    '& node "/p/frontier-guard.mjs" pause',
+  ]) {
+    assert.equal(pausesGuard(c), true, c);
+  }
+  for (const c of ['node frontier-guard.mjs resume', 'node frontier-guard.mjs status', 'echo "node frontier-guard.mjs pause"', 'node other.mjs pause', 'npm test']) {
+    assert.equal(pausesGuard(c), false, c);
+  }
 });
 
 test('판정할 명령만 bd 를 부른다', () => {

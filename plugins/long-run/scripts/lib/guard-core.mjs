@@ -393,6 +393,24 @@ export function parseWaveArgs(args) {
   return { runId, tickets };
 }
 
+// --- 일시정지 ---
+
+/**
+ * 사람이 되밀기를 잠시 끈 마커. 끄는 것은 Stop 뿐이다 — 질문에 답이 오기 전 진행을 막는 게이트(`gate.mjs`)는
+ * 켜 둔다. `claim` 은 마커를 새로 쓰며 이 칸을 물려주지 않아, 인계받은 세션은 가드가 켜진 채 출발한다.
+ *
+ * @param {object} marker 지금 마커. 고치지 않고 새 객체를 돌려준다
+ * @param {string} since 지금(ISO)
+ * @returns {object}
+ */
+export const pauseMarker = (marker, since) => ({ ...marker, paused: { since } });
+
+/** 일시정지를 푼 마커. */
+export function resumeMarker(marker) {
+  const { paused: _paused, ...rest } = marker;
+  return rest;
+}
+
 /** 웨이브가 도는 동안의 되밂. 워커의 보고를 받고 정산하는 길만 말한다. */
 function waveReason(epic, wave, tickets) {
   const list = tickets.map((t) => `${t.id}→${t.dispatchId}`).join(', ');
@@ -455,6 +473,11 @@ export function decide({
   if (!owner) return { block: false, ratio };
   // 인계를 보낸 세션이다 — 새 세션이 claim 해 마커를 새로 쓸 때까지 이 칸이 남는다. 또 밀면 맵을 두 세션이 민다.
   if (marker.handedOffAt) return { block: false, ratio };
+  // 사람이 끈 동안 맵이 닫혔으면 선언까지 지운다 — 남기면 재개할 맵 없는 일시정지 표시만 남는다.
+  if (marker.paused) {
+    const done = frontier && !epicOpen && frontier.pushable.length === 0 && !isWaiting(frontier);
+    return done ? { block: false, clear: true, ratio } : { block: false, ratio };
+  }
   // 웨이브는 마커가 말하므로 bd 를 못 읽어도 선다 — 워커가 도는 동안 코디네이터가 떠나면 보고를 받을 이가 없다.
   const inFlight = pendingWave(marker);
   if (inFlight.length) return { block: true, ratio, reason: waveReason(marker.epic, marker.wave, inFlight) };

@@ -68,6 +68,16 @@ export function needsGate(command) {
   return bdCalls(command).some(([sub, ...rest]) => ['close', 'update', 'human', 'delete', 'dep', 'label'].includes(sub) || (sub === 'ready' && rest.includes('--claim')));
 }
 
+/** 이 명령이 가드를 일시정지하는가. 경로는 설치 위치마다 달라 파일 이름으로 본다. */
+export const pausesGuard = (command) =>
+  shellSegments(command).some((segment) => {
+    const [script, sub] = argsOf(segment, 'node') ?? [];
+    return /frontier-guard(\.mjs)?$/.test(script ?? '') && sub === 'pause';
+  });
+
+/** 일시정지의 거부 사유. 사람은 입력창 위 버튼이나 `!` 명령으로 켠다 — 둘 다 이 게이트를 지나지 않는다. */
+export const PAUSE_DENIAL = '가드 일시정지는 사람이 켠다 — 세션이 스스로 되밀기를 끄지 않는다. 멈춰야 하는 이유가 있으면 그 이유를 보고한다.';
+
 /** 이 명령이 그 맵을 닫는가. */
 export const closesEpic = (command, epic) => bdCalls(command).some(([sub, ...rest]) => sub === 'close' && rest.includes(epic));
 

@@ -18,9 +18,11 @@ import {
   isDelegatedToMod,
   ownership,
   parseWaveArgs,
+  pauseMarker,
   pendingWave,
   pickOwned,
   readTranscriptTail,
+  resumeMarker,
   settleWave,
   stalledSincePush,
   STOP_PLACE_LIST,
@@ -100,6 +102,26 @@ test('트랜스크립트의 도구 호출을 센다', () => {
 
 test('인계를 보낸 세션은 더 밀지 않는다', () => {
   assert.equal(decide({ ...base, marker: { ...marker, handedOffAt: 'x' } }).block, false);
+});
+
+test('🚨 일시정지 중이면 밀 것이 남아도, 웨이브가 돌아도, 프론티어를 몰라도 되밀지 않는다', () => {
+  const paused = pauseMarker(marker, '2026-01-01T00:00:00Z');
+  assert.equal(decide({ ...base, marker: paused }).block, false);
+  assert.equal(decide({ ...base, marker: beginWave(paused, { runId: 'r', startedAt: 'x', tickets: [{ id: 't', dispatchId: 'd' }] }) }).block, false);
+  assert.equal(decide({ ...base, marker: paused, frontier: null }).block, false);
+});
+
+test('일시정지 중에도 맵이 닫혔으면 선언을 지운다 — 재개할 맵이 없다', () => {
+  const paused = pauseMarker(marker, 'x');
+  assert.equal(decide({ ...base, marker: paused, frontier: frontierOf(), epicOpen: false }).clear, true);
+  assert.equal(decide({ ...base, marker: paused, frontier: null, epicOpen: false }).clear, undefined);
+});
+
+test('일시정지는 마커의 다른 칸을 건드리지 않고, 재개하면 평소 판정으로 돌아간다', () => {
+  const paused = pauseMarker({ ...marker, ticketLimit: false }, '2026-01-01T00:00:00Z');
+  assert.deepEqual(paused, { ...marker, ticketLimit: false, paused: { since: '2026-01-01T00:00:00Z' } });
+  assert.deepEqual(resumeMarker(paused), { ...marker, ticketLimit: false });
+  assert.equal(decide({ ...base, marker: resumeMarker(paused) }).block, true);
 });
 
 test('프론티어가 남았으면 막고, 묻지 말고 claim 하라고 돌려준다', () => {
