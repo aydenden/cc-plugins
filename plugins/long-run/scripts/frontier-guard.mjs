@@ -40,7 +40,7 @@
  * 세션을 못 끝내게 만드는 쪽이 훨씬 나쁜 고장이다.
  */
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -93,7 +93,7 @@ import {
   waveCarriedBy,
   withAskHint,
 } from './lib/guard-core.mjs';
-import { BD_TIMEOUT_MS, readMap } from './lib/read-map.mjs';
+import { BD_TIMEOUT_MS, bdReadLine, readMap } from './lib/read-map.mjs';
 import { repoKeyOf, repoRootOf, stateRoot } from './lib/state-root.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -128,6 +128,23 @@ const writeMarker = (path, body) => {
   writeFileSync(path, `${JSON.stringify(body, null, 2)}\n`);
 };
 
+/** bd 조회 로그가 이보다 커지면 비우고 다시 쌓는다 — 지난 기록보다 지금의 실패가 필요하다. */
+const BD_LOG_MAX_BYTES = 1024 * 1024;
+
+/** bd 조회 로그를 남긴다. 🚨 판정을 돕는 기록이라 쓰기 실패가 판정을 막지 않는다. */
+function logBdRead(read) {
+  const line = bdReadLine({ at: new Date().toISOString(), ...read });
+  if (!line) return;
+  try {
+    const file = join(stateRoot(), 'logs', 'bd-read.log');
+    mkdirSync(dirname(file), { recursive: true });
+    if (existsSync(file) && statSync(file).size > BD_LOG_MAX_BYTES) rmSync(file);
+    appendFileSync(file, line);
+  } catch {
+    // 위 주석대로 삼킨다.
+  }
+}
+
 /**
  * bd 의 JSON 출력. 실패는 reject 하고, `readMap` 이 «모름» 으로 바꾼다. bd 는 그 worktree 에서 돌아야
  * 그 저장소의 DB 를 찾는다.
@@ -136,13 +153,21 @@ const writeMarker = (path, body) => {
  * 떨어져 가드가 말없이 사라지는 꼴이 된다. 시한은 `BD_TIMEOUT_MS` 가 훅 예산에 맞춰 소유한다.
  */
 const bdRunner = (cwd) => async (args) => {
-  const { stdout } = await execFileAsync('bd', [...args, '--json'], {
-    cwd,
-    encoding: 'utf8',
-    timeout: BD_TIMEOUT_MS,
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  return JSON.parse(stdout);
+  const started = Date.now();
+  try {
+    const { stdout } = await execFileAsync('bd', [...args, '--json'], {
+      cwd,
+      encoding: 'utf8',
+      timeout: BD_TIMEOUT_MS,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const rows = JSON.parse(stdout);
+    logBdRead({ args, ms: Date.now() - started });
+    return rows;
+  } catch (error) {
+    logBdRead({ args, ms: Date.now() - started, error });
+    throw error;
+  }
 };
 
 const UNREAD_MAP = { frontier: null, epicOpen: true, epicTitle: null, claimed: null, children: null, delegated: null };

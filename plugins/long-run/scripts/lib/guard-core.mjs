@@ -616,17 +616,9 @@ export function decide({
         `서버처럼 끝나지 않는 작업이면 기다리지 말고 다음 티켓을 민다.`,
     };
   }
-  // 모르면 한 번 말하고 선언은 남긴다 — 말없이 통과시키면 가드가 사라진 것과 구분되지 않는다. 또 멈추면 놓아준다.
-  if (!frontier) {
-    return {
-      block: true,
-      ratio,
-      reason:
-        `${marker.epic} 의 프론티어를 bd 에서 못 읽어 이 멈춤을 판정하지 못했다. ` +
-        `\`frontier-guard.mjs status\` 로 다시 읽고, 서면 평소처럼 밀거나 멈출 자리를 판단한다. ` +
-        `계속 못 읽으면 그 사실을 보고하고 멈춘다. 🚨 마커는 지우지 않는다.`,
-    };
-  }
+  // 모르면 세션을 되밀지 않는다 — 다시 읽어 보라는 말뿐이라 턴만 쓴다. 가드가 사라진 것과 구분되도록 `unread` 로
+  // 사람에게 알리고(mod 의 토스트) 선언은 남긴다. 실패 사유는 bd 조회 로그에 있다.
+  if (!frontier) return { block: false, unread: true, ratio };
 
   const { pushable, questions, blocked, unscoped = [] } = frontier;
   if (isWaiting(frontier)) {

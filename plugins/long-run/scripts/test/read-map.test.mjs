@@ -3,7 +3,31 @@ import assert from 'node:assert/strict';
 
 import { readFileSync } from 'node:fs';
 
-import { BD_TIMEOUT_MS, openChildrenOf, readMap } from '../lib/read-map.mjs';
+import { BD_SLOW_MS, BD_TIMEOUT_MS, bdReadLine, openChildrenOf, readMap } from '../lib/read-map.mjs';
+
+// --- bd 조회 로그 ---
+
+const AT = '2026-01-01T00:00:00.000Z';
+
+test('빠르게 성공한 조회는 남기지 않는다 — 로그는 문제를 재는 자리다', () => {
+  assert.equal(bdReadLine({ at: AT, args: ['show', 'm'], ms: BD_SLOW_MS - 1 }), null);
+});
+
+test('느린 성공은 소요 시간과 함께 남긴다', () => {
+  assert.equal(bdReadLine({ at: AT, args: ['list', '--parent', 'm'], ms: BD_SLOW_MS }), `${AT} slow ${BD_SLOW_MS}ms bd list --parent m\n`);
+});
+
+test('🚨 시한 초과와 다른 실패를 가른다 — 원인을 못 가르면 고칠 곳을 모른다', () => {
+  assert.equal(bdReadLine({ at: AT, args: ['ready'], ms: 17000, error: { killed: true } }), `${AT} timeout 17000ms bd ready\n`);
+  assert.equal(bdReadLine({ at: AT, args: ['show', 'm'], ms: 30, error: { code: 1, stderr: 'database\n  is locked' } }), `${AT} exit-1 30ms bd show m — database is locked\n`);
+  assert.equal(bdReadLine({ at: AT, args: ['show', 'm'], ms: 30, error: new SyntaxError('bad json') }), `${AT} error 30ms bd show m — bad json\n`);
+});
+
+test('실패 사유는 한 줄로, 길이를 잘라 남긴다', () => {
+  const line = bdReadLine({ at: AT, args: ['show'], ms: 1, error: { code: 1, stderr: `a\n${'b'.repeat(500)}` } });
+  assert.equal(line.split('\n').length, 2);
+  assert.ok(line.length < 300);
+});
 
 const EPIC = 'map-abcd';
 const ROWS = {

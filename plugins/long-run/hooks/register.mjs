@@ -136,6 +136,7 @@ export function register(on) {
       $.ui.status(undefined);
       await update($, band, () => null);
     }
+    if (verdict.unread) $.ui.toast('가드가 bd 를 못 읽어 이번 멈춤은 판정하지 않았습니다');
     if (!verdict.block) return result;
     await update($, pushes, (count) => count + 1);
     return { ...result, block: verdict.reason };

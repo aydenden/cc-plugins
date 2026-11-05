@@ -12,6 +12,24 @@ import { classifyFrontier, DELEGATED_LABEL } from './guard-core.mjs';
  */
 export const BD_TIMEOUT_MS = 17_000;
 
+/** 이보다 오래 걸린 조회는 성공해도 로그에 남긴다. 시한에 걸리기 전에 느려지는 것을 보려는 값이다. */
+export const BD_SLOW_MS = 5_000;
+
+const REASON_MAX = 200;
+
+/**
+ * bd 조회 로그의 한 줄. «모름» 은 시한 초과인지 잠금인지 말해 주지 않아, 실패의 원인을 여기서만 볼 수 있다.
+ *
+ * @param {{at: string, args: string[], ms: number, error?: {killed?: boolean, code?: number | string, stderr?: string, message?: string}}} read
+ * @returns {string | null} 남길 것이 없으면 null
+ */
+export function bdReadLine({ at, args, ms, error }) {
+  if (!error && ms < BD_SLOW_MS) return null;
+  const kind = !error ? 'slow' : error.killed ? 'timeout' : error.code !== undefined ? `exit-${error.code}` : 'error';
+  const reason = String(error?.stderr || (error && !error.killed ? error.message : '') || '').replace(/\s+/g, ' ').trim().slice(0, REASON_MAX);
+  return `${at} ${kind} ${ms}ms bd ${args.join(' ')}${reason ? ` — ${reason}` : ''}\n`;
+}
+
 /** 읽지 못한 맵. 🚨 빈 프론티어가 아니라 «모름» 이고, 맵은 열린 것으로 둔다 — 닫혔다고 읽으면 선언이 지워진다. */
 const UNREAD = { frontier: null, epicOpen: true, epicTitle: null, claimed: null, delegated: null };
 

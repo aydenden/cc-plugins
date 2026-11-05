@@ -264,12 +264,11 @@ test('프론티어가 비고 맵이 닫혔으면 통과시키고 선언을 지�
 });
 
 // bd 가 잠깐 죽은 것을 빈 프론티어로 읽으면 선언이 사라지고, 새 세션이 가드 없이 출발한다.
-test('🚨 프론티어를 모르면 말없이 통과시키지 않는다 — 한 번 말하고, 선언은 지우지 않는다', () => {
+test('🚨 프론티어를 모르면 세션을 되밀지 않고 «모름» 을 표시한다 — 세션이 할 수 있는 일이 없고, 선언은 지우지 않는다', () => {
   const verdict = decide({ ...base, frontier: null });
-  assert.equal(verdict.block, true);
-  assert.match(verdict.reason, /못 읽어/);
+  assert.equal(verdict.block, false);
+  assert.equal(verdict.unread, true);
   assert.notEqual(verdict.clear, true);
-  assert.equal(decide({ ...base, frontier: null, stalled: true }).block, false);
 });
 
 test('컨텍스트가 절반을 넘으면 이어가지 말고 넘기라고 한다', () => {
