@@ -6,6 +6,7 @@
     "name": "aydenden"
   },
   "repository": "https://github.com/aydenden/cc-plugins",
+  "types": "./types/index.d.ts",
   "keywords": [
     "beads",
     "orca",

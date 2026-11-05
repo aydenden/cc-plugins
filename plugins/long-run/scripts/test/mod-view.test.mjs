@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { HANDOFF_SKILL } from '../lib/guard-core.mjs';
-import { compactNote, judgeUsageArgs, movesMap, parseStatus, statusLine } from '../lib/mod-view.mjs';
+import { bandOf, bandText, compactNote, judgeUsageArgs, movesMap, parseStatus, statusLine, toggleOf } from '../lib/mod-view.mjs';
 
 // `frontier-guard.mjs status` 가 내는 꼴 그대로다 — 프론티어는 분류된 id 로 실린다.
 const claimed = {
@@ -33,6 +33,39 @@ test('읽을 수 없는 출력은 null 이다', () => {
 
 test('선언한 세션은 맵·프론티어·컨텍스트를 한 줄로 본다', () => {
   assert.equal(statusLine(claimed, usageAt(420_000)), '🧭 [결제 모듈 이전] · 밀기 2 · 막힘 0 · 질문 0 · 컨텍스트 42%/50%');
+});
+
+test('일시정지 중이면 상태줄이 맵 제목 바로 뒤에서 말한다 — 풀어 두는 것을 잊지 않게', () => {
+  const paused = { ...claimed, marker: { epic: 'map-abcd', paused: { since: 'x' } } };
+  assert.equal(statusLine(paused, usageAt(420_000)), '🧭 [결제 모듈 이전] · ⏸ 일시정지 · 밀기 2 · 막힘 0 · 질문 0 · 컨텍스트 42%/50%');
+});
+
+// --- 일시정지 띠 ---
+
+test('맵을 미는 세션에는 띠가 있고, 일시정지 여부를 마커에서 읽는다', () => {
+  assert.deepEqual(bandOf(claimed), { paused: false });
+  assert.deepEqual(bandOf({ ...claimed, owner: true, marker: { epic: 'map-abcd', paused: { since: 'x' } } }), { paused: true });
+});
+
+test('🚨 선언이 없거나 다른 세션이 주인이거나 status 를 못 읽었으면 띠가 없다', () => {
+  assert.equal(bandOf(unclaimed), null);
+  assert.equal(bandOf({ ...claimed, owner: false }), null);
+  assert.equal(bandOf(null), null);
+});
+
+test('인계를 보낸 세션은 더 되밀리지 않으므로 띠가 없다', () => {
+  assert.equal(bandOf({ ...claimed, marker: { epic: 'map-abcd', handedOffAt: 'x' } }), null);
+});
+
+test('띠의 글은 지금 상태와 이 세션이 되밀린 횟수를 말한다', () => {
+  assert.equal(bandText({ paused: false, pushes: 0 }), '🧭 가드 동작 중');
+  assert.equal(bandText({ paused: false, pushes: 3 }), '🧭 가드 동작 중 · 되밀림 3회');
+  assert.equal(bandText({ paused: true, pushes: 3 }), '⏸ 가드 일시정지 중 · 질문 게이트는 켜져 있음');
+});
+
+test('버튼은 지금 상태의 반대로 전환하고, 그 전환을 알린다', () => {
+  assert.deepEqual(toggleOf(false), { label: '⏸', command: 'pause', toast: '⏸ 가드 일시정지 — 다음 멈춤부터 되밀지 않습니다' });
+  assert.deepEqual(toggleOf(true), { label: '▶', command: 'resume', toast: '▶ 가드 재개 — 다음 멈춤부터 다시 판정합니다' });
 });
 
 // id 는 사람이 모른다 — 제목을 그리고, 터미널 한 줄에 들도록 자른다. 한글은 바이트가 아니라 글자로 센다.

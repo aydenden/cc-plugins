@@ -80,6 +80,7 @@ export function statusLine(status, usage) {
   if (!status?.marker?.epic) return undefined;
   if (status.owner === false) return `${heading(status, false)} · 다른 세션이 주인`;
   const parts = [heading(status, true)];
+  if (status.marker.paused) parts.push('⏸ 일시정지');
   const count = (ids) => (status.frontier ? ids.length : '?');
   const { pushable = [], blocked = [], questions = [] } = status.frontier ?? {};
   parts.push(`밀기 ${count(pushable)}`, `막힘 ${count(blocked)}`, `질문 ${count(questions)}`);
@@ -100,6 +101,30 @@ export function statusLine(status, usage) {
   const due = (limit != null && typeof closed === 'number' && closed >= limit) || (typeof percent === 'number' && percent >= HANDOFF_RATIO * 100);
   if (due) parts.push('인계할 때');
   return parts.join(' · ');
+}
+
+/**
+ * 입력창 위 띠의 상태. 되밀릴 수 있는 세션에만 있다 — 첫 되밂 전에도 미리 끌 수 있게 맵을 미는 내내 그린다.
+ *
+ * @param {ReturnType<typeof parseStatus>} status
+ * @returns {{paused: boolean} | null} 띠가 없는 세션이면 null
+ */
+export function bandOf(status) {
+  if (!status?.marker?.epic || status.owner === false || status.marker.handedOffAt) return null;
+  return { paused: Boolean(status.marker.paused) };
+}
+
+/** 띠의 왼쪽 글. */
+export function bandText({ paused, pushes }) {
+  if (paused) return '⏸ 가드 일시정지 중 · 질문 게이트는 켜져 있음';
+  return pushes > 0 ? `🧭 가드 동작 중 · 되밀림 ${pushes}회` : '🧭 가드 동작 중';
+}
+
+/** 띠의 버튼. 이미 되민 턴은 취소되지 않으므로 전환은 «다음 멈춤부터» 로 말한다. */
+export function toggleOf(paused) {
+  return paused
+    ? { label: '▶', command: 'resume', toast: '▶ 가드 재개 — 다음 멈춤부터 다시 판정합니다' }
+    : { label: '⏸', command: 'pause', toast: '⏸ 가드 일시정지 — 다음 멈춤부터 되밀지 않습니다' };
 }
 
 /** 맵의 티켓이나 선언을 움직이는 셸 명령. status 는 bd 를 여러 번 부르므로 이것이 돈 뒤에만 상태줄을 다시 그린다. */

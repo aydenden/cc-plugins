@@ -15,8 +15,13 @@
  * @param {(event: string, ...rest: unknown[]) => unknown} on
  */
 
+import { atom, read, update } from 'claude-code';
+
 import { MOD_FLAG } from '../scripts/lib/guard-core.mjs';
-import { compactNote, judgeUsageArgs, movesMap, parseStatus, statusLine } from '../scripts/lib/mod-view.mjs';
+import { bandOf, bandText, compactNote, judgeUsageArgs, movesMap, parseStatus, statusLine, toggleOf } from '../scripts/lib/mod-view.mjs';
+
+const band = atom({ plugin: 'long-run', key: 'band' }, null);
+const pushes = atom({ plugin: 'long-run', key: 'pushes' }, 0);
 
 /** 이 세션 자리에서 본 status. 세션 id 를 실어야 주인이 아닌 세션이 판정에서 빠진다. */
 async function readStatus($, cwd) {
@@ -48,7 +53,33 @@ async function judge($, e) {
 }
 
 async function refreshStatusLine($, usage) {
-  $.ui.status(statusLine(await readStatus($), usage));
+  const status = await readStatus($);
+  $.ui.status(statusLine(status, usage));
+  // CLI 가 한 번 실패했다고 버튼을 치우지 않는다 — 끄려는 순간이 바로 그런 때일 수 있다.
+  if (status) await update($, band, () => bandOf(status));
+}
+
+/** 띠의 버튼. 마커가 판정의 근거이므로 CLI 가 성공한 뒤에야 전환을 알린다. */
+async function toggle($) {
+  const { paused = false } = (await read($, band)) ?? {};
+  const { command, toast } = toggleOf(paused);
+  try {
+    const sessionId = await $.session.id();
+    const { exitCode } = await $.process.run(['node', `${$.plugin.root}/scripts/frontier-guard.mjs`, command, '--session', sessionId]);
+    if (exitCode !== 0) {
+      $.ui.toast('가드 상태를 바꾸지 못했습니다');
+      return;
+    }
+  } catch {
+    $.ui.toast('가드 상태를 바꾸지 못했습니다');
+    return;
+  }
+  await update($, band, () => ({ paused: !paused }));
+  $.ui.toast(toast);
+  $.session
+    .usage()
+    .then((usage) => refreshStatusLine($, usage))
+    .catch(() => {});
 }
 
 export function register(on) {
@@ -101,7 +132,28 @@ export function register(on) {
     if (verdict === null) return next(e);
     const result = await next({ ...e, [MOD_FLAG]: true });
     if (result?.block) return result;
-    if (verdict.clear) $.ui.status(undefined);
-    return verdict.block ? { ...result, block: verdict.reason } : result;
+    if (verdict.clear) {
+      $.ui.status(undefined);
+      await update($, band, () => null);
+    }
+    if (!verdict.block) return result;
+    await update($, pushes, (count) => count + 1);
+    return { ...result, block: verdict.reason };
+  });
+
+  // 질문 창이 뜨면 비켜 준다. 그 밖에는 맵을 미는 내내 그려 첫 되밂 전에도 끌 수 있게 한다.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const state = e.props.hasSurvey ? null : await read($, band);
+    if (!state) return next(e);
+    const { Box, Button, Text } = $.ui.resolve(e);
+    return Box({
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      width: e.props.bodyColumns,
+      children: [
+        Text({ dimColor: true, children: bandText({ ...state, pushes: await read($, pushes) }) }),
+        Button({ key: 'guard-toggle', label: toggleOf(state.paused).label, plain: true, hotkey: 'p', onPress: () => toggle($) }),
+      ],
+    });
   });
 }
