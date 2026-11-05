@@ -5,8 +5,10 @@ import {
   HANDOFF_CLOSED_TICKETS,
   HANDOFF_RATIO,
   MOD_FLAG,
+  awaitMarker,
   beginWave,
   classifyFrontier,
+  clearAwaiting,
   contextLimitOf,
   contextTokensOf,
   countClosedSince,
@@ -122,6 +124,18 @@ test('일시정지는 마커의 다른 칸을 건드리지 않고, 재개하면 
   assert.deepEqual(paused, { ...marker, ticketLimit: false, paused: { since: '2026-01-01T00:00:00Z' } });
   assert.deepEqual(resumeMarker(paused), { ...marker, ticketLimit: false });
   assert.equal(decide({ ...base, marker: resumeMarker(paused) }).block, true);
+});
+
+test('🚨 사람의 답을 기다린다고 적힌 멈춤은 첫 번째부터 되밀지 않는다', () => {
+  const asking = awaitMarker(marker, '2026-01-01T00:00:00Z', 'push 승인');
+  assert.deepEqual(asking, { ...marker, awaiting: { since: '2026-01-01T00:00:00Z', reason: 'push 승인' } });
+  assert.equal(decide({ ...base, marker: asking }).block, false);
+});
+
+test('사람이 답하면 표지가 지워지고 평소 판정으로 돌아간다', () => {
+  const answered = clearAwaiting(awaitMarker(marker, 'x', 'push 승인'));
+  assert.deepEqual(answered, marker);
+  assert.equal(decide({ ...base, marker: answered }).block, true);
 });
 
 test('프론티어가 남았으면 막고, 묻지 말고 claim 하라고 돌려준다', () => {

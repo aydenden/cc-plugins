@@ -17,6 +17,7 @@
  *                                                           헌장 목표를 근거로 대신 답하고 표시를 남긴다
  *   node frontier-guard.mjs delegation-report [맵]          위임 답변을 모아 보고서를 쓰고 경로를 낸다
  *   node frontier-guard.mjs hand-over                       인계를 보냈다고 적는다(보낸 세션을 더 밀지 않는다)
+ *   node frontier-guard.mjs wait <요지>                     사람의 답을 기다리며 멈춘다고 적는다(사람이 말하면 지워진다)
  *   node frontier-guard.mjs pause [--session <id>]          사람이 Stop 되밀기를 잠시 끈다(세션의 pause 는 게이트가 막는다)
  *   node frontier-guard.mjs resume [--session <id>]         다시 켠다. 재claim 도 푼다
  *   node frontier-guard.mjs clear                           선언 해제(맵을 놓을 때. 인계할 때는 지우지 않는다)
@@ -62,7 +63,9 @@ import {
 import { closesEpic, denyCommand, denyWrite, needsGate, PAUSE_DENIAL, pausesGuard } from './lib/gate.mjs';
 import { movesMap } from './lib/mod-view.mjs';
 import {
+  awaitMarker,
   beginWave,
+  clearAwaiting,
   contextLimitOf,
   contextTokensOf,
   countClosedSince,
@@ -480,6 +483,13 @@ if (command === 'claim') {
 } else if (command === 'hand-over') {
   const marker = readJson(MARKER);
   if (marker?.epic) writeMarker(MARKER, { ...marker, handedOffAt: new Date().toISOString() });
+} else if (command === 'wait') {
+  const marker = readJson(MARKER);
+  if (!marker?.epic) refuse('이 worktree 에 선언된 맵이 없다.');
+  const reason = String(argument ?? '').trim();
+  if (!reason) refuse('무엇을 기다리는지 한 줄로 준다 — wait "<요지>"');
+  writeMarker(MARKER, awaitMarker(marker, new Date().toISOString(), reason));
+  console.log(`[frontier-guard] 사람의 답을 기다린다고 적었다(${reason}). 사람이 말하면 지워진다.`);
 } else if (command === 'pause' || command === 'resume') {
   const sessionId = flagOf(process.argv.slice(3), '--session');
   // cwd 가 옮겨 간 세션도 자기 맵을 찾는다. 주인이 아직 안 적혔으면 이 worktree 의 마커다.
@@ -563,6 +573,7 @@ if (command === 'claim') {
     if (isHumanPrompt(input.prompt)) {
       const path = receiptsPathFor(found ? mapCwdOf(found.marker, cwd) : cwd);
       writeMarker(path, addReceipt(readJson(path), new Date().toISOString(), input.prompt));
+      if (found?.marker.awaiting) writeMarker(found.path, clearAwaiting(found.marker));
     }
     const questions = found?.marker.gate?.questions ?? [];
     if (questions.length) {
@@ -591,6 +602,6 @@ if (command === 'claim') {
   }
   process.exit(0);
 } else {
-  console.error('usage: node frontier-guard.mjs <claim <epic> [--no-ticket-limit|--ticket-limit]|wave-begin <runId> <티켓>=<dispatch>[=<worktreeId>]...|wave-settle <티켓>|answer <질문> --quote <원문>|delegate --quote <원문>|delegate --off|delegate-answer <질문> --choice <고른 것> --cite <헌장 원문> --why <이유>|delegation-report [맵]|hand-over|clear|epic|wave|move <경로>|status [--session <id>] [트랜스크립트]|judge|--hook|--gate|--receipt|--refresh>');
+  console.error('usage: node frontier-guard.mjs <claim <epic> [--no-ticket-limit|--ticket-limit]|wave-begin <runId> <티켓>=<dispatch>[=<worktreeId>]...|wave-settle <티켓>|answer <질문> --quote <원문>|delegate --quote <원문>|delegate --off|delegate-answer <질문> --choice <고른 것> --cite <헌장 원문> --why <이유>|delegation-report [맵]|hand-over|wait <요지>|pause|resume|clear|epic|wave|move <경로>|status [--session <id>] [트랜스크립트]|judge|--hook|--gate|--receipt|--refresh>');
   process.exit(1);
 }

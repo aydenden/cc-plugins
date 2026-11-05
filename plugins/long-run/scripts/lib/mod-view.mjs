@@ -81,6 +81,7 @@ export function statusLine(status, usage) {
   if (status.owner === false) return `${heading(status, false)} · 다른 세션이 주인`;
   const parts = [heading(status, true)];
   if (status.marker.paused) parts.push('⏸ 일시정지');
+  if (status.marker.awaiting) parts.push(`⌛ 답 대기: ${clip(status.marker.awaiting.reason, TICKET_TITLE_MAX)}`);
   const count = (ids) => (status.frontier ? ids.length : '?');
   const { pushable = [], blocked = [], questions = [] } = status.frontier ?? {};
   parts.push(`밀기 ${count(pushable)}`, `막힘 ${count(blocked)}`, `질문 ${count(questions)}`);

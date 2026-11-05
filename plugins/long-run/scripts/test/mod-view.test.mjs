@@ -40,6 +40,11 @@ test('일시정지 중이면 상태줄이 맵 제목 바로 뒤에서 말한다 
   assert.equal(statusLine(paused, usageAt(420_000)), '🧭 [결제 모듈 이전] · ⏸ 일시정지 · 밀기 2 · 막힘 0 · 질문 0 · 컨텍스트 42%/50%');
 });
 
+test('사람의 답을 기다리면 상태줄이 그 요지를 말한다 — 세션이 일을 피하려 쓴 표지도 사람 눈에 보인다', () => {
+  const asking = { ...claimed, marker: { epic: 'map-abcd', awaiting: { since: 'x', reason: 'push 승인' } } };
+  assert.equal(statusLine(asking, usageAt(420_000)), '🧭 [결제 모듈 이전] · ⌛ 답 대기: push 승인 · 밀기 2 · 막힘 0 · 질문 0 · 컨텍스트 42%/50%');
+});
+
 // --- 일시정지 띠 ---
 
 test('맵을 미는 세션에는 띠가 있고, 일시정지 여부를 마커에서 읽는다', () => {

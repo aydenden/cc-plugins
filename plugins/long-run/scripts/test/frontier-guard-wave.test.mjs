@@ -29,6 +29,8 @@ function sandbox(t) {
     const dir = join(state, 'frontier-guard');
     return join(dir, readdirSync(dir).find((name) => name.endsWith('.json')));
   };
+  guard.hook = (flag, input) =>
+    spawnSync(process.execPath, [GUARD, flag], { cwd, encoding: 'utf8', input: JSON.stringify({ cwd, ...input }), env: { ...process.env, LONG_RUN_STATE_ROOT: state } });
   guard.marker = () => JSON.parse(readFileSync(markerFile(), 'utf8'));
   guard.setMarker = (body) => writeFileSync(markerFile(), JSON.stringify(body));
   return guard;
@@ -62,6 +64,42 @@ test('🚨 주인이 적힌 맵은 다른 세션이 일시정지하지 못한다
   assert.equal(guard.marker().paused, undefined);
   assert.equal(guard('pause', '--session', 'owner').code, 0);
   assert.equal(typeof guard.marker().paused.since, 'string');
+});
+
+test('wait 는 요지를 받아 적고, 요지가 없거나 선언이 없으면 실패한다', (t) => {
+  const guard = sandbox(t);
+  assert.equal(guard('wait', 'push 승인').code, 1);
+
+  guard('claim', 'map-x');
+  assert.equal(guard('wait').code, 1);
+  assert.equal(guard('wait', '   ').code, 1);
+  assert.equal(guard('wait', 'push 승인').code, 0);
+  assert.equal(guard.marker().awaiting.reason, 'push 승인');
+});
+
+test('🚨 사람이 말하면 대기 표지가 지워지고, 프로그램이 넣은 입력으로는 안 지워진다', (t) => {
+  const guard = sandbox(t);
+  guard('claim', 'map-x');
+  guard.setMarker({ ...guard.marker(), session: { id: 'owner', since: 'x' } });
+  guard('wait', 'push 승인');
+
+  guard.hook('--receipt', { session_id: 'owner', prompt: '[세션 인계] 이어받아라' });
+  guard.hook('--receipt', { session_id: 'owner', prompt: '<task-notification>끝</task-notification>' });
+  assert.equal(guard.marker().awaiting.reason, 'push 승인');
+
+  guard.hook('--receipt', { session_id: 'other', prompt: '승인' });
+  assert.equal(guard.marker().awaiting.reason, 'push 승인');
+
+  guard.hook('--receipt', { session_id: 'owner', prompt: '승인' });
+  assert.equal(guard.marker().awaiting, undefined);
+});
+
+test('다시 claim 하면 대기 표지가 풀린다 — 앞 세션의 질문이 새 세션을 놓아주면 안 된다', (t) => {
+  const guard = sandbox(t);
+  guard('claim', 'map-x');
+  guard('wait', 'push 승인');
+  guard('claim', 'map-x');
+  assert.equal(guard.marker().awaiting, undefined);
 });
 
 // 인계가 진행 웨이브의 Run 을 새 세션에 넘기려고 읽는다 — epic 처럼 한 줄, 없으면 빈 출력.

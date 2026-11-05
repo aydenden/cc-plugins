@@ -411,6 +411,26 @@ export function resumeMarker(marker) {
   return rest;
 }
 
+// --- 사람 대기 ---
+
+/**
+ * 세션이 사람의 답을 기다리며 멈춘다고 적은 마커. 멈춤의 이유는 문장에서 읽을 수 없으므로 데이터로 받는다 —
+ * 질문을 내놓자마자 되밀면 사람이 답을 치는 동안 세션이 말을 이어 가 답과 엇갈린다.
+ * 사람이 다음에 말할 때(`--receipt`) 지워진다.
+ *
+ * @param {object} marker 지금 마커. 고치지 않고 새 객체를 돌려준다
+ * @param {string} since 지금(ISO)
+ * @param {string} reason 무엇을 기다리는지 한 줄. 상태줄에 그대로 보인다
+ * @returns {object}
+ */
+export const awaitMarker = (marker, since, reason) => ({ ...marker, awaiting: { since, reason } });
+
+/** 대기 표지를 지운 마커. */
+export function clearAwaiting(marker) {
+  const { awaiting: _awaiting, ...rest } = marker;
+  return rest;
+}
+
 /** 웨이브가 도는 동안의 되밂. 워커의 보고를 받고 정산하는 길만 말한다. */
 function waveReason(epic, wave, tickets) {
   const list = tickets.map((t) => `${t.id}→${t.dispatchId}`).join(', ');
@@ -473,8 +493,8 @@ export function decide({
   if (!owner) return { block: false, ratio };
   // 인계를 보낸 세션이다 — 새 세션이 claim 해 마커를 새로 쓸 때까지 이 칸이 남는다. 또 밀면 맵을 두 세션이 민다.
   if (marker.handedOffAt) return { block: false, ratio };
-  // 사람이 끈 동안 맵이 닫혔으면 선언까지 지운다 — 남기면 재개할 맵 없는 일시정지 표시만 남는다.
-  if (marker.paused) {
+  // 사람이 끈 동안, 또는 답을 기다리는 동안 맵이 닫혔으면 선언까지 지운다 — 남기면 재개할 맵 없는 표시만 남는다.
+  if (marker.paused || marker.awaiting) {
     const done = frontier && !epicOpen && frontier.pushable.length === 0 && !isWaiting(frontier);
     return done ? { block: false, clear: true, ratio } : { block: false, ratio };
   }
