@@ -192,7 +192,10 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/axis-sync.mjs" push "add <도메인> domain"
 
 템플릿의 `<plugin>:`은 자리표시자다. 복사할 때 생성 플러그인 이름으로 바꾼다. `PRIME.md`의 스킬 목록에는 기본 스펙의 이음매 단계가 적혀 있을 뿐이므로 **이 스펙의 이음매 단계로 다시 쓴다** — `domain.md`와 `triage-labels.md`가 가리키는 `sources`·`slice`도 그 단계가 없으면 지운다. `PRIME.md`는 매 세션 주입되므로 여기 남은 한 줄은 없는 스킬을 부르라는 지시가 세션마다 반복되는 것이다. 「Stage order」 줄도 이 스펙의 `stages` 순서로 다시 쓴다 — 위임 단계를 빼지 않고, 사용자만 부를 수 있는 스킬에 ⌨ 를 단다.
 
+템플릿의 mattpocock 스킬 이름은 플러그인 이름(`mattpocock-skills:tdd`)으로 적혀 있다. 0단계의 `check-deps` 가 그 스킬에 「부르는 이름」을 찍지 않았으면 맨이름으로 설치된 것이므로, 복사할 때 `mattpocock-skills:` 접두를 뗀다 — 스펙의 `delegate_to` 도 같다.
+
 ```bash
+grep -rn 'mattpocock-skills:' <생성된 플러그인과 복사된 문서 경로>    # 맨이름으로 설치된 기기라면 남아 있으면 안 된다
 grep -rn '<plugin>:' <생성된 플러그인과 복사된 문서 경로>    # 남아 있으면 치환이 빠진 것
 ```
 

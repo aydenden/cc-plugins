@@ -50,7 +50,7 @@
       // 문서 경로를 마지막 인자로 받는다. 0 이 아닌 종료 코드는 닫기를 막는다
       // "invariants": [{ "name": "…", "run": ["node", "scripts/check-….mjs"] }]
     },
-    { "id": "implement", "kind": "delegate", "delegate_to": "/implement", "checks": ["execution"] }
+    { "id": "implement", "kind": "delegate", "delegate_to": "/mattpocock-skills:implement", "checks": ["execution"] }
   ],
 
   // --- 축 ---

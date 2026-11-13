@@ -55,7 +55,7 @@
       "produces": "claim된 티켓 + 실행 환경(bd worktree / orca terminal)",
       "checks": ["existence"]
     },
-    { "id": "implement", "kind": "delegate", "delegate_to": "/implement", "checks": ["execution"] },
+    { "id": "implement", "kind": "delegate", "delegate_to": "/mattpocock-skills:implement", "checks": ["execution"] },
     {
       "id": "verify",
       "kind": "seam",

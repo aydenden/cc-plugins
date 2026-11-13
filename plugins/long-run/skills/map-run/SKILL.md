@@ -32,8 +32,19 @@ description: "여러 세션에 걸쳐야 끝나는 목표 하나를 실행 맵(b
 ### 무엇을 할지 아직 모르면 이 스킬이 아니다
 
 이 맵은 **실행**의 맵이다 — 완료조건에 적힌 산출물까지 민다. 무엇을 만들지가 아직 결정에 걸려 있으면
-먼저 `/wayfinder` 로 그 결정들을 푼다. 판정은 하나다: **완료 조건을 관측 가능한 문장으로 지금 쓸 수
+먼저 `wayfinder` 스킬로 그 결정들을 푼다. 판정은 하나다: **완료 조건을 관측 가능한 문장으로 지금 쓸 수
 있는가.** 못 쓰면 남은 것은 작업이 아니라 결정이다.
+
+`wayfinder` 가 어디 설치돼 있는지는 이 스킬이 로드될 때 스크립트가 찾아 싣는다:
+
+<wayfinder-skill>
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" wayfinder --install "claude plugin marketplace add mattpocock/skills 후 claude plugin install mattpocock-skills@mattpocock"`
+</wayfinder-skill>
+
+완료 조건을 못 쓰는 상태면 **이 스킬의 절차를 시작하지 않고** 위 블록의 `use:` 줄대로 한다 — `use: Read` 면
+`path:` 의 파일을 읽어 그 지시를 따르고(모델이 호출할 수 없는 스킬이라 Skill 도구로 부르지 않는다),
+`MISSING` 이면 `install:` 줄을 알리고 완료 조건을 사용자와 직접 합의한다. 사용자에게 직접 쳐 달라고 할 일이 아니다.
+그 맵이 닫히면 이 스킬로 돌아와 1단계에서 물려받는다. 블록에 결과 대신 명령이 그대로 보이면 그 명령을 먼저 실행해 출력을 쓴다.
 
 🚨 **두 맵을 한 맵으로 합치지 않는다.** `/wayfinder` 는 「세션당 티켓 하나」, 「차팅이 끝나면 정지」가
 규약이고 이 스킬의 Stop hook 은 바로 그 정지를 되민다. 같은 맵에 둘을 걸면 하네스가 wayfinder 의
