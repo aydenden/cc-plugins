@@ -27,9 +27,11 @@
 - 상태줄과 mod 판정은 Claude Code v2.1.287 이상. 그보다 낮으면 Stop hook 만으로 동작한다
 - 인계는 이 세션이 Orca 터미널에서 돌고 있을 때 자기 탭을 닫는다(`ORCA_TERMINAL_HANDLE`)
 - `handoff` 스킬: 인계 문서 본문 합성의 지시문이다. 모델이 호출할 수 없는 스킬이라(`disable-model-invocation`)
-  설치본의 `SKILL.md` 를 읽어 따른다. 어디 있는지는 `session-handoff` 가 로드될 때 `scripts/resolve-skill.mjs` 가
+  설치본의 `SKILL.md` 를 읽어 따른다. 어디 있는지는 `session-handoff` 가 로드될 때 `scripts/resolve-skill.mjs`(원본은 저장소의 `shared/`) 가
   찾아 본문에 싣는다(프로젝트 → `~/.claude/skills` → `~/.agents/skills` → 플러그인 설치본). 없으면 `/setup-matt-pocock-skills` 로 설치한다.
   `references/handoff-doc.md` 만으로도 문서는 쓸 수 있지만, 그때는 대화 압축·비밀 삭제 판단이 빠진다
+- `pstack` 플러그인(선택): 맵을 닫기 전 검증에서 완료 조건에 성능 수치가 있으면 `benchmark-checklist` 를 검증자의
+  브리프에 싣고, 같은 원인의 재작업이 두 번 이상이었으면 `correct` 를 권한다. 없으면 그 사실만 적고 진행한다
 - `wayfinder` 스킬: 선행 계획 맵이 필요할 때만. 없으면 완료 조건을 사용자와 직접 합의한다
 
 `bd`·`orca` 에는 폴백이 없다. 없으면 그 사실을 보고하고 멈춘다.

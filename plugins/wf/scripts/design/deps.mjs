@@ -23,6 +23,11 @@ const OPTIONAL_TOOLS = [
   { command: 'npx', present: 'npx (스킬 레지스트리 조사)', absent: 'npx', install: 'brew install node' },
 ];
 
+// Their skills are all model-gated; a seam skill reads them by path (stage-patterns.md, 경로 주입).
+const OPTIONAL_PLUGINS = [
+  { plugin: 'pstack', present: 'pstack (반복 실수의 강제 장치화·영향 범위·성능 수치 검증)', absent: 'pstack', install: 'claude plugin marketplace add cursor/plugins 후 claude plugin install pstack@cursor-plugins' },
+];
+
 const RESEARCH_SKILLS = [
   { skill: 'find-skills', repo: 'vercel-labs/skills' },
   { skill: 'agent-browser', repo: 'vercel-labs/agent-browser' },
@@ -73,6 +78,8 @@ export function report(probe) {
   REQUIRED_PLUGINS.forEach((item) => required(probe.plugin(item.plugin), item));
   lines.push('', '조건부 도구 — 없으면 해당 단계를 설계에서 뺀다');
   OPTIONAL_TOOLS.forEach((item) => optional(probe.command(item.command), item));
+  lines.push('', '조건부 플러그인 — 없으면 그 판단을 위임하는 단계를 설계에서 뺀다');
+  OPTIONAL_PLUGINS.forEach((item) => optional(probe.plugin(item.plugin), item));
   lines.push('', '조사·조작 스킬 — 설계 4단계(스킬 조사)와 브라우저 검증이 여기 기댄다');
   RESEARCH_SKILLS.forEach((item) => skill(item.skill, item.repo));
   lines.push('', '위임 대상 스킬 — 없으면 그 판단을 대신할 스킬을 조사해야 한다');

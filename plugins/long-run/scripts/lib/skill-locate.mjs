@@ -6,6 +6,9 @@
  * 그 뒤에 플러그인 설치본을 본다.
  *
  * 여기는 판정만 한다. 파일은 `resolve-skill.mjs` 가 읽는다.
+ *
+ * 원본은 저장소의 `shared/scripts/` 다. 플러그인 안의 이 파일은 사본이므로 고치지 않는다 —
+ * `node shared/sync.mjs` 가 다시 쓰고, 테스트가 원본과 같은지 본다.
  */
 
 import path from 'node:path';
@@ -29,8 +32,11 @@ export function ancestors(cwd) {
 /**
  * 스킬 이름이 놓일 수 있는 자리를 가까운 순서로 낸다.
  * @param {string} name 스킬 이름. `plugin:skill` 꼴이면 그 플러그인의 설치본만 본다
- * @param {{cwd: string, home: string, plugins: Array<{key: string, installPath: string}>}} env
- *   plugins 는 installed_plugins.json 의 기록(키는 `plugin@marketplace`)을 파일 순서대로
+ * @param {{cwd: string, home: string, self?: string,
+ *   plugins: Array<{key: string, installPath: string, categories?: string[]}>}} env
+ *   plugins 는 installed_plugins.json 의 기록(키는 `plugin@marketplace`)을 파일 순서대로.
+ *   categories 는 그 플러그인의 `skills/` 바로 아래 폴더 이름 — 스킬을 분류 폴더에 넣는 플러그인이 있다.
+ *   self 는 묻는 쪽 플러그인의 이름. 자기 스킬은 남의 스킬이 아니므로 후보에서 뺀다
  * @returns {Array<{origin: string, path: string}>} origin 은 project | personal | agents | plugin:<키>
  */
 export function candidates(name, env) {
@@ -46,8 +52,14 @@ export function candidates(name, env) {
     out.push({ origin: 'agents', path: path.join(env.home, '.agents', 'skills', skill, 'SKILL.md') });
   }
   for (const p of env.plugins ?? []) {
-    if (pluginFilter && pluginFilter !== p.key.split('@')[0]) continue;
-    out.push({ origin: `plugin:${p.key}`, path: path.join(p.installPath, 'skills', skill, 'SKILL.md') });
+    const pluginName = p.key.split('@')[0];
+    if (pluginFilter ? pluginFilter !== pluginName : pluginName === env.self) continue;
+    const origin = `plugin:${p.key}`;
+    out.push({ origin, path: path.join(p.installPath, 'skills', skill, 'SKILL.md') });
+    for (const category of p.categories ?? []) {
+      if (category === skill) continue;
+      out.push({ origin, path: path.join(p.installPath, 'skills', category, skill, 'SKILL.md') });
+    }
   }
   return out;
 }

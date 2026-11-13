@@ -45,7 +45,7 @@
 
 `scripts/check-deps.mjs` 가 설치 여부를 보는 것은 이 중 기본 스펙이 쓰는 mattpocock 스킬 13개와 `find-skills`·`agent-browser` 다. 표의 나머지 — `/grill-me`(코드베이스가 없을 때의 대안), `/retro` — 는 그 판단을 워크플로우에 넣기로 했을 때 design 4단계에서 설치 여부를 본다.
 
-† 는 upstream 이 `disable-model-invocation: true` 로 둔 스킬이다(`mattpocock/skills` main `49dd158`, 2026-10-12 실측). 모델이 Skill 도구로 부를 수 없고 사용자가 직접 쳐야 한다. 표시는 실측일의 사실이다 — 설계할 때는 설치본 `SKILL.md` 의 frontmatter 를 직접 본다.
+† 는 upstream 이 `disable-model-invocation: true` 로 둔 스킬이다(`mattpocock/skills` main `49dd158`, 2026-10-12 실측. `pstack` 은 0.15.36, 2026-11-13 실측 — 전부 †다). 모델이 Skill 도구로 부를 수 없고 사용자가 직접 쳐야 한다. 표시는 실측일의 사실이다 — 설계할 때는 설치본 `SKILL.md` 의 frontmatter 를 직접 본다.
 
 | 판단 | 스킬 |
 |---|---|
@@ -62,7 +62,11 @@
 | 여러 세션에 걸친 실행 | `long-run:map-run` |
 | 설계 질문 | `/prototype` |
 | 도메인 용어 | `/domain-modeling` |
-| 세션 회고 (에이전트 환경) | `/retro`† — 사용자가 직접 실행한다. 워크플로우의 재작업·누락은 `wf:retro` |
+| 세션 회고 (에이전트 환경) | `/retro`† — 워크플로우의 재작업·누락은 `wf:retro` |
+| 반복되는 실수를 강제 장치로 | `pstack:correct`† — 구조 → 타입 → 고칠 방법을 적은 lint → 테스트 → 문서 순으로 올린다 |
+| 변경의 영향 범위 | `pstack:blast-radius`† — diff 밖에서 무엇이 깨지는지, 안전의 근거 하나를 실행으로 증명한다 |
+| 성능 수치의 검증 | `pstack:benchmark-checklist`† — 측정한 숫자를 보고하거나 그것으로 고르기 전에 |
+| 과제 문장을 깊게 다시 쓰기 | `pstack:sharpen`† |
 | 브라우저 조작 | `agent-browser` |
 
 ## 위임 단계의 문구
@@ -72,13 +76,34 @@
 | 대상 스킬 | 쓰는 문구 | 그 뒤 |
 |---|---|---|
 | 모델이 부를 수 있다 | 「Skill 도구를 `"tdd"` 로 호출한다」 — 도구를 이름으로 적는다. 산문에 `/tdd` 만 두면 명령이 아니라 언급으로 읽힐 수 있다 | 같은 턴에서 이어 간다 |
-| 사용자만 부를 수 있다(†) | 「사용자에게 `/implement <넘길 것>` 을 실행해 달라고 요청하고 턴을 끝낸다」 — 넘길 것(티켓 ID·문서 경로)과, 끝난 뒤 이어 부를 이음매 스킬을 함께 알린다 | 사용자가 친다. 워크플로우는 다음 이음매 스킬의 첫 동작(앞 단계 증거 확인)에서 다시 잡힌다 |
+| 사용자만 부를 수 있다(†) — 자기 인자·서브에이전트·`context: fork`·훅을 가진 스킬 | 「사용자에게 `/implement <넘길 것>` 을 실행해 달라고 요청하고 턴을 끝낸다」 — 넘길 것(티켓 ID·문서 경로)과, 끝난 뒤 이어 부를 이음매 스킬을 함께 알린다 | 사용자가 친다. 워크플로우는 다음 이음매 스킬의 첫 동작(앞 단계 증거 확인)에서 다시 잡힌다 |
+| 사용자만 부를 수 있다(†) — 본문이 지침뿐인 스킬 | 앞 이음매 스킬에 주입 블록을 둔다(아래 「경로 주입」). 블록의 `use: Read` 를 보고 `path:` 의 `SKILL.md` 를 읽어 따른다 | 같은 턴에서 이어 간다 |
 
 † 스킬을 Skill 도구로 부르라고 쓰면 그 호출은 거부된다(`cannot be used with Skill tool due to disable-model-invocation`).
 
 사용자만 부를 수 있는 단계가 연달아 오면(정제 → 명세) 그 사이에는 이음매 스킬이 없다. 그 순서를 알리는 것은 `PRIME.md` 다 — 단계 순서에서 위임 단계를 빼지 않고, 사용자가 치는 것을 표시한다. 이 문구를 싣기 위해 감싸는 스킬을 만들지 않는다.
 
 upstream 도 같은 규약을 쓴다(`mattpocock/skills` 의 `.agents/invocation.md`).
+
+### 경로 주입
+
+† 스킬을 Skill 도구로 부를 수는 없지만 파일로 읽을 수는 있다. 읽으면 지침은 오고 **실행 의미는 오지 않는다** — 그 스킬의 인자 치환, `allowed-tools`, 모델·fork 설정, 훅이 빠진다. 그래서 본문이 지침뿐인 스킬에만 쓴다. `pstack` 은 자기 문서(`docs/harness/claude-code.md`)가 Claude Code 에서 이 방식을 쓰라고 적는다.
+
+설치 위치는 기기마다 다르므로 경로를 본문에 적지 않는다. 스킬이 로드될 때 스크립트가 찾아 싣는다:
+
+```markdown
+---
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" *)
+---
+
+<delegate-skill>
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" pstack:blast-radius --install "<없을 때 알릴 설치 방법>"`
+</delegate-skill>
+```
+
+출력의 첫 줄이 `FOUND` 면 `path:`·`origin:`·`use:` 가 따라오고, `MISSING` 이면 `install:` 이 따라온다. `use:` 는 대상의 frontmatter 를 읽어 정해진다 — upstream 이 제한을 풀면 `use: Skill` 로 바뀌므로 본문은 「`use:` 줄대로 한다」고만 쓴다. `allowed-tools` 의 그 줄이 없으면 로드 때 치환되지 않고 「이 명령을 먼저 실행하라」는 지시로 바뀐다. 찾는 순서는 프로젝트 → `~/.claude/skills` → `~/.agents/skills` → 플러그인 설치본이고, 묻는 쪽 플러그인 자신의 스킬은 후보가 아니다(`scripts/lib/skill-locate.mjs`).
+
+남의 스킬의 본문을 이음매 스킬에 옮겨 적지 않는다. 사본은 upstream 이 나아져도 그대로 남는다.
 
 ## 단계 사이의 계약
 

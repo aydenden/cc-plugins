@@ -1,5 +1,6 @@
 ---
 name: map-run
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" *)
 description: "여러 세션에 걸쳐야 끝나는 목표 하나를 실행 맵(bd epic)으로 세우고 완료조건까지 밀어붙인다 — 헌장·프론티어를 깔고, 멈춤을 되미는 가드(mod, 안 뜨는 환경에서는 Stop hook)와 답 없는 질문의 진행을 거부하는 게이트(PreToolUse)를 걸고, 이 세션이 티켓 2건을 닫았거나 컨텍스트 50% 에서 session-handoff 로 넘기며(코디네이터 맵은 claim --no-ticket-limit 으로 티켓 수 축을 끈다), 서로 다른 파일을 건드리는 티켓이 여럿이면 승인받아 병렬 웨이브(wave.mjs)로 워커에게 나눠 맡기고, 사람이 위임하면 헌장 목표를 근거로 질문에 대신 답해 표시를 남기고 맵을 닫기 전 위임 보고서로 모으며, 완료 조건을 검증해 맵을 닫을 때까지 반복한다. 트리거: '이거 오래 걸릴 것 같은데 맵으로 세워줘', '목표 잡고 끝까지 밀어줘', '맵 하나 만들자', '여러 세션 걸릴 것 같아', '이 맵 이어서 밀어줘', '/map-run'. 무엇을 만들지가 아직 결정에 걸려 있으면(완료 조건을 관측 가능한 문장으로 못 쓰면) 먼저 /wayfinder 로 그 결정을 풀고, 닫힌 그 맵을 이 맵이 물려받는다 — 두 맵을 한 맵으로 합치지 않는다. 한 번의 소유권 이전은 long-run:session-handoff 쪽이고, 티켓 하나로 끝나는 작업은 맵이 아니다."
 ---
 
@@ -279,6 +280,22 @@ reason 이 이력이다. §0 의 나머지 규칙은 `session-handoff` 의 `refe
 3. 거짓인 줄과 남은 안개는 **티켓으로 만든다** — 프론티어가 다시 차고 가드가 평소대로 민다
 4. **「확정된 결정」을 뒤집는 지적은 반영하지 않는다.** 리뷰어는 의도를 모른 채 방향을 바꿀 수 있다.
    4단계처럼 `--labels human` 질문으로 주차한다
+
+두 경우에는 남의 스킬을 쓴다. 어디 설치돼 있는지는 이 스킬이 로드될 때 스크립트가 찾아 싣는다 — 블록에 결과
+대신 명령이 그대로 보이면 그 명령을 먼저 실행해 출력을 쓴다:
+
+<close-check-skills>
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" pstack:benchmark-checklist --install "claude plugin marketplace add cursor/plugins 후 claude plugin install pstack@cursor-plugins"`
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" pstack:correct --install "claude plugin marketplace add cursor/plugins 후 claude plugin install pstack@cursor-plugins"`
+</close-check-skills>
+
+- **완료 조건에 성능 수치가 있으면**(시간·처리량·메모리·크기) 그 줄은 숫자가 나온 것만으로 참이 되지 않는다 —
+  한 번 잰 숫자, 한쪽만 튜닝한 비교, 일이 실제로는 돌지 않은 측정이 그대로 통과한다. 1번 서브에이전트의
+  브리프에 `benchmark-checklist` 를 싣는다: `use: Read` 면 「`path:` 의 파일을 읽고 그 질문들에 답한 뒤
+  판정하라」고 적는다. `MISSING` 이면 그 줄의 관측에 「측정 검증 없이 읽은 숫자」라고 적고 `install:` 을 알린다
+- **같은 원인의 재작업이 두 번 이상 있었으면**(같은 종류의 실수로 티켓을 다시 열었거나 같은 이유로 되밀렸다)
+  맵을 닫으며 사용자에게 `pstack:correct` 를 권한다. 그 실수를 저장소의 구조·타입·검사로 못 하게 만드는
+  일이고, 이 맵의 완료 조건이 아니다 — 맵 안에서 직접 하지 않는다. 사용자가 이어서 하자고 하면 `use:` 줄대로 한다
 
 **위임으로 답한 질문이 있으면 먼저 보고서를 만든다.** 게이트는 그 전부를 담은 보고서가 없거나 close 명령에
 경로가 없으면 맵을 닫지 못하게 한다. 맵을 닫고 나면 보고서 경로를 사용자에게 알린다:

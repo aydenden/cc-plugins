@@ -39,7 +39,7 @@ ls skills/
 
 ```bash
 # wf 플러그인 루트에서
-for f in scripts/hook-*.mjs scripts/lib/*.mjs; do
+for f in scripts/hook-*.mjs scripts/resolve-skill.mjs scripts/lib/*.mjs; do
   cmp -s "$f" "<생성물 루트>/$f" || echo "STALE $f"
 done
 cmp -s templates/hooks.json "<생성물 루트>/hooks/hooks.json" || echo "STALE hooks.json"

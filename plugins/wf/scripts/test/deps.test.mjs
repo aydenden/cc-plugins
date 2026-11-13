@@ -65,9 +65,11 @@ test('🚨 each missing required tool or plugin is counted and carries its insta
 });
 
 test('a missing optional tool or skill is reported but not counted', () => {
-  const { lines, missingRequired } = report(having({ commands: ['orca'], skills: ['implement', 'find-skills'] }));
+  const { lines, missingRequired } = report(having({ commands: ['orca'], skills: ['implement', 'find-skills'], plugins: ['pstack'] }));
   assert.equal(missingRequired, 0);
   assert.ok(lines.includes('  · orca — 없음 (해당 단계를 넣을 수 없다)'));
+  // pstack 은 조건부다 — 없어도 설계는 진행되고, 그 판단을 위임하는 단계만 빠진다.
+  assert.ok(lines.includes('  · pstack — 없음 (해당 단계를 넣을 수 없다)'));
   assert.ok(lines.includes('  · implement — 없음 → npx skills add mattpocock/skills@implement'));
   assert.ok(lines.includes('  · find-skills — 없음 → npx skills add vercel-labs/skills@find-skills'));
 });

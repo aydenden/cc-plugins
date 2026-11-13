@@ -1,11 +1,24 @@
 ---
 name: retro
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" *)
 description: wf 로 만든 워크플로우에서 난 재작업·누락을 규명해 그 워크플로우를 고친다. 산출물·우회 로그·세션 기록을 읽어 어느 단계에서 무엇이 빠졌는지 찾고, 검사가 실제로 돌고 있었는지부터 확인한 뒤, 기계적으로 판정되는 것은 검사로, 판단이 필요한 것은 검토 축으로 스펙에 넣는다. 단계·위임 스킬·증거 저장소를 바꿔야 하면 스펙을 고치고 생성된 플러그인에 반영하며, 수정 전에 영향 파일을 제시하고 컨펌받는다. "이거 놓쳐서 다시 했어", "재작업 났어", "요구사항 빠뜨렸다", "왜 이걸 못 봤지", "다음엔 안 놓치게 축 추가해줘", "이 축 매번 해당 없음이야", "워크플로우 단계 바꾸고 싶어", "워크플로우 스펙 고쳤어 반영해줘" 같은 요청과, 워크플로우의 결과물을 보고 나서야 누락을 발견했을 때, 워크플로우의 한 주기를 돌아보며 축을 정리할 때 사용한다.
 ---
 
 워크플로우가 시간이 지나며 좋아지는 유일한 경로다. 놓친 것을 사람 기억에 맡기면 다음에도 놓친다. 스펙에 넣으면 다음 실행부터 hook 이 강제한다.
 
-대상은 **wf 로 만든 워크플로우**다. 에이전트 환경 전반(지시문·권한·도구)을 돌아보는 세션 회고는 이 스킬의 일이 아니다 — 사용자가 `/retro` 를 직접 실행한다(`references/stage-patterns.md`).
+대상은 **wf 로 만든 워크플로우**다. 워크플로우 밖의 일은 이 스킬의 일이 아니고, 그 일을 하는 스킬이 따로 있다 — 어디 설치돼 있는지는 이 스킬이 로드될 때 아래에 실린다(`references/stage-patterns.md` 의 위임 표).
+
+| 사건의 성격 | 넘길 스킬 |
+|---|---|
+| 세션 하나를 돌아보며 에이전트 환경(탐색 경로·자동 검사·지시문·도구 비용)의 개선 후보를 찾는다 | `retro` (mattpocock 스킬군) |
+| 이 저장소에서 에이전트가 같은 실수를 두 번 이상 했고, 그것을 구조·타입·lint·테스트로 못 하게 만든다 | `pstack:correct` |
+
+<outside-workflow-skills>
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" retro --install "npx skills add mattpocock/skills -g -s retro"`
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" pstack:correct --install "claude plugin marketplace add cursor/plugins 후 claude plugin install pstack@cursor-plugins"`
+</outside-workflow-skills>
+
+사건이 위 둘에 해당하면 여기서 축이나 검사로 만들지 않는다 — 워크플로우의 스펙은 그 워크플로우가 도는 동안만 읽히므로, 거기 넣은 규칙은 워크플로우 밖의 세션을 막지 못한다. 어느 스킬의 일인지 사용자에게 말하고, 블록의 `use:` 줄대로 한다: `use: Read` 면 사용자가 원할 때 `path:` 의 파일을 읽어 그 지시를 따르고, `MISSING` 이면 `install:` 줄을 알린다. 블록에 결과 대신 명령이 그대로 보이면 그 명령을 먼저 실행해 출력을 쓴다.
 
 개선은 세 갈래로 나뉘고, 비용이 크게 다르다.
 

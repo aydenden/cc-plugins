@@ -43,12 +43,20 @@ rather than defining it inline.
 Two runners, both must pass:
 
 ```bash
-node --test "plugins/**/*.test.mjs"
+node --test "plugins/**/*.test.mjs" "shared/**/*.test.mjs"
 for f in $(find plugins -name '*.test.sh'); do bash "$f"; done
 ```
 
 Decision logic never touches the filesystem; I/O lives in an adapter so pure
 functions can be stubbed. Keep that split.
+
+## Code two plugins share
+
+A plugin is copied into the cache alone, so it cannot reach a file outside its own
+folder. The original lives in `shared/`; `node shared/sync.mjs` writes a copy into each
+plugin listed in its `MANIFEST`, and a test fails when a copy differs. Edit the original,
+run the sync, commit both. Symlinks are the documented alternative and are not used:
+git on Windows may check one out as a text file.
 
 ## Adding a plugin
 

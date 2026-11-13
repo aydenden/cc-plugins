@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ancestors, candidates, invokeName, isGated, render } from '../lib/skill-locate.mjs';
+import { ancestors, candidates, invokeName, isGated, render } from '../scripts/lib/skill-locate.mjs';
 
 const env = {
   cwd: '/home/u/work/repo/pkg',
@@ -76,4 +76,27 @@ test('막힌 스킬은 Read 로, 열린 스킬은 Skill 도구로 쓰라고 적�
 test('없으면 MISSING 과 설치 방법을 낸다', () => {
   assert.equal(render('handoff', null, '/setup-matt-pocock-skills'), 'MISSING skill=handoff\ninstall: /setup-matt-pocock-skills');
   assert.match(render('handoff', null), /^MISSING skill=handoff\ninstall: \(설치 방법이/);
+});
+
+// mattpocock-skills 플러그인은 skills/engineering/tdd 처럼 분류 폴더 아래에 스킬을 둔다.
+test('분류 폴더 아래의 플러그인 스킬도 후보다', () => {
+  const plugins = [{ key: 'mattpocock-skills@mattpocock', installPath: '/c/m', categories: ['engineering', 'productivity'] }];
+  const got = candidates('mattpocock-skills:handoff', { cwd: '/w', home: '/home/u', plugins }).map((c) => c.path);
+  assert.deepEqual(got, [
+    '/c/m/skills/handoff/SKILL.md',
+    '/c/m/skills/engineering/handoff/SKILL.md',
+    '/c/m/skills/productivity/handoff/SKILL.md',
+  ]);
+});
+
+// 🚨 wf 가 맨이름 retro 를 물었을 때 자기 스킬 wf:retro 가 나오면, 범위 밖 일을 자기에게 되넘긴다.
+test('묻는 쪽 플러그인의 스킬은 후보가 아니다', () => {
+  const plugins = [
+    { key: 'wf@aydenden-plugins', installPath: '/c/wf' },
+    { key: 'other@mp', installPath: '/c/other' },
+  ];
+  const got = candidates('retro', { cwd: '/w', home: '/home/u', plugins, self: 'wf' }).filter((c) => c.origin.startsWith('plugin:'));
+  assert.deepEqual(got, [{ origin: 'plugin:other@mp', path: '/c/other/skills/retro/SKILL.md' }]);
+  // 이름을 짚어 물으면 자기 것도 답한다 — 그때는 실수가 아니라 요청이다.
+  assert.equal(candidates('wf:retro', { cwd: '/w', home: '/home/u', plugins, self: 'wf' }).length, 1);
 });

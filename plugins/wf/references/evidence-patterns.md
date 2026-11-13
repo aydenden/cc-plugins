@@ -159,4 +159,4 @@ echo "style: 목업 미수령, proj-142" >> .claude/wf-skip-checks    # <대상>
 | `scripts/lib/bypass.mjs` · `bypass-file.mjs` | 우회 판정과 기록 |
 | `templates/hooks.json` | 두 hook 을 거는 설정 |
 
-생성기는 `scripts/hook-post-edit.mjs`·`scripts/hook-pre-close.mjs` 와 `scripts/lib/` 의 `.mjs` 전부를 생성되는 플러그인의 같은 경로로 **고치지 않고** 복사하고, `templates/hooks.json` 을 `hooks/hooks.json` 으로 둔다. 프로젝트마다 다른 것은 전부 스펙의 데이터라서 사본은 원본과 바이트 단위로 같게 유지된다 — 스크립트는 스펙 경로를 자기 플러그인의 `plugin.json` 의 `name` 으로 구하므로(`.claude/<name>.spec.jsonc`) 이름을 박을 곳이 없다. `scripts/test/` 는 복사하지 않는다. 사본이 원본과 같은지는 `spec-change.md` 의 drift 확인이 본다.
+생성기는 `scripts/hook-post-edit.mjs`·`scripts/hook-pre-close.mjs`·`scripts/resolve-skill.mjs`(위임 스킬의 설치 경로 주입, `stage-patterns.md`) 와 `scripts/lib/` 의 `.mjs` 전부를 생성되는 플러그인의 같은 경로로 **고치지 않고** 복사하고, `templates/hooks.json` 을 `hooks/hooks.json` 으로 둔다. 프로젝트마다 다른 것은 전부 스펙의 데이터라서 사본은 원본과 바이트 단위로 같게 유지된다 — 스크립트는 스펙 경로를 자기 플러그인의 `plugin.json` 의 `name` 으로 구하므로(`.claude/<name>.spec.jsonc`) 이름을 박을 곳이 없다. `scripts/test/` 는 복사하지 않는다. 사본이 원본과 같은지는 `spec-change.md` 의 drift 확인이 본다.

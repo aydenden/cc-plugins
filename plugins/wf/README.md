@@ -67,6 +67,8 @@ npx skills add vercel-labs/skills@find-skills
 npx skills add vercel-labs/agent-browser@agent-browser
 ```
 
+**조건부 플러그인**: `pstack`(`claude plugin marketplace add cursor/plugins` 후 `claude plugin install pstack@cursor-plugins`). 반복되는 실수를 강제 장치로 바꾸는 일(`correct`), 변경의 영향 범위(`blast-radius`), 성능 수치 검증(`benchmark-checklist`)을 맡긴다. 스킬이 전부 모델 호출이 막혀 있어, 이음매 스킬이 설치 경로를 주입받아 파일로 읽는다(`references/stage-patterns.md` 의 「경로 주입」). `wf:retro` 는 워크플로우 밖의 사건을 `retro`(mattpocock)와 `pstack:correct` 로 넘긴다.
+
 **위임 대상 스킬**: 사고 절차는 이쪽에 맡긴다. 전부 같은 레지스트리(`mattpocock/skills`)에 있어 한 줄로 끝난다. 없으면 그 판단을 대신할 스킬을 `find-skills`로 조사한다.
 
 ```bash
@@ -198,6 +200,8 @@ scripts/
   hook-post-edit.mjs    편집 직후 hook — 인용(차단) · 부정(경고)
   hook-pre-close.mjs    bd close 직전 hook — 커버리지 · 프리뷰 · 불변식(차단)
   lib/                  판정(순수 함수)과 파일·git 어댑터. 생성물로 그대로 복사된다
+  resolve-skill.mjs     위임할 남의 스킬의 설치 경로·호출 방법 — 스킬 본문이 로드될 때 싣는다. 생성물로 복사된다.
+                        원본은 저장소의 shared/ (lib/skill-locate.mjs 와 함께)
   check-deps.mjs        의존성 유무 + 설치법 (design 0단계)
   axis-sync.mjs         도메인 축 저장소 pull/push (refs/wf/axes)
   design/               위 둘의 판정과 어댑터. 설계 시점 전용 — 생성물로 복사하지 않는다
