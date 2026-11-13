@@ -33,7 +33,9 @@ const RESEARCH_SKILLS = [
   { skill: 'agent-browser', repo: 'vercel-labs/agent-browser' },
 ];
 
-const DELEGATE_REPO = 'mattpocock/skills';
+// Installed as a plugin, so its skills answer to `mattpocock-skills:<name>`; a copy made with
+// `npx skills add` answers to the bare name. The report prints whichever this machine has.
+const DELEGATE_INSTALL = 'claude plugin marketplace add mattpocock/skills 후 claude plugin install mattpocock-skills@mattpocock';
 const DELEGATE_SKILLS = [
   'grill-with-docs', 'to-spec', 'to-tickets', 'implement', 'tdd', 'code-review',
   'diagnosing-bugs', 'triage', 'handoff', 'prototype', 'wayfinder', 'domain-modeling', 'research',
@@ -56,7 +58,8 @@ export function installedPlugins(text) {
 /**
  * The dependency report.
  *
- * @param {{command: (name: string) => boolean, skill: (name: string) => boolean, plugin: (name: string) => boolean}} probe
+ * @param {{command: (name: string) => boolean, skill: (name: string) => boolean, plugin: (name: string) => boolean,
+ *   skillName?: (name: string) => string | null}} probe `skillName` gives the name the skill is invoked by, when known
  * @returns {{lines: string[], missingRequired: number}} `missingRequired` above 0 means a generated workflow would not run
  */
 export function report(probe) {
@@ -69,8 +72,12 @@ export function report(probe) {
   };
   const optional = (found, item) =>
     found ? lines.push(`  ✓ ${item.present}`) : lines.push(`  · ${item.absent} — 없음 (해당 단계를 넣을 수 없다)`, `      설치: ${item.install}`);
-  const skill = (name, repo) =>
-    lines.push(probe.skill(name) ? `  ✓ ${name}` : `  · ${name} — 없음 → npx skills add ${repo}@${name}`);
+  const invokedAs = (name) => probe.skillName?.(name) ?? (probe.skill(name) ? name : null);
+  const present = (name, as) => (as === name ? `  ✓ ${name}` : `  ✓ ${name} — 부르는 이름: ${as}`);
+  const skill = (name, repo) => {
+    const as = invokedAs(name);
+    lines.push(as ? present(name, as) : `  · ${name} — 없음 → npx skills add ${repo}@${name}`);
+  };
 
   lines.push('필수 도구');
   REQUIRED_TOOLS.forEach((item) => required(probe.command(item.command), item));
@@ -83,7 +90,10 @@ export function report(probe) {
   lines.push('', '조사·조작 스킬 — 설계 4단계(스킬 조사)와 브라우저 검증이 여기 기댄다');
   RESEARCH_SKILLS.forEach((item) => skill(item.skill, item.repo));
   lines.push('', '위임 대상 스킬 — 없으면 그 판단을 대신할 스킬을 조사해야 한다');
-  DELEGATE_SKILLS.forEach((name) => skill(name, DELEGATE_REPO));
+  const delegates = DELEGATE_SKILLS.map((name) => [name, invokedAs(name)]);
+  delegates.forEach(([name, as]) => lines.push(as ? present(name, as) : `  · ${name} — 없음`));
+  if (delegates.some(([, as]) => !as)) lines.push(`      설치: ${DELEGATE_INSTALL}`);
+  lines.push('      생성물에는 여기 찍힌 「부르는 이름」을 적는다 — 설치 형태에 따라 이름이 다르다.');
   lines.push(
     '',
     missingRequired > 0

@@ -14,7 +14,7 @@ description: wf 로 만든 워크플로우에서 난 재작업·누락을 규명
 | 이 저장소에서 에이전트가 같은 실수를 두 번 이상 했고, 그것을 구조·타입·lint·테스트로 못 하게 만든다 | `pstack:correct` |
 
 <outside-workflow-skills>
-!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" retro --install "npx skills add mattpocock/skills -g -s retro"`
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" retro --install "claude plugin marketplace add mattpocock/skills 후 claude plugin install mattpocock-skills@mattpocock"`
 !`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" pstack:correct --install "claude plugin marketplace add cursor/plugins 후 claude plugin install pstack@cursor-plugins"`
 </outside-workflow-skills>
 

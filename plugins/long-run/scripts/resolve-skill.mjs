@@ -15,47 +15,10 @@
  * `node shared/sync.mjs` 가 다시 쓰고, 테스트가 원본과 같은지 본다.
  */
 
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { candidates, isGated, render } from './lib/skill-locate.mjs';
-
-/** 그 플러그인의 skills/ 바로 아래 폴더 이름. 폴더가 없으면 빈 목록. */
-function skillFolders(installPath) {
-  try {
-    return fs.readdirSync(path.join(installPath, 'skills'), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name);
-  } catch {
-    return [];
-  }
-}
-
-/** installed_plugins.json 의 설치 기록. 없거나 깨졌으면 빈 목록 — 플러그인 자리만 건너뛴다. */
-function readPlugins(home) {
-  try {
-    const data = JSON.parse(fs.readFileSync(path.join(home, '.claude', 'plugins', 'installed_plugins.json'), 'utf8'));
-    return Object.entries(data.plugins ?? data).flatMap(([key, records]) =>
-      [].concat(records)
-        .filter((r) => r?.installPath)
-        .map((r) => ({ key, installPath: r.installPath, categories: skillFolders(r.installPath) })),
-    );
-  } catch {
-    return [];
-  }
-}
-
-/** 이 스크립트를 실은 플러그인의 이름 — scripts/ 의 부모가 플러그인 루트다. 못 읽으면 빈 문자열. */
-function ownPluginName() {
-  try {
-    const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-    return JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'plugin.json'), 'utf8')).name ?? '';
-  } catch {
-    return '';
-  }
-}
+import { locate, ownPluginName } from './lib/skill-locate-file.mjs';
+import { render } from './lib/skill-locate.mjs';
 
 const argv = process.argv.slice(2);
 const name = argv[0] && !argv[0].startsWith('--') ? argv[0] : '';
@@ -65,9 +28,6 @@ const hint = hintAt >= 0 ? argv[hintAt + 1] : '';
 if (!name) {
   process.stdout.write(`${render('(이름 없음)', null, 'resolve-skill.mjs 에 스킬 이름을 넘긴다')}\n`);
 } else {
-  const home = os.homedir();
-  const env = { cwd: process.cwd(), home, plugins: readPlugins(home), self: ownPluginName() };
-  const found = candidates(name, env).find((c) => fs.existsSync(c.path));
-  const hit = found ? { ...found, gated: isGated(fs.readFileSync(found.path, 'utf8')) } : null;
+  const hit = locate(name, { self: ownPluginName(fileURLToPath(import.meta.url)) });
   process.stdout.write(`${render(name, hit, hint)}\n`);
 }

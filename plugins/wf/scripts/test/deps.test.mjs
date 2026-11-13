@@ -70,7 +70,8 @@ test('a missing optional tool or skill is reported but not counted', () => {
   assert.ok(lines.includes('  · orca — 없음 (해당 단계를 넣을 수 없다)'));
   // pstack 은 조건부다 — 없어도 설계는 진행되고, 그 판단을 위임하는 단계만 빠진다.
   assert.ok(lines.includes('  · pstack — 없음 (해당 단계를 넣을 수 없다)'));
-  assert.ok(lines.includes('  · implement — 없음 → npx skills add mattpocock/skills@implement'));
+  assert.ok(lines.includes('  · implement — 없음'));
+  assert.ok(lines.includes('      설치: claude plugin marketplace add mattpocock/skills 후 claude plugin install mattpocock-skills@mattpocock'));
   assert.ok(lines.includes('  · find-skills — 없음 → npx skills add vercel-labs/skills@find-skills'));
 });
 
@@ -83,13 +84,16 @@ function machine(t, { keys = [PD, BD, LR], skills = [], commands = [] } = {}) {
   // The marketplace directories are always there: adding a marketplace is not installing a plugin.
   mkdirSync(join(root, '.claude/plugins/marketplaces/claude-plugins-official'), { recursive: true });
   writeFileSync(join(root, '.claude/plugins/installed_plugins.json'), record(...keys));
-  skills.forEach((name) => mkdirSync(join(root, '.claude/skills', name), { recursive: true }));
+  skills.forEach((name) => {
+    mkdirSync(join(root, '.claude/skills', name), { recursive: true });
+    writeFileSync(join(root, '.claude/skills', name, 'SKILL.md'), `---\nname: ${name}\n---\n`);
+  });
   mkdirSync(join(root, 'bin'));
   commands.forEach((name) => {
     writeFileSync(join(root, 'bin', name), '');
     chmodSync(join(root, 'bin', name), 0o755);
   });
-  return { home: root, env: { PATH: join(root, 'bin') } };
+  return { home: root, cwd: root, env: { PATH: join(root, 'bin') } };
 }
 
 test('the probe reads PATH, the skill folders and the install record', (t) => {
@@ -122,4 +126,23 @@ test('🚨 the script exits 1 when a required dependency is missing and 0 when n
   const marketOnly = run(machine(t, { keys: [], commands: ['bd', 'git', 'node'] }));
   assert.equal(marketOnly.status, 1);
   assert.match(marketOnly.stdout, /필수 항목 3개가 없다/);
+});
+
+// The same skill answers to a different name depending on how it was installed, and a generated
+// workflow that writes the wrong one tells the user to type a command that does not resolve.
+test('a skill shipped by a plugin is found and reported under the name it is invoked by', (t) => {
+  const where = machine(t);
+  const install = join(where.home, '.claude/plugins/cache/mattpocock/mattpocock-skills/1.0.0');
+  mkdirSync(join(install, 'skills/engineering/tdd'), { recursive: true });
+  mkdirSync(join(install, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(install, 'skills/engineering/tdd/SKILL.md'), '---\nname: tdd\n---\n');
+  writeFileSync(join(install, '.claude-plugin/plugin.json'), JSON.stringify({ name: 'mattpocock-skills', skills: ['./skills/engineering/tdd'] }));
+  writeFileSync(
+    join(where.home, '.claude/plugins/installed_plugins.json'),
+    JSON.stringify({ version: 2, plugins: { 'mattpocock-skills@mattpocock': [{ scope: 'user', installPath: install }] } }),
+  );
+  const found = probe({ ...where, platform: 'linux' });
+  assert.equal(found.skillName('tdd'), 'mattpocock-skills:tdd');
+  assert.equal(found.skillName('implement'), null);
+  assert.ok(report(found).lines.includes('  ✓ tdd — 부르는 이름: mattpocock-skills:tdd'));
 });

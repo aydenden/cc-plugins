@@ -69,14 +69,14 @@ npx skills add vercel-labs/agent-browser@agent-browser
 
 **조건부 플러그인**: `pstack`(`claude plugin marketplace add cursor/plugins` 후 `claude plugin install pstack@cursor-plugins`). 반복되는 실수를 강제 장치로 바꾸는 일(`correct`), 변경의 영향 범위(`blast-radius`), 성능 수치 검증(`benchmark-checklist`)을 맡긴다. 스킬이 전부 모델 호출이 막혀 있어, 이음매 스킬이 설치 경로를 주입받아 파일로 읽는다(`references/stage-patterns.md` 의 「경로 주입」). `wf:retro` 는 워크플로우 밖의 사건을 `retro`(mattpocock)와 `pstack:correct` 로 넘긴다.
 
-**위임 대상 스킬**: 사고 절차는 이쪽에 맡긴다. 전부 같은 레지스트리(`mattpocock/skills`)에 있어 한 줄로 끝난다. 없으면 그 판단을 대신할 스킬을 `find-skills`로 조사한다.
+**위임 대상 스킬**: 사고 절차는 이쪽에 맡긴다. 전부 `mattpocock-skills` 플러그인 하나에 들어 있다. 없으면 그 판단을 대신할 스킬을 `find-skills`로 조사한다.
 
 ```bash
-for s in grill-with-docs to-spec to-tickets implement tdd code-review diagnosing-bugs \
-         triage handoff prototype wayfinder domain-modeling research; do
-  npx skills add "mattpocock/skills@$s"
-done
+claude plugin marketplace add mattpocock/skills
+claude plugin install mattpocock-skills@mattpocock
 ```
+
+플러그인으로 설치한 스킬은 `mattpocock-skills:tdd` 처럼 플러그인 이름이 붙은 이름으로 불린다. `npx skills add` 로 복사해 둔 설치본도 찾지만 그때는 맨이름(`tdd`)이다. `check-deps.mjs` 가 이 기기에서 부르는 이름을 찍고, 생성물에는 그 이름을 적는다.
 
 </details>
 

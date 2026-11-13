@@ -100,3 +100,16 @@ test('묻는 쪽 플러그인의 스킬은 후보가 아니다', () => {
   // 이름을 짚어 물으면 자기 것도 답한다 — 그때는 실수가 아니라 요청이다.
   assert.equal(candidates('wf:retro', { cwd: '/w', home: '/home/u', plugins, self: 'wf' }).length, 1);
 });
+
+// mattpocock-skills 설치본에는 skills/in-progress/ 도 실려 오지만 매니페스트에 없어 그 이름으로 못 부른다.
+test('매니페스트가 스킬을 등록했으면 등록된 것만 후보다', () => {
+  const plugins = [{
+    key: 'mattpocock-skills@mattpocock', installPath: '/c/m', categories: ['engineering', 'in-progress'],
+    skillDirs: ['/c/m/skills/engineering/tdd', '/c/m/skills/productivity/handoff'],
+  }];
+  const where = { cwd: '/w', home: '/home/u', plugins };
+  assert.deepEqual(candidates('mattpocock-skills:handoff', where), [
+    { origin: 'plugin:mattpocock-skills@mattpocock', path: '/c/m/skills/productivity/handoff/SKILL.md' },
+  ]);
+  assert.deepEqual(candidates('mattpocock-skills:loop-me', where), []);
+});

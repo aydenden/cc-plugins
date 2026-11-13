@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 export const MANIFEST = [
   { file: 'scripts/resolve-skill.mjs', plugins: ['long-run', 'wf'] },
   { file: 'scripts/lib/skill-locate.mjs', plugins: ['long-run', 'wf'] },
+  { file: 'scripts/lib/skill-locate-file.mjs', plugins: ['long-run', 'wf'] },
 ];
 
 /**

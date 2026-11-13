@@ -33,9 +33,11 @@ export function ancestors(cwd) {
  * 스킬 이름이 놓일 수 있는 자리를 가까운 순서로 낸다.
  * @param {string} name 스킬 이름. `plugin:skill` 꼴이면 그 플러그인의 설치본만 본다
  * @param {{cwd: string, home: string, self?: string,
- *   plugins: Array<{key: string, installPath: string, categories?: string[]}>}} env
+ *   plugins: Array<{key: string, installPath: string, categories?: string[], skillDirs?: string[] | null}>}} env
  *   plugins 는 installed_plugins.json 의 기록(키는 `plugin@marketplace`)을 파일 순서대로.
  *   categories 는 그 플러그인의 `skills/` 바로 아래 폴더 이름 — 스킬을 분류 폴더에 넣는 플러그인이 있다.
+ *   skillDirs 는 매니페스트가 등록한 스킬 폴더(절대경로). 있으면 그것만 후보다 — 설치본에 파일이 있어도
+ *   등록하지 않은 스킬은 그 플러그인 이름으로 부를 수 없다.
  *   self 는 묻는 쪽 플러그인의 이름. 자기 스킬은 남의 스킬이 아니므로 후보에서 뺀다
  * @returns {Array<{origin: string, path: string}>} origin 은 project | personal | agents | plugin:<키>
  */
@@ -55,6 +57,12 @@ export function candidates(name, env) {
     const pluginName = p.key.split('@')[0];
     if (pluginFilter ? pluginFilter !== pluginName : pluginName === env.self) continue;
     const origin = `plugin:${p.key}`;
+    if (Array.isArray(p.skillDirs)) {
+      for (const dir of p.skillDirs) {
+        if (path.basename(dir) === skill) out.push({ origin, path: path.join(dir, 'SKILL.md') });
+      }
+      continue;
+    }
     out.push({ origin, path: path.join(p.installPath, 'skills', skill, 'SKILL.md') });
     for (const category of p.categories ?? []) {
       if (category === skill) continue;
