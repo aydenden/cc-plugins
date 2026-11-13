@@ -1,5 +1,6 @@
 ---
 name: session-handoff
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" *)
 description: "Hand the current session's work over to a fresh claude session in a new Orca tab — allocate the doc path, delegate the write-up to the `handoff` skill, boot the new session on it, and step out. Ownership transfer, not orchestration: the sending session does not supervise or wait. Triggers: '컨텍스트 꽉 찼어', '새 세션에 넘겨줘', '인계해줘', '핸드오프 문서 써줘', '/session-handoff'; when the remaining work will not fit in a single session. A coordinator that delegates a child task and waits for its reply is a different thing and does not belong here."
 ---
 
@@ -36,9 +37,16 @@ claude 를 띄우고, 인계 문서 하나로 소유권을 넘긴 뒤, 이 세�
 `orca` 가 PATH 에 있어야 한다. `--close-self` 는 이 세션이 Orca 터미널에서 돌고 있을 때만 동작한다
 (`ORCA_TERMINAL_HANDLE`). bd 를 쓰는 작업이면 `--bd` 로 진행 정본을 가리킨다.
 
-본문 합성을 맡길 `handoff` 스킬의 파일이 있어야 한다(찾는 순서는 2단계). 없으면 사용자에게
-`/setup-matt-pocock-skills` 를 알리고, 그 세션에서는 템플릿만으로 쓴 뒤 **그 사실을 보고한다** — 대화
-압축·비밀 삭제 판단이 빠진 문서라고 적는다.
+본문 합성을 맡길 `handoff` 스킬이 설치돼 있어야 한다. 어디 있는지는 이 스킬이 로드될 때 스크립트가
+찾아 아래에 적는다(프로젝트 → `~/.claude/skills` → `~/.agents/skills` → 플러그인 설치본):
+
+<handoff-skill>
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" handoff --install "/setup-matt-pocock-skills"`
+</handoff-skill>
+
+`MISSING` 이면 사용자에게 `install:` 줄의 방법을 알리고, 그 세션에서는 템플릿만으로 쓴 뒤 **그 사실을
+보고한다** — 대화 압축·비밀 삭제 판단이 빠진 문서라고 적는다. 위 블록에 결과 대신 명령이 그대로 보이면
+그 명령을 먼저 실행해 출력을 쓴다.
 
 ## 절차
 
@@ -70,10 +78,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/handoff.mjs" allocate --slug {슬러그}
 번호를 올려 쌓고 덮어쓰지 않는다 — 정돈이 아니라 **인계 사슬을 남기기 위해서다.** 3차 인계 세션이
 1차에서 뭘 확정했는지 되짚을 수 있어야 한다.
 
-그다음 `handoff` 스킬의 `SKILL.md` 를 **Read 로 읽어 그 지시대로 합성한다.** 🚨 Skill 도구로 부르지 않는다 —
-`disable-model-invocation: true` 라 모델은 호출할 수 없다. 찾는 순서는 지금 worktree 의
-`.claude/skills/handoff/SKILL.md`, `~/.claude/skills/handoff/SKILL.md`, `~/.agents/skills/handoff/SKILL.md` 이고
-먼저 있는 것을 쓴다(전제의 「없으면」은 셋 다 없을 때다). 지시의 «인자» 자리에는 다음 세션이 할 일을 넣는다.
+그다음 전제의 `<handoff-skill>` 블록이 적은 대로 `handoff` 스킬을 쓴다. 블록의 `use:` 줄이 방법이다 —
+`use: Read` 면 `path:` 의 `SKILL.md` 를 **Read 로 읽어 그 지시대로 합성한다.** 🚨 이때 Skill 도구로 부르지
+않는다 — `disable-model-invocation: true` 인 스킬은 하네스가 호출을 거부한다. `use: Skill` 이면 적힌 이름으로
+Skill 도구를 호출한다(upstream 이 그 제한을 푼 경우다). 경로를 기억으로 적지 않는다 — 설치 위치는 기기마다
+다르다. 지시의 «인자» 자리에는 다음 세션이 할 일을 넣는다.
 
 합성한 본문에 `references/handoff-doc.md` 의 계약을 씌워 위 경로에 Write 한다. 두 가지를 **덮어써야 한다**:
 

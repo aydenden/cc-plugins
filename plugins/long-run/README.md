@@ -27,7 +27,8 @@
 - 상태줄과 mod 판정은 Claude Code v2.1.287 이상. 그보다 낮으면 Stop hook 만으로 동작한다
 - 인계는 이 세션이 Orca 터미널에서 돌고 있을 때 자기 탭을 닫는다(`ORCA_TERMINAL_HANDLE`)
 - `handoff` 스킬: 인계 문서 본문 합성의 지시문이다. 모델이 호출할 수 없는 스킬이라(`disable-model-invocation`)
-  전역 설치본의 `SKILL.md` 를 읽어 따른다. 없으면 `/setup-matt-pocock-skills` 로 설치한다.
+  설치본의 `SKILL.md` 를 읽어 따른다. 어디 있는지는 `session-handoff` 가 로드될 때 `scripts/resolve-skill.mjs` 가
+  찾아 본문에 싣는다(프로젝트 → `~/.claude/skills` → `~/.agents/skills` → 플러그인 설치본). 없으면 `/setup-matt-pocock-skills` 로 설치한다.
   `references/handoff-doc.md` 만으로도 문서는 쓸 수 있지만, 그때는 대화 압축·비밀 삭제 판단이 빠진다
 - `wayfinder` 스킬: 선행 계획 맵이 필요할 때만. 없으면 완료 조건을 사용자와 직접 합의한다
 
@@ -196,6 +197,9 @@ node scripts/wave.mjs settle <티켓> [--apply] [--park] [--message <병합 메�
 # 인계 문서 경로 할당 → 문서를 쓴 뒤 → 넘기고 빠진다
 node scripts/handoff.mjs allocate --slug <슬러그>
 node scripts/handoff.mjs send --doc <절대경로> --close-self [--bd <epic>] [--hold]
+
+# 남의 스킬이 어디 설치돼 있고 모델이 부를 수 있는지 — 스킬 본문이 로드될 때 이 출력을 싣는다
+node scripts/resolve-skill.mjs <스킬이름 | plugin:스킬이름> [--install "<없을 때 알릴 설치 방법>"]
 ```
 
 맵을 미는 worktree 에서 보내면 새 세션의 첫 단계가 `claim` 이 되고, 대상 worktree 가 다르면 선언도
@@ -256,6 +260,6 @@ claude plugin validate .
 
 순수 로직만 테스트한다. 프론티어 분류·주인·판정(`lib/guard-core.mjs`), 질문 게이트(`lib/gate.mjs`), 영수증·헌장 근거·위임 보고서(`lib/delegation.mjs`), claim 토큰(`lib/claim.mjs`), 헌장과 가드의 문구 일치
 (`test/charter-wording.test.mjs`), mod 의 입력 조립과 상태줄 문구(`lib/mod-view.mjs`),
-문서 메타 대조와 §0 검사(`lib/doc-meta.mjs`), 인계 프롬프트(`lib/handoff-prompt.mjs`), 경로·키 계산(`lib/handoff-path.mjs`), bd 조회의 동시성과 «모름» 처리(`lib/read-map.mjs` — bd 는 스텁으로
+문서 메타 대조와 §0 검사(`lib/doc-meta.mjs`), 인계 프롬프트(`lib/handoff-prompt.mjs`), 경로·키 계산(`lib/handoff-path.mjs`), 남의 스킬 설치 위치와 호출 방법(`lib/skill-locate.mjs`), bd 조회의 동시성과 «모름» 처리(`lib/read-map.mjs` — bd 는 스텁으로
 갈아 끼운다). orca·bd 자체의 동작은 실측 대상이라 테스트하지 않는다. `hooks/register.mjs` 는 배선뿐이라 `claude plugin validate` 가 읽어 내는 hooks·calls
 목록으로 확인한다.
