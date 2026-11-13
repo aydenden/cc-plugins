@@ -63,6 +63,8 @@ What they don't know:
 Use `commands/` only for direct human invocation with arguments
 (`/llm-wiki:capture <url>`); skills for everything else.
 
-## Ending a session
+## Issues stay on this machine
 
-Run `bd dolt push` after committing, or issue sync falls behind.
+bd is local-only here: no Dolt remote is configured, and none should be added. This
+repository is public, and `bd dolt push` once published the issue database to it as
+`refs/dolt/data`. Do not run `bd dolt push` or `bd dolt remote add`.
