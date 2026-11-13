@@ -41,7 +41,7 @@ claude 를 띄우고, 인계 문서 하나로 소유권을 넘긴 뒤, 이 세�
 찾아 아래에 적는다(프로젝트 → `~/.claude/skills` → `~/.agents/skills` → 플러그인 설치본):
 
 <handoff-skill>
-!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" handoff --install "claude plugin marketplace add mattpocock/skills 후 claude plugin install mattpocock-skills@mattpocock"`
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" handoff --from mattpocock-skills --install "claude plugin marketplace add mattpocock/skills 후 claude plugin install mattpocock-skills@mattpocock"`
 </handoff-skill>
 
 `MISSING` 이면 사용자에게 `install:` 줄의 방법을 알리고, 그 세션에서는 템플릿만으로 쓴 뒤 **그 사실을

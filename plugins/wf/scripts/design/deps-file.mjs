@@ -25,7 +25,7 @@ function isExecutable(path) {
  *
  * @param {{env?: Record<string, string|undefined>, home?: string, platform?: string, cwd?: string}} [where]
  * @returns {{command: (name: string) => boolean, skill: (name: string) => boolean, plugin: (name: string) => boolean,
- *   skillName: (name: string) => string | null}} `skillName` is the name the skill is invoked by — a plugin's
+ *   skillName: (name: string, from?: string) => string | null}} `skillName` is the name the skill is invoked by — a plugin's
  *   skill answers to `plugin:skill` — or null when it is not installed anywhere
  */
 export function probe({ env = process.env, home = homedir(), platform = process.platform, cwd = process.cwd() } = {}) {
@@ -38,7 +38,7 @@ export function probe({ env = process.env, home = homedir(), platform = process.
     command: (name) => folders.some((folder) => suffixes.some((suffix) => isExecutable(join(folder, `${name}${suffix}`)))),
     // wf's own skills are not somebody else's: asking for `retro` must not answer `wf:retro`.
     skill: (name) => locate(name, { cwd, home, self: 'wf' }) !== null,
-    skillName: (name) => locate(name, { cwd, home, self: 'wf' })?.invoke ?? null,
+    skillName: (name, from = '') => locate(name, { cwd, home, self: 'wf', from })?.invoke ?? null,
     plugin: (name) => plugins.has(name),
   };
 }

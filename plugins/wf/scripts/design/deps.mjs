@@ -35,6 +35,7 @@ const RESEARCH_SKILLS = [
 
 // Installed as a plugin, so its skills answer to `mattpocock-skills:<name>`; a copy made with
 // `npx skills add` answers to the bare name. The report prints whichever this machine has.
+const DELEGATE_PLUGIN = 'mattpocock-skills';
 const DELEGATE_INSTALL = 'claude plugin marketplace add mattpocock/skills 후 claude plugin install mattpocock-skills@mattpocock';
 const DELEGATE_SKILLS = [
   'grill-with-docs', 'to-spec', 'to-tickets', 'implement', 'tdd', 'code-review',
@@ -59,7 +60,8 @@ export function installedPlugins(text) {
  * The dependency report.
  *
  * @param {{command: (name: string) => boolean, skill: (name: string) => boolean, plugin: (name: string) => boolean,
- *   skillName?: (name: string) => string | null}} probe `skillName` gives the name the skill is invoked by, when known
+ *   skillName?: (name: string, from?: string) => string | null}} probe `skillName` gives the name the skill is invoked
+ *   by, when known; `from` names the plugin that ships it, so a same-named skill of another plugin is not taken
  * @returns {{lines: string[], missingRequired: number}} `missingRequired` above 0 means a generated workflow would not run
  */
 export function report(probe) {
@@ -72,7 +74,7 @@ export function report(probe) {
   };
   const optional = (found, item) =>
     found ? lines.push(`  ✓ ${item.present}`) : lines.push(`  · ${item.absent} — 없음 (해당 단계를 넣을 수 없다)`, `      설치: ${item.install}`);
-  const invokedAs = (name) => probe.skillName?.(name) ?? (probe.skill(name) ? name : null);
+  const invokedAs = (name, from) => probe.skillName?.(name, from) ?? (probe.skill(name) ? name : null);
   const present = (name, as) => (as === name ? `  ✓ ${name}` : `  ✓ ${name} — 부르는 이름: ${as}`);
   const skill = (name, repo) => {
     const as = invokedAs(name);
@@ -90,7 +92,7 @@ export function report(probe) {
   lines.push('', '조사·조작 스킬 — 설계 4단계(스킬 조사)와 브라우저 검증이 여기 기댄다');
   RESEARCH_SKILLS.forEach((item) => skill(item.skill, item.repo));
   lines.push('', '위임 대상 스킬 — 없으면 그 판단을 대신할 스킬을 조사해야 한다');
-  const delegates = DELEGATE_SKILLS.map((name) => [name, invokedAs(name)]);
+  const delegates = DELEGATE_SKILLS.map((name) => [name, invokedAs(name, DELEGATE_PLUGIN)]);
   delegates.forEach(([name, as]) => lines.push(as ? present(name, as) : `  · ${name} — 없음`));
   if (delegates.some(([, as]) => !as)) lines.push(`      설치: ${DELEGATE_INSTALL}`);
   lines.push('      생성물에는 여기 찍힌 「부르는 이름」을 적는다 — 설치 형태에 따라 이름이 다르다.');

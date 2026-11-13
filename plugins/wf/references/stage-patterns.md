@@ -103,7 +103,7 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" *)
 </delegate-skill>
 ```
 
-출력의 첫 줄이 `FOUND` 면 `path:`·`origin:`·`use:` 가 따라오고, `MISSING` 이면 `install:` 이 따라온다. `use:` 는 대상의 frontmatter 를 읽어 정해진다 — upstream 이 제한을 풀면 `use: Skill` 로 바뀌므로 본문은 「`use:` 줄대로 한다」고만 쓴다. `allowed-tools` 의 그 줄이 없으면 로드 때 치환되지 않고 「이 명령을 먼저 실행하라」는 지시로 바뀐다. 찾는 순서는 프로젝트 → `~/.claude/skills` → `~/.agents/skills` → 플러그인 설치본이고, 묻는 쪽 플러그인 자신의 스킬은 후보가 아니다(`scripts/lib/skill-locate.mjs`).
+출력의 첫 줄이 `FOUND` 면 `path:`·`origin:`·`use:` 가 따라오고, `MISSING` 이면 `install:` 이 따라온다. `use:` 는 대상의 frontmatter 를 읽어 정해진다 — upstream 이 제한을 풀면 `use: Skill` 로 바뀌므로 본문은 「`use:` 줄대로 한다」고만 쓴다. `allowed-tools` 의 그 줄이 없으면 로드 때 치환되지 않고 「이 명령을 먼저 실행하라」는 지시로 바뀐다. 맨이름으로 물을 때는 `--from <플러그인>` 을 함께 준다 — 같은 이름의 스킬을 여러 플러그인이 낸다(`tdd` 는 `mattpocock-skills` 와 `pstack` 에 둘 다 있다). 찾는 순서는 프로젝트 → `~/.claude/skills` → `~/.agents/skills` → 플러그인 설치본이고, 묻는 쪽 플러그인 자신의 스킬은 후보가 아니다(`scripts/lib/skill-locate.mjs`).
 
 남의 스킬의 본문을 이음매 스킬에 옮겨 적지 않는다. 사본은 upstream 이 나아져도 그대로 남는다.
 

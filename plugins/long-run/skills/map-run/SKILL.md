@@ -38,7 +38,7 @@ description: "여러 세션에 걸쳐야 끝나는 목표 하나를 실행 맵(b
 `wayfinder` 가 어디 설치돼 있는지는 이 스킬이 로드될 때 스크립트가 찾아 싣는다:
 
 <wayfinder-skill>
-!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" wayfinder --install "claude plugin marketplace add mattpocock/skills 후 claude plugin install mattpocock-skills@mattpocock"`
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-skill.mjs" wayfinder --from mattpocock-skills --install "claude plugin marketplace add mattpocock/skills 후 claude plugin install mattpocock-skills@mattpocock"`
 </wayfinder-skill>
 
 완료 조건을 못 쓰는 상태면 **이 스킬의 절차를 시작하지 않고** 위 블록의 `use:` 줄대로 한다 — `use: Read` 면

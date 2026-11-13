@@ -32,13 +32,15 @@ export function ancestors(cwd) {
 /**
  * 스킬 이름이 놓일 수 있는 자리를 가까운 순서로 낸다.
  * @param {string} name 스킬 이름. `plugin:skill` 꼴이면 그 플러그인의 설치본만 본다
- * @param {{cwd: string, home: string, self?: string,
+ * @param {{cwd: string, home: string, self?: string, from?: string,
  *   plugins: Array<{key: string, installPath: string, categories?: string[], skillDirs?: string[] | null}>}} env
  *   plugins 는 installed_plugins.json 의 기록(키는 `plugin@marketplace`)을 파일 순서대로.
  *   categories 는 그 플러그인의 `skills/` 바로 아래 폴더 이름 — 스킬을 분류 폴더에 넣는 플러그인이 있다.
  *   skillDirs 는 매니페스트가 등록한 스킬 폴더(절대경로). 있으면 그것만 후보다 — 설치본에 파일이 있어도
  *   등록하지 않은 스킬은 그 플러그인 이름으로 부를 수 없다.
- *   self 는 묻는 쪽 플러그인의 이름. 자기 스킬은 남의 스킬이 아니므로 후보에서 뺀다
+ *   self 는 묻는 쪽 플러그인의 이름. 자기 스킬은 남의 스킬이 아니므로 후보에서 뺀다.
+ *   from 은 그 스킬을 내는 플러그인의 이름. 맨이름으로 물어도 플러그인 후보는 그 플러그인으로 한정한다 —
+ *   같은 이름의 스킬을 여러 플러그인이 낸다(tdd). 프로젝트·개인 자리는 from 과 무관하게 먼저 본다
  * @returns {Array<{origin: string, path: string}>} origin 은 project | personal | agents | plugin:<키>
  */
 export function candidates(name, env) {
@@ -56,6 +58,7 @@ export function candidates(name, env) {
   for (const p of env.plugins ?? []) {
     const pluginName = p.key.split('@')[0];
     if (pluginFilter ? pluginFilter !== pluginName : pluginName === env.self) continue;
+    if (!pluginFilter && env.from && env.from !== pluginName) continue;
     const origin = `plugin:${p.key}`;
     if (Array.isArray(p.skillDirs)) {
       for (const dir of p.skillDirs) {

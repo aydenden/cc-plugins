@@ -70,12 +70,13 @@ export function ownPluginName(scriptFile) {
 /**
  * 이 기기에서 그 스킬을 찾는다.
  * @param {string} name 스킬 이름 또는 `plugin:skill`
- * @param {{cwd?: string, home?: string, self?: string}} [where] self 는 묻는 쪽 플러그인의 이름
+ * @param {{cwd?: string, home?: string, self?: string, from?: string}} [where] self 는 묻는 쪽 플러그인의 이름,
+ *   from 은 그 스킬을 내는 플러그인의 이름(같은 이름의 다른 플러그인 스킬을 집지 않게 한다)
  * @returns {{origin: string, path: string, gated: boolean, invoke: string} | null}
  *   invoke 는 Skill 도구와 슬래시 명령에 쓰는 이름
  */
-export function locate(name, { cwd = process.cwd(), home = os.homedir(), self = '' } = {}) {
-  const env = { cwd, home, self, plugins: readPlugins(home) };
+export function locate(name, { cwd = process.cwd(), home = os.homedir(), self = '', from = '' } = {}) {
+  const env = { cwd, home, self, from, plugins: readPlugins(home) };
   const found = candidates(name, env).find((c) => fs.existsSync(c.path));
   if (!found) return null;
   return { ...found, gated: isGated(fs.readFileSync(found.path, 'utf8')), invoke: invokeName(name, found.origin) };

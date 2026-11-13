@@ -113,3 +113,18 @@ test('매니페스트가 스킬을 등록했으면 등록된 것만 후보다', 
   ]);
   assert.deepEqual(candidates('mattpocock-skills:loop-me', where), []);
 });
+
+// 🚨 pstack 과 mattpocock-skills 가 둘 다 tdd 를 낸다. 설치 기록 순서대로 집으면 pstack:tdd 가 나왔다.
+test('from 을 주면 맨이름의 플러그인 후보가 그 플러그인으로 한정된다', () => {
+  const plugins = [
+    { key: 'pstack@cursor-plugins', installPath: '/c/p' },
+    { key: 'mattpocock-skills@mattpocock', installPath: '/c/m', skillDirs: ['/c/m/skills/engineering/tdd'] },
+  ];
+  const got = candidates('tdd', { cwd: '/w', home: '/home/u', plugins, from: 'mattpocock-skills' });
+  assert.deepEqual(got.filter((c) => c.origin.startsWith('plugin:')), [
+    { origin: 'plugin:mattpocock-skills@mattpocock', path: '/c/m/skills/engineering/tdd/SKILL.md' },
+  ]);
+  // 복사해 둔 설치본은 from 과 무관하게 먼저다 — npx 로 설치한 기기가 계속 동작한다.
+  assert.deepEqual(got.slice(0, 2).map((c) => c.origin), ['project', 'project']);
+  assert.ok(got.some((c) => c.origin === 'personal'));
+});
