@@ -14,7 +14,8 @@
  * release → worktree rm → 남은 브랜치 삭제 → wave-settle, park 는 release → wave-settle(worktree·브랜치는
  * 남긴다). 우편함 ack 와 bd close·주차 질문은 코디네이터가 한다.
  *
- * 종료코드: 0 정상 / 1 실패·거부(start 에서 워커 일부만 떴으면 결과 JSON 의 `started`·`failed` 를 본다) / 2 사용법
+ * 종료코드: 0 정상 / 1 실패·거부(start 에서 워커 일부만 떴으면 결과 JSON 의 `started`·`failed` 를, settle 이
+ * 병합 뒤 정리에 실패했으면 `cleanupFailed` 를 본다 — 그 티켓은 이미 웨이브에서 빠졌다) / 2 사용법
  */
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
@@ -88,7 +89,7 @@ function settle(ticketId) {
   });
 }
 
-const { flags, positional } = parseArgs(process.argv.slice(2));
+const { flags, positional } = parseArgs(process.argv.slice(2), { booleans: ['dry-run', 'apply', 'park'] });
 const [sub, ...ticketIds] = positional;
 
 if (sub === 'settle') {
@@ -99,7 +100,7 @@ if (sub === 'settle') {
   try {
     const out = settle(ticketIds[0]);
     console.log(JSON.stringify(out, null, 2));
-    process.exit(out.action === 'refuse' ? 1 : 0);
+    process.exit(out.action === 'refuse' || out.cleanupFailed?.length ? 1 : 0);
   } catch (error) {
     console.error(`[wave] ${error.message}`);
     process.exit(1);

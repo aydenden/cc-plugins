@@ -792,11 +792,15 @@ test('웨이브 인자의 셋째 칸은 정산이 지울 worktree id 다 — orc
 test('🚨 웨이브가 돌고 있으면 그 티켓을 claim 하라고 하지 않고, 워커의 보고를 기다리라고 되민다', () => {
   const verdict = decide({ ...base, marker: waving });
   assert.equal(verdict.block, true);
-  assert.match(verdict.reason, /check --wait/);
+  assert.match(verdict.reason, /--wait/);
   assert.match(verdict.reason, /run_1/);
   assert.match(verdict.reason, /map-abcd\.9/);
-  assert.match(verdict.reason, /wave-settle/);
+  assert.match(verdict.reason, /wave\.mjs settle/);
+  assert.match(verdict.reason, /check --run run_1 /);
+  assert.doesNotMatch(verdict.reason, /frontier-guard\.mjs wave-settle/);
   assert.doesNotMatch(verdict.reason, /bd update <id> --claim/);
+  // 🚨 Bash 도구는 600000ms 를 넘는 foreground 호출을 죽인다 — 대기 시한이 그보다 길면 대기가 끝나기 전에 끊긴다.
+  assert.ok(Number(verdict.reason.match(/--timeout-ms (\d+)/)[1]) < 600000);
 });
 
 test('웨이브는 bd 를 못 읽어도 마커만으로 기다리라고 말한다 — 워커가 도는 동안 가드가 사라지면 안 된다', () => {

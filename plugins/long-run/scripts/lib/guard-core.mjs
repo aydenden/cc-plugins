@@ -529,15 +529,22 @@ function backgroundNoticeDue(notice, ids, toolUses) {
   return quiet ? null : { digest, tools: toolUses };
 }
 
+/**
+ * 웨이브 보고 대기 한 번의 시한(ms). 🚨 Bash 도구는 foreground 호출을 최대 600000ms 에 죽이므로 그 안에 둔다 —
+ * 넘으면 대기가 끝나기 전에 끊긴다. map-run SKILL.md 의 대기 명령이 같은 값을 쓴다.
+ */
+export const WAVE_WAIT_MS = 540000;
+
 /** 웨이브가 도는 동안의 되밂. 워커의 보고를 받고 정산하는 길만 말한다. */
 function waveReason(epic, wave, tickets) {
   const list = tickets.map((t) => `${t.id}→${t.dispatchId}`).join(', ');
   return (
     `${epic} 의 웨이브(${wave.runId})가 돌고 있다 — 워커에게 나간 티켓 ${tickets.length}건(${list}). ` +
     `**그 티켓을 다시 claim 하지 않고 워커의 보고를 기다린다**: ` +
-    `\`orca orchestration check --wait --types worker_done,escalation,question --timeout-ms 900000 --json\`. ` +
-    `빈 결과·시한 초과는 실패가 아니라 다시 기다릴 자리다. 질문에는 답하고, worker_done 은 기대한 dispatch 와 대조해 ` +
-    `검증·병합·release 한 뒤 \`frontier-guard.mjs wave-settle <티켓>\` 으로 웨이브에서 뺀다. ` +
+    `\`orca orchestration check --run ${wave.runId} --wait --types "worker_done,escalation,question" --timeout-ms ${WAVE_WAIT_MS} --json\` ` +
+    `(Bash 호출의 timeout 을 그보다 길게 준다). ` +
+    `빈 결과·시한 초과는 실패가 아니라 다시 기다릴 자리다. 질문에는 답하고, worker_done 이 온 티켓은 ` +
+    `\`wave.mjs settle <티켓>\` 으로 판정받아 검증한 뒤 \`--apply\`(떨어뜨리면 \`--apply --park\`)로 병합·정리하고 웨이브에서 뺀다. ` +
     `웨이브가 비면 평소처럼 다음 티켓을 민다.`
   );
 }

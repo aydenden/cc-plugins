@@ -72,10 +72,12 @@ test('base 에 커밋 안 된 추적 파일 변경이 있으면 시험 병합 �
 });
 
 /** 부른 순서를 남기는 가짜 I/O. */
-function fakeDeps({ show = childShow(), wave = [entry], porcelain = '', ahead = 1, trialClean = true, branchLeft = true } = {}) {
+function fakeDeps({ show = childShow(), wave = [entry], porcelain = '', ahead = 1, trialClean = true, branchLeft = true, failing = [] } = {}) {
   const calls = [];
   const log = (name, value) => (...args) => {
     calls.push([name, ...args]);
+    const step = name === 'orca' ? args[0].slice(0, 2).join(' ') : name;
+    if (failing.includes(step)) throw new Error(`${step} 실패`);
     return typeof value === 'function' ? value(...args) : value;
   };
   return {
@@ -147,4 +149,24 @@ test('base 가 더러우면 시험 병합도 하지 않고 멈춘다', () => {
   const { deps, calls } = fakeDeps({ porcelain: ' M a.txt' });
   assert.throws(() => settleTicket({ ticketId: 'map-x.1', apply: true, deps }), /a\.txt/);
   assert.ok(!calls.some(([n]) => n === 'trialMerge'));
+});
+
+test('🚨 병합한 뒤 정리가 실패해도 웨이브에서 뺀다 — 남기면 재정산이 병합된 티켓을 «커밋 없음» 주차로 읽는다', () => {
+  const { deps, calls } = fakeDeps({ failing: ['worktree rm'] });
+  const out = settleTicket({ ticketId: 'map-x.1', apply: true, deps });
+  assert.equal(out.action, 'merge');
+  assert.equal(out.applied, true);
+  assert.deepEqual(mutating(calls), ['merge', 'orchestration worker-release', 'worktree rm', 'deleteBranch', 'guardSettle']);
+  assert.equal(out.cleanupFailed.length, 1);
+  assert.match(out.cleanupFailed[0], /worktree rm/);
+});
+
+test('정리가 다 되면 cleanupFailed 는 비어 있다', () => {
+  assert.deepEqual(settleTicket({ ticketId: 'map-x.1', apply: true, deps: fakeDeps().deps }).cleanupFailed, []);
+});
+
+test('병합 자체가 실패하면 웨이브에서 빼지 않고 죽는다 — 합쳐지지 않은 일을 정산하지 않는다', () => {
+  const { deps, calls } = fakeDeps({ failing: ['merge'] });
+  assert.throws(() => settleTicket({ ticketId: 'map-x.1', apply: true, deps }), /merge 실패/);
+  assert.ok(!calls.some(([n]) => n === 'guardSettle'));
 });

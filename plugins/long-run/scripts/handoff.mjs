@@ -71,7 +71,7 @@ function moveGuardClaim(worktreePath) {
 }
 
 main(() => {
-  const { flags, positional } = parseArgs(process.argv.slice(2));
+  const { flags, positional } = parseArgs(process.argv.slice(2), { booleans: ['dry-run', 'hold', 'force-worktree', 'close-self'] });
   const [sub, arg] = positional;
 
   if (sub === 'allocate') {

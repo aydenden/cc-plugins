@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Bail, planSelfClose, submissionOf } from '../lib/cli.mjs';
+import { Bail, parseArgs, planSelfClose, submissionOf } from '../lib/cli.mjs';
 
 // --- submissionOf ---
 //
@@ -90,4 +90,26 @@ test('지연은 초로 받는다', () => {
 test('보고가 끝나기 전에 닫을 만큼 짧은 지연은 거부한다', () => {
   assert.throws(() => planSelfClose({ env: withHandle, delaySeconds: 3 }), Bail);
   assert.throws(() => planSelfClose({ env: withHandle, delaySeconds: 'soon' }), Bail);
+});
+
+// --- parseArgs ---
+
+test('🚨 값 없는 플래그는 뒤의 위치 인자를 값으로 삼키지 않는다 — 티켓 id 가 사라지면 승인과 다른 웨이브가 뜬다', () => {
+  const booleans = ['dry-run', 'apply', 'park'];
+  assert.deepEqual(parseArgs(['start', '--dry-run', 'ccp-a', 'ccp-b'], { booleans }), {
+    flags: { 'dry-run': true },
+    positional: ['start', 'ccp-a', 'ccp-b'],
+  });
+  assert.deepEqual(parseArgs(['settle', '--apply', '--park', 'ccp-a'], { booleans }), {
+    flags: { apply: true, park: true },
+    positional: ['settle', 'ccp-a'],
+  });
+});
+
+test('값을 받는 플래그는 다음 인자를 값으로, --flag=value 도 받는다', () => {
+  assert.deepEqual(parseArgs(['start', 'a', '--model', 'sonnet', 'b', '--run=run_1'], { booleans: ['dry-run'] }), {
+    flags: { model: 'sonnet', run: 'run_1' },
+    positional: ['start', 'a', 'b'],
+  });
+  assert.deepEqual(parseArgs(['x', '--dry-run']), { flags: { 'dry-run': true }, positional: ['x'] });
 });

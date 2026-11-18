@@ -62,6 +62,9 @@ export function settleVerdict({ entry, worker, basePath, ahead, trialClean, park
  * 티켓 하나를 정산한다. `apply` 가 없으면 판정만 낸다 — 코디네이터는 그 `worktreePath` 에서 검증을 돌린
  * 뒤 `apply` 로 다시 부르거나, 떨어뜨렸으면 `park` 와 함께 부른다.
  *
+ * `apply` 결과의 `cleanupFailed` 는 병합 뒤 정리(release·worktree rm·브랜치 삭제) 중 실패한 단계다. 그래도
+ * 티켓은 웨이브에서 빠졌으므로, 코디네이터는 그 단계만 손으로 마무리한다. 병합 자체의 실패는 예외다.
+ *
  * @param {{ticketId: string, apply?: boolean, park?: boolean, message?: string, deps: {
  *   waveEntry: (id: string) => object|null, basePath: () => string, orca: (args: string[]) => object,
  *   porcelain: () => string, ahead: (branch: string) => number, trialMerge: (branch: string) => boolean,
@@ -89,12 +92,24 @@ export function settleTicket({ ticketId, apply = false, park = false, message, d
   if (!apply || verdict.action === 'wait' || verdict.action === 'refuse') return { ...report, applied: false };
 
   if (verdict.action === 'merge') deps.merge(worker.branch, message || `chore(wave): ${ticketId} 워커 브랜치 ${worker.branch} 병합`);
-  if (!worker.released) deps.orca(['orchestration', 'worker-release', '--dispatch', entry.dispatchId]);
+  // 🚨 병합(또는 주차 결정) 뒤의 정리는 실패해도 웨이브에서 뺀다 — 남기면 다시 정산할 때 이미 합친 브랜치가
+  // «앞선 커밋 0» 으로 읽혀 주차로 오판되고, 가드는 끝난 워커를 계속 기다리라고 되민다. 실패는 보고로 돌려준다.
+  const cleanupFailed = [];
+  const attempt = (step, fn) => {
+    try {
+      fn();
+    } catch (error) {
+      cleanupFailed.push(`${step}: ${error.message}`);
+    }
+  };
+  if (!worker.released) attempt('worker-release', () => deps.orca(['orchestration', 'worker-release', '--dispatch', entry.dispatchId]));
   // 주차는 worktree·브랜치를 남긴다 — 코디네이터가 실패·충돌을 들여다볼 자리다.
   if (verdict.action === 'merge') {
-    deps.orca(['worktree', 'rm', '--worktree', `id:${worker.worktreeId}`]);
-    if (deps.branchExists(worker.branch)) deps.deleteBranch(worker.branch);
+    attempt('worktree rm', () => deps.orca(['worktree', 'rm', '--worktree', `id:${worker.worktreeId}`]));
+    attempt('branch -d', () => {
+      if (deps.branchExists(worker.branch)) deps.deleteBranch(worker.branch);
+    });
   }
   deps.guardSettle(ticketId);
-  return { ...report, applied: true };
+  return { ...report, applied: true, cleanupFailed };
 }

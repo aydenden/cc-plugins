@@ -45,8 +45,17 @@ export function orca(args) {
   return env.result;
 }
 
-/** `--flag value` 와 `--flag=value` 를 모두 받는 최소 파서. 나머지는 위치 인자다. */
-export function parseArgs(argv) {
+/**
+ * `--flag value` 와 `--flag=value` 를 모두 받는 최소 파서. 나머지는 위치 인자다.
+ *
+ * 🚨 값 없는 플래그는 `booleans` 에 적는다 — 적지 않으면 `--dry-run ccp-a` 의 `ccp-a` 가 플래그 값으로
+ * 삼켜져 위치 인자(티켓 id)에서 사라진다.
+ *
+ * @param {string[]} argv
+ * @param {{booleans?: string[]}} [options] 값을 받지 않는 플래그 이름(`--` 없이)
+ * @returns {{flags: Record<string, string|true>, positional: string[]}}
+ */
+export function parseArgs(argv, { booleans = [] } = {}) {
   const flags = {};
   const positional = [];
   for (let i = 0; i < argv.length; i++) {
@@ -58,7 +67,7 @@ export function parseArgs(argv) {
     const eq = a.indexOf('=');
     if (eq !== -1) {
       flags[a.slice(2, eq)] = a.slice(eq + 1);
-    } else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
+    } else if (!booleans.includes(a.slice(2)) && i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
       flags[a.slice(2)] = argv[++i];
     } else {
       flags[a.slice(2)] = true;

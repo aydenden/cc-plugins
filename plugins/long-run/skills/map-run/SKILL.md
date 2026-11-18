@@ -218,11 +218,13 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/wave.mjs" start {티켓}... --dry-run
 **대기**는 foreground sleep 이 아니라 우편함 대기다:
 
 ```bash
-orca orchestration check --run {runId} [--ack {직전 deliveryId}] --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json
+orca orchestration check --run {runId} --wait --types "worker_done,escalation,question" --timeout-ms 540000 --json
 ```
 
-워커의 `worker_done`·질문·에스컬레이션이 여기로 온다. `runId` 는 `start` 결과에 있다. 받은 배치는
-`--ack` 하기 전까지 다시 온다 — 다음 대기에 직전 `deliveryId` 를 `--ack` 로 실어 넘긴다. `--types` 에 없는
+🚨 Bash 도구는 foreground 호출을 최대 600000ms 에 죽인다 — 이 호출의 Bash `timeout` 을 600000 으로 준다(기본
+120000 이면 대기가 2분에 끊긴다). 워커의 `worker_done`·질문·에스컬레이션이 여기로 온다. `runId` 는 `start`
+결과에 있다. 받아 간 배치는 그 자리에서 처리됨으로 표시되어 다음 대기는 새 메시지를 받는다(orca 1.4.261 `check --help` —
+`--ack` 는 표시하지 않는 구 orca 용이다). 그래서 받은 배치는 버리지 말고 그 턴에 처리한다. `--types` 에 없는
 이름(예: `ask`)은 `invalid_argument` 로 거부된다. 타임아웃이면 다시 부른다.
 
 **정산**은 티켓 하나씩이다. 먼저 판정만 받는다:
@@ -239,7 +241,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/wave.mjs" settle {티켓}
 | `refuse` | dispatch 불일치, 브랜치·worktree 를 못 읽음 등 | 손으로 확인한다. `--apply` 해도 아무것도 안 한다 |
 
 `merge` 의 `--apply` 는 base 병합 → release → worktree rm → 병합된 브랜치 삭제 → `wave-settle` 까지 한다
-(`--message` 로 병합 메시지를 줄 수 있다). base 에 커밋 안 된 추적 파일 변경이 있으면 정산이 죽으므로 먼저
+(`--message` 로 병합 메시지를 줄 수 있다). 병합 뒤 정리 단계가 실패해도 웨이브에서는 빼고, 실패한 단계를
+결과의 `cleanupFailed` 에 적어 exit 1 로 끝난다 — 그 단계만 손으로 마무리한다(정산을 다시 부르지 않는다). base 에 커밋 안 된 추적 파일 변경이 있으면 정산이 죽으므로 먼저
 커밋하거나 치운다. 스크립트는 우편함을 소비하지 않는다 — **그 뒤는 코디네이터 몫이다**: 해당 워커의 우편함
 메시지를 ack 하고, `bd close {티켓} --reason "{검증 수치}"` 로 닫는다(워커의 보고가 아니라 코디네이터가
 돌린 검증의 관측을 적는다).
