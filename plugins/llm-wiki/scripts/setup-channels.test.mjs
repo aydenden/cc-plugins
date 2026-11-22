@@ -33,6 +33,12 @@ test('every channel is installable, probed for real, and self-describing', () =>
   }
 });
 
+test('the Reddit channel carries its dead search and points at the archive', () => {
+  const note = byId('rdt').broken.join(' ');
+  assert.match(note, /search/);
+  assert.match(note, /research-channels\.mjs reddit search/);
+});
+
 test('the X channel carries its known-broken subcommand', () => {
   // agent-reach's doctor called this channel fully available while search 404'd.
   assert.match(byId('twitter').broken.join(' '), /search/);

@@ -20,22 +20,41 @@
 | 일반 웹·공식 문서 | CC 내장 WebSearch → WebFetch | 도구 직접 |
 | 라이브러리 API·버전 | context7 MCP | `resolve-library-id` → `query-docs` |
 | 인용된 트윗 원문 확인 | cdn.syndication.twimg.com | `scripts/research-channels.mjs tweet` |
+| 커뮤니티 여론(Reddit) | Arctic Shift 아카이브 | `scripts/research-channels.mjs reddit` |
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/research-channels.mjs" papers "<질의>" --limit 5
 node "${CLAUDE_PLUGIN_ROOT}/scripts/research-channels.mjs" tweet <트윗 id 또는 URL>
+node "${CLAUDE_PLUGIN_ROOT}/scripts/research-channels.mjs" reddit search "<질의>" --sub <서브레딧> [--after YYYY-MM-DD]
+node "${CLAUDE_PLUGIN_ROOT}/scripts/research-channels.mjs" reddit thread <글 id 또는 URL> [--limit 20]
 ```
 
 - 출력은 이미 압축돼 있다(`title/authors/date/doi/url/abstract`, 중복 병합). 전문이 필요할 때만 `--json`.
 - `skipped: <소스> (<사유>)` 줄이 있으면 그 소스는 빠진 것이다 — 산출물의 제외 채널에 옮긴다.
 - 스크립트가 없거나 `node`가 없으면 그것도 축퇴다. WebSearch로 대체하고 명시한다.
 
+### Reddit은 아카이브로 본다
+
+Reddit 본사 경로는 막혔다. `www.reddit.com/search.json`은 로그인한 `rdt`에서도 HTTP 403 "Blocked"이고
+(2026-11-22 실측), RSS는 2026-11-13에 끝났으며, 공개 API는 2027-03 종료가 예고됐다. 그래서 Reddit은
+설치·키가 필요 없는 Arctic Shift 아카이브(자원봉사 1인 운영)로 필수 계층에 둔다.
+
+- **검색은 서브레딧(또는 작성자) 안에서만 된다.** 레딧 전체 검색은 없다. 서브레딧을 모르면
+  WebSearch `site:reddit.com <주제>`로 먼저 찾고, 걸린 글의 서브레딧으로 `reddit search`를 돌린다.
+- **키워드 매칭이 느슨하다.** 단어 하나만 걸려도 결과에 오른다. 결과의 제목을 보고 고른 글만
+  `reddit thread`로 본문·댓글(점수순, 깊이 유지)을 읽는다 — 근거는 thread에서 읽은 것만 쓴다.
+- **점수·댓글 수가 늦게 반영된다.** 방금 올라온 글은 댓글이 비어 있을 수 있다. 여론의 크기를 점수로
+  단정하지 않는다.
+- **아카이브는 부하가 걸리면 `422 Timeout`으로 거절한다.** 스크립트가 1회 재시도하고, 그래도 실패하면
+  `REDDIT unavailable` 한 줄로 축퇴한다 — WebSearch `site:reddit.com`으로 대체하고 제외 채널에 남긴다.
+- raw로 남길 때 `source_url`은 출력의 `https://www.reddit.com/r/…/comments/<id>/`를 쓴다.
+
 ## 선택 계층 — 주력 기기(설치·인증 완료된 기기)만
 
 | 질의 성격 | 채널 | 채널 id | 축퇴 |
 |---|---|---|---|
 | 코드·저장소 사실 | `gh` CLI | `gh` | GitHub 웹 페이지를 WebFetch |
-| 커뮤니티 여론 | Reddit `rdt-cli` | `rdt` | WebSearch에 `site:reddit.com` |
+| 특정 서브레딧의 지금 목록 | Reddit `rdt-cli` (`rdt sub`) | `rdt` | 필수 계층 `reddit search --after` |
 | 인물 발언·최신 발표 | X `twitter user-posts` / `twitter list` | `twitter` | 신규 수집 포기, 기존 인용만 필수 계층으로 확인 |
 | 영상 내용 | YouTube `yt-dlp` 자막 | `yt-dlp` | 영상 채널 제외를 명시 |
 
@@ -90,5 +109,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-channels.mjs" check --channel agent-br
 
 ## 감싸지 않는 것
 
-WebSearch·WebFetch(CC 내장), context7(MCP), Reddit·X 수집·YouTube·gh·agent-browser·scrapling(이미 CLI).
+WebSearch·WebFetch(CC 내장), context7(MCP), `rdt`·X 수집·YouTube·gh·agent-browser·scrapling(이미 CLI).
+Reddit MCP 서버(reddit-mcp-buddy 등)도 감싸지 않는다 — npx/uvx 실행 의존이 생기고, 키 없이 도는 것들은
+결국 같은 Arctic Shift를 부른다.
 래퍼를 두면 유지비만 늘고 얻는 게 없다.

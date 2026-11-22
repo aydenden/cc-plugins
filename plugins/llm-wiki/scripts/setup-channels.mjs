@@ -103,6 +103,7 @@ const CHANNELS = [
     install: { pipx: ['pipx', 'install', 'rdt-cli'] },
     probe: { cmd: ['rdt', 'status'], kind: 'auth-yaml' },
     auth: 'rdt login   # 브라우저 쿠키를 추출한다 — 기기마다 1회',
+    broken: ['search — www.reddit.com/search.json 이 로그인 상태에서도 HTTP 403 "Blocked" (2026-11-22 실측, rdt-cli #27 미해결). sub / read 는 정상. 검색은 필수 계층 `research-channels.mjs reddit search` 로 한다'],
   },
   {
     id: 'twitter',

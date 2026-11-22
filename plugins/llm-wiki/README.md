@@ -131,14 +131,18 @@ Lint 커맨드는 없다. 정비도 커밋도 아래 훅이 log 기록 직후 �
 
 ## 리서치 채널
 
-채널 레지스트리는 [`docs/research-channels.md`](docs/research-channels.md)가 정본이다. **필수 계층**(WebSearch/WebFetch, 논문 5종 무키 REST, 트윗 단건)은 전 기기에서 설치 없이 돌고, **선택 계층**(gh·rdt-cli·twitter-cli·yt-dlp)은 그 질의에 필요할 때만 1회 탐지한다. 채널이 없거나 상류에 오류가 나도 실패로 치지 않고 그 채널을 빼고 진행하며, 빠진 채널은 산출물에 명시한다.
+채널 레지스트리는 [`docs/research-channels.md`](docs/research-channels.md)가 정본이다. **필수 계층**(WebSearch/WebFetch, 논문 5종 무키 REST, 트윗 단건, Reddit 아카이브 검색·스레드)은 전 기기에서 설치 없이 돌고, **선택 계층**(gh·rdt-cli·twitter-cli·yt-dlp)은 그 질의에 필요할 때만 1회 탐지한다. 채널이 없거나 상류에 오류가 나도 실패로 치지 않고 그 채널을 빼고 진행하며, 빠진 채널은 산출물에 명시한다.
 
-무키 REST 두 채널은 의존성 0 스크립트가 감싼다:
+무키 REST 채널은 의존성 0 스크립트가 감싼다:
 
 ```bash
 node scripts/research-channels.mjs papers "<질의>" [--source id,...] [--limit N] [--json]
 node scripts/research-channels.mjs tweet <id 또는 URL>
+node scripts/research-channels.mjs reddit search "<질의>" --sub <서브레딧> [--after YYYY-MM-DD]
+node scripts/research-channels.mjs reddit thread <글 id 또는 URL>
 ```
+
+Reddit은 본사 경로가 막혀(검색 403·RSS 종료·공개 API 2027-03 종료 예고) Arctic Shift 아카이브를 쓴다. 서브레딧 안에서만 검색되고 점수가 늦게 반영된다.
 
 선택 계층은 `command -v`가 아니라 **실호출로 판정**한다(`ok | auth | missing | broken`). 설치됐지만 미인증인 것과 상류가 깨진 것은 사용자가 할 일이 다르기 때문이다:
 

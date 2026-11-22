@@ -15,6 +15,7 @@ import {
   parseArgs, parseArxiv, reconstructAbstract, normalizeDoi, dateFromParts,
   normalizePubdate, mergeRecords, tweetToken, tweetId, compressTweet, stripTags,
   decodeEntities, truncate, formatAuthors, SOURCES,
+  redditPostId, compressRedditPost, flattenCommentTree,
 } from './research-channels.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./research-channels.mjs', import.meta.url));
@@ -221,4 +222,95 @@ test('CLI lists sources and help offline', () => {
   assert.equal(sources.code, 0);
   assert.match(sources.out, /^arxiv\tarXiv\t/m);
   assert.match(runCli(['--help']).out, /research-channels\.mjs papers/);
+});
+
+// --- Reddit (Arctic Shift) ---
+
+// Trimmed from a real arctic-shift.photon-reddit.com response (2026-11-22 shape).
+const AS_POST = {
+  author: 'FuegoMonster', created_utc: 1790807851, id: '1wuizsu', num_comments: 10, score: 6,
+  selftext: 'How do you keep your project current? ', subreddit: 'ClaudeAI',
+  title: 'When do you refresh your project folder?',
+  url: 'https://www.reddit.com/r/ClaudeAI/comments/1wuizsu/when_do_you_refresh_your_project_folder/',
+};
+
+const t1 = (author, score, body, replies = '') => ({
+  kind: 't1',
+  data: { author, score, body, created_utc: 1790807851, replies: replies ? { kind: 'Listing', data: { children: replies } } : '' },
+});
+
+const AS_TREE = [
+  t1('AutoModerator', 1, 'Your post will be reviewed shortly.'),
+  t1('low', 0, 'low-scored top comment'),
+  t1('lulz', 2, 'When you say start from scratch?', [
+    t1('FuegoMonster', 2, 'I do not want to wipe everything.'),
+    t1('gone', 5, '[deleted]'),
+  ]),
+  t1('crow', 3, 'CLAUDE.md and MEMORY.md are the memory.'),
+  { kind: 'more', data: { children: ['abc', 'def'] } },
+];
+
+test('redditPostId accepts bare ids, fullnames and comment URLs', () => {
+  assert.equal(redditPostId('1wuizsu'), '1wuizsu');
+  assert.equal(redditPostId('t3_1wuizsu'), '1wuizsu');
+  assert.equal(redditPostId('https://www.reddit.com/r/ClaudeAI/comments/1wuizsu/when_do_you/'), '1wuizsu');
+  assert.equal(redditPostId('https://old.reddit.com/comments/1wuizsu'), '1wuizsu');
+  assert.equal(redditPostId('https://example.com/x'), null);
+  assert.equal(redditPostId('not an id!'), null);
+});
+
+test('compressRedditPost keeps the fields research cites', () => {
+  const post = compressRedditPost(AS_POST);
+  assert.equal(post.id, '1wuizsu');
+  assert.equal(post.subreddit, 'ClaudeAI');
+  assert.equal(post.author, 'FuegoMonster');
+  assert.equal(post.date, '2026-09-30');
+  assert.equal(post.score, 6);
+  assert.equal(post.comments, 10);
+  assert.equal(post.text, 'How do you keep your project current?');
+  assert.equal(post.url, 'https://www.reddit.com/r/ClaudeAI/comments/1wuizsu/');
+  assert.equal(post.link, null, 'a self post has no external link');
+});
+
+test('compressRedditPost separates an external link and drops removed bodies', () => {
+  const post = compressRedditPost({ ...AS_POST, selftext: '[removed]', url: 'https://github.com/org/repo' });
+  assert.equal(post.text, null);
+  assert.equal(post.link, 'https://github.com/org/repo');
+});
+
+test('flattenCommentTree orders siblings by score, keeps depth, drops bots and deleted bodies', () => {
+  const { comments, total, more } = flattenCommentTree(AS_TREE, { limit: 10 });
+  assert.deepEqual(comments.map((c) => [c.depth, c.author]), [
+    [0, 'crow'], [0, 'lulz'], [1, 'FuegoMonster'], [0, 'low'],
+  ]);
+  assert.equal(total, 4);
+  assert.equal(more, 2, 'collapsed children are counted, not fetched');
+});
+
+test('flattenCommentTree stops at the limit', () => {
+  const { comments, total } = flattenCommentTree(AS_TREE, { limit: 2 });
+  assert.equal(comments.length, 2);
+  assert.equal(total, 4);
+});
+
+test('parseArgs reads the reddit filters', () => {
+  const opts = parseArgs(['reddit', 'search', 'skills', '--sub', 'r/ClaudeAI', '--after=2026-01-01']);
+  assert.equal(opts.command, 'reddit');
+  assert.deepEqual(opts.positional, ['search', 'skills']);
+  assert.equal(opts.sub, 'ClaudeAI', 'an r/ prefix is accepted');
+  assert.equal(opts.after, '2026-01-01');
+});
+
+test('reddit search without a subreddit or author is a usage error, offline', () => {
+  assert.throws(
+    () => execFileSync(process.execPath, [SCRIPT, 'reddit', 'search', 'skills'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }),
+    (err) => err.status === 2 && /--sub/.test(err.stderr),
+  );
+});
+
+test('a malformed --after is a usage error', () => {
+  assert.throws(
+    () => execFileSync(process.execPath, [SCRIPT, 'reddit', 'search', 'x', '--sub', 'a', '--after', '2026/01/01'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }),
+    (err) => err.status === 2 && /YYYY-MM-DD/.test(err.stderr),
+  );
 });

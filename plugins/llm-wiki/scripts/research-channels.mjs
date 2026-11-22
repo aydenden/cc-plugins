@@ -5,15 +5,22 @@
  * Dependency-free Node ESM, single file. Runs on macOS / Linux / Windows 11 with
  * nothing but `node` on PATH; uses only node: builtins and global fetch.
  *
- * Wraps exactly the two channels that are key-free REST and therefore belong to
- * the mandatory (install-free) layer (ccp-0at, ccp-73z):
+ * Wraps exactly the channels that are key-free REST and therefore belong to the
+ * mandatory (install-free) layer (ccp-0at, ccp-73z):
  *
  *   papers  arXiv · OpenAlex · Crossref · Europe PMC · PubMed
  *   tweet   cdn.syndication.twimg.com/tweet-result (single tweet, no auth)
+ *   reddit  Arctic Shift archive (search within a subreddit, read one thread)
+ *
+ * Reddit moved here from the optional layer: since 2026-10 www.reddit.com
+ * answers search.json with 403 "Blocked" even with a logged-in rdt-cli, RSS ended
+ * 2026-11-13, and the public API is announced to close in 2027-03. Arctic Shift
+ * is a volunteer-run copy of Reddit with no key and no install, so it is the one
+ * path every machine has — with the caveat that scores lag and it can go down.
  *
  * Everything else stays unwrapped: WebSearch / WebFetch are built into Claude
- * Code, context7 is an MCP server, and Reddit / X collection / YouTube / GitHub
- * already ship their own CLIs.
+ * Code, context7 is an MCP server, and X collection / YouTube / GitHub already
+ * ship their own CLIs.
  *
  * The value of this script is twofold:
  *   1. Pinning the traps so they are not rediscovered per call — arXiv returns an
@@ -26,6 +33,8 @@
  * Usage:
  *   node research-channels.mjs papers "<query>" [--source id,...] [--limit N] [--json]
  *   node research-channels.mjs tweet <id|url> [--json]
+ *   node research-channels.mjs reddit search "<query>" --sub <name> [--after D] [--limit N] [--json]
+ *   node research-channels.mjs reddit thread <id|url> [--limit N] [--json]
  *   node research-channels.mjs sources
  *
  * Degradation is the normal path, not an exception (ccp-0at): a source that
@@ -45,12 +54,35 @@ const PUBMED_GAP_MS = 350;
 const ABSTRACT_CHARS = 400;
 const AUTHORS_SHOWN = 3;
 
+const ARCTIC_SHIFT = 'https://arctic-shift.photon-reddit.com';
+/** Post fields requested from search; `permalink` is not selectable, so URLs are rebuilt. */
+const REDDIT_POST_FIELDS = 'id,title,selftext,author,subreddit,created_utc,score,num_comments,url';
+/** Comments fetched for one thread before collapsing; the printed count is --limit. */
+const REDDIT_TREE_LIMIT = 500;
+const REDDIT_DEFAULT_COMMENTS = 20;
+/**
+ * The archive sheds load by answering 422 "Timeout. Maybe slow down a bit" — on
+ * 2026-11-22 about half of r/ClaudeAI searches did, independent of the date
+ * window, and an identical retry seconds later often succeeded. One retry, then
+ * degrade.
+ */
+const ARCTIC_RETRY_GAP_MS = 3000;
+const ARCTIC_TIMEOUT_RE = /^http 422: .*timeout/i;
+/** A thread's opening post is the evidence itself, so it gets far more room than an abstract. */
+const REDDIT_POST_CHARS = 4000;
+const REDDIT_COMMENT_CHARS = 600;
+/** Bodies Reddit leaves behind for removed content, and authors that are not people. */
+const REDDIT_GONE = new Set(['[removed]', '[deleted]']);
+const REDDIT_BOTS = new Set(['AutoModerator']);
+
 const USER_AGENT = 'llm-wiki-research-channels/1.0 (+https://github.com/aydenden/cc-plugins)';
 
 const HELP = `llm-wiki research-channels — key-free REST channels
 
   node research-channels.mjs papers "<query>" [options]   search the 5 paper sources
   node research-channels.mjs tweet <id|url> [--json]      fetch one tweet, no auth
+  node research-channels.mjs reddit search "<query>" --sub <name>   posts in one subreddit
+  node research-channels.mjs reddit thread <id|url>       one post and its comments
   node research-channels.mjs sources                      list paper source ids
 
 Options for \`papers\`:
@@ -59,6 +91,16 @@ Options for \`papers\`:
   --mailto <email>    polite-pool contact for OpenAlex / Crossref
                       (default: $LLM_WIKI_MAILTO)
   --json              full records, untruncated abstracts
+
+Options for \`reddit\` (Arctic Shift archive — no key; scores lag, recent
+posts may have no comments yet):
+  --sub <name>        subreddit to search (r/ prefix optional)
+  --author <name>     search one user's posts instead of / within a subreddit
+  --after YYYY-MM-DD  only posts after this date
+  --limit N           posts for search (default ${DEFAULT_LIMIT}), comments for
+                      thread (default ${REDDIT_DEFAULT_COMMENTS})
+  Reddit search needs a subreddit or author — find the subreddit first with
+  WebSearch \`site:reddit.com <topic>\`.
 
 Exit codes: 0 ok · 1 every requested channel failed · 2 usage error
 `;
@@ -202,7 +244,18 @@ async function httpGet(url, ctx) {
   } catch (err) {
     throw new ChannelError(err.name === 'TimeoutError' ? `timeout after ${REQUEST_TIMEOUT_MS}ms` : `network: ${err.message}`);
   }
-  if (!response.ok) throw new ChannelError(`http ${response.status}`);
+  if (!response.ok) {
+    // APIs explain refusals in the body (the archive's 422 says "Timeout. Maybe
+    // slow down a bit"); a bare status code hides whether to narrow or to wait.
+    const body = await response.text().catch(() => '');
+    let reason = '';
+    try {
+      reason = JSON.parse(body)?.error || '';
+    } catch {
+      reason = '';
+    }
+    throw new ChannelError(`http ${response.status}${reason ? `: ${clean(String(reason)).slice(0, 160)}` : ''}`);
+  }
   return response;
 }
 
@@ -395,12 +448,123 @@ function compressTweet(data) {
   };
 }
 
+// --- Reddit (Arctic Shift) ---
+
+/** Accept a bare id, a `t3_` fullname, or any reddit.com comments URL. */
+function redditPostId(input) {
+  if (typeof input !== 'string') return null;
+  const trimmed = input.trim();
+  const bare = /^(?:t3_)?([a-z0-9]{4,12})$/i.exec(trimmed);
+  if (bare) return bare[1].toLowerCase();
+  const url = /reddit\.com\/(?:r\/[^/]+\/)?comments\/([a-z0-9]{4,12})/i.exec(trimmed);
+  return url ? url[1].toLowerCase() : null;
+}
+
+function redditDate(utc) {
+  return Number.isFinite(utc) ? new Date(utc * 1000).toISOString().slice(0, 10) : null;
+}
+
+function redditBody(text) {
+  const body = clean(text);
+  return body && !REDDIT_GONE.has(body) ? body : null;
+}
+
+function compressRedditPost(post) {
+  if (!post || typeof post !== 'object' || !post.id) {
+    throw new ChannelError('unexpected payload shape — the archive API may have changed');
+  }
+  const permalink = post.subreddit ? `https://www.reddit.com/r/${post.subreddit}/comments/${post.id}/` : `https://www.reddit.com/comments/${post.id}/`;
+  // A self post's `url` points back at reddit; only an outside URL is a separate source.
+  const link = typeof post.url === 'string' && !/^https?:\/\/(www\.|old\.)?reddit\.com\//i.test(post.url) ? post.url : null;
+  return {
+    id: post.id,
+    subreddit: post.subreddit || null,
+    author: post.author || null,
+    date: redditDate(post.created_utc),
+    score: post.score ?? null,
+    comments: post.num_comments ?? null,
+    title: clean(post.title),
+    text: redditBody(post.selftext),
+    url: permalink,
+    link,
+  };
+}
+
+/**
+ * Depth-first walk of an Arctic Shift comment tree, best-scored sibling first so
+ * the cap keeps the comments a reader would actually see. Bots and removed bodies
+ * are skipped but still descended into: a reply under a deleted comment can be
+ * the answer. `more` nodes (collapsed by the server) are counted, not fetched.
+ */
+function flattenCommentTree(nodes, { limit }) {
+  const comments = [];
+  let total = 0;
+  let more = 0;
+  const walk = (list, depth) => {
+    const sorted = [...(list || [])].sort((a, b) => (b?.data?.score ?? 0) - (a?.data?.score ?? 0));
+    for (const node of sorted) {
+      if (node?.kind === 'more') {
+        more += (node.data?.children || []).length;
+        continue;
+      }
+      const data = node?.data;
+      if (!data) continue;
+      const body = redditBody(data.body);
+      if (body && !REDDIT_BOTS.has(data.author)) {
+        total++;
+        if (comments.length < limit) {
+          comments.push({ depth, author: data.author || null, score: data.score ?? null, date: redditDate(data.created_utc), body });
+        }
+      }
+      walk(data.replies?.data?.children, depth + 1);
+    }
+  };
+  walk(nodes, 0);
+  return { comments, total, more };
+}
+
+async function arcticJson(endpoint, params, ctx) {
+  const url = `${ARCTIC_SHIFT}${endpoint}?${new URLSearchParams(params)}`;
+  let data;
+  try {
+    data = await httpJson(url, ctx);
+  } catch (err) {
+    if (!(err instanceof ChannelError) || !ARCTIC_TIMEOUT_RE.test(err.message)) throw err;
+    await sleep(ARCTIC_RETRY_GAP_MS);
+    data = await httpJson(url, ctx);
+  }
+  if (data?.error) throw new ChannelError(`archive: ${data.error}`);
+  if (!Array.isArray(data?.data)) throw new ChannelError('unexpected payload shape — the archive API may have changed');
+  return data.data;
+}
+
+// No `sort`: with `sort=desc` every measured search timed out (2026-11-22), and
+// without it results already come back newest first.
+async function searchReddit(query, opts) {
+  const params = { query, limit: String(opts.limit), fields: REDDIT_POST_FIELDS };
+  if (opts.sub) params.subreddit = opts.sub;
+  if (opts.author) params.author = opts.author;
+  if (opts.after) params.after = opts.after;
+  return (await arcticJson('/api/posts/search', params, { mailto: null })).map(compressRedditPost);
+}
+
+async function fetchRedditThread(id, opts) {
+  const ctx = { mailto: null };
+  const [posts, tree] = await Promise.all([
+    arcticJson('/api/posts/ids', { ids: id, fields: REDDIT_POST_FIELDS }, ctx),
+    arcticJson('/api/comments/tree', { link_id: `t3_${id}`, limit: String(REDDIT_TREE_LIMIT) }, ctx),
+  ]);
+  if (!posts.length) throw new ChannelError('post not in the archive');
+  return { post: compressRedditPost(posts[0]), ...flattenCommentTree(tree, { limit: opts.limit }) };
+}
+
 // --- CLI ---
 
 function parseArgs(argv) {
   const opts = {
-    command: null, positional: [], sources: null, limit: DEFAULT_LIMIT,
+    command: null, positional: [], sources: null, limit: null,
     mailto: process.env.LLM_WIKI_MAILTO || null, json: false, help: false,
+    sub: null, author: null, after: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -417,12 +581,16 @@ function parseArgs(argv) {
       case '--source': opts.sources = next().split(',').map((s) => s.trim()).filter(Boolean); break;
       case '--limit': opts.limit = Number(next()); break;
       case '--mailto': opts.mailto = next(); break;
+      case '--sub': opts.sub = next().replace(/^\/?r\//i, ''); break;
+      case '--author': opts.author = next().replace(/^\/?u\//i, ''); break;
+      case '--after': opts.after = next(); break;
       case '--json': opts.json = true; break;
       case '-h': case '--help': opts.help = true; break;
       default: fail(`unknown argument: ${arg}`);
     }
   }
-  if (!Number.isInteger(opts.limit) || opts.limit < 1) fail('--limit must be a positive integer');
+  if (opts.limit !== null && (!Number.isInteger(opts.limit) || opts.limit < 1)) fail('--limit must be a positive integer');
+  if (opts.after !== null && !/^\d{4}-\d{2}-\d{2}$/.test(opts.after)) fail('--after must be YYYY-MM-DD');
   if (opts.sources) {
     const unknown = opts.sources.filter((id) => !SOURCES.some((s) => s.id === id));
     if (unknown.length) fail(`unknown source: ${unknown.join(', ')}\nknown sources: ${SOURCES.map((s) => s.id).join(', ')}`);
@@ -478,11 +646,80 @@ function printTweet(tweet, opts) {
   process.stdout.write(`${out.join('\n')}\n`);
 }
 
+const REDDIT_CAVEAT = 'source=arctic-shift (archive: scores lag, newest posts may lack comments)';
+
+function printRedditSearch(query, posts, opts) {
+  if (opts.json) {
+    process.stdout.write(`${JSON.stringify({ query, subreddit: opts.sub, author: opts.author, after: opts.after, total: posts.length, items: posts }, null, 2)}\n`);
+    return;
+  }
+  const scope = [opts.sub && `sub=r/${opts.sub}`, opts.author && `author=u/${opts.author}`, opts.after && `after=${opts.after}`].filter(Boolean).join(' ');
+  const out = [`REDDIT search query="${query}" ${scope} results=${posts.length} ${REDDIT_CAVEAT}`];
+  posts.forEach((post, index) => {
+    out.push('');
+    out.push(`[${index + 1}] ${post.title}`);
+    out.push(`    r/${post.subreddit} · u/${post.author} · ${post.date || 'undated'} · score ${post.score ?? '?'} · comments ${post.comments ?? '?'}`);
+    out.push(`    ${post.url}`);
+    if (post.link) out.push(`    link: ${post.link}`);
+    if (post.text) out.push(`    ${truncate(post.text, ABSTRACT_CHARS)}`);
+  });
+  process.stdout.write(`${out.join('\n')}\n`);
+}
+
+function printRedditThread(thread, opts) {
+  if (opts.json) {
+    process.stdout.write(`${JSON.stringify(thread, null, 2)}\n`);
+    return;
+  }
+  const { post } = thread;
+  const out = [
+    `REDDIT thread id=${post.id} r/${post.subreddit} u/${post.author} date=${post.date || 'unknown'} score=${post.score ?? '?'} comments=${post.comments ?? '?'} ${REDDIT_CAVEAT}`,
+    post.title,
+    post.url,
+  ];
+  if (post.link) out.push(`link: ${post.link}`);
+  if (post.text) out.push('', truncate(post.text, REDDIT_POST_CHARS));
+  out.push('', `--- comments shown=${thread.comments.length} of ${thread.total}${thread.more ? ` (+${thread.more} collapsed, not fetched)` : ''}`);
+  for (const c of thread.comments) {
+    out.push(`${'  '.repeat(c.depth)}[${c.score ?? '?'}] u/${c.author} ${c.date || ''}: ${truncate(c.body, REDDIT_COMMENT_CHARS)}`);
+  }
+  process.stdout.write(`${out.join('\n')}\n`);
+}
+
+/** Like `tweet`, an archive failure is degradation: one stable line, exit 1. */
+async function runReddit(opts) {
+  const [action, ...rest] = opts.positional;
+  try {
+    if (action === 'search') {
+      const query = rest.join(' ');
+      if (!query) fail('reddit search needs a query: research-channels.mjs reddit search "<query>" --sub <name>');
+      if (!opts.sub && !opts.author) {
+        fail('reddit search needs --sub <name> or --author <name> (the archive cannot search all of Reddit).\n'
+          + 'Find the subreddit first: WebSearch `site:reddit.com <topic>`.');
+      }
+      printRedditSearch(query, await searchReddit(query, { ...opts, limit: opts.limit ?? DEFAULT_LIMIT }), opts);
+      return 0;
+    }
+    if (action === 'thread') {
+      const id = redditPostId(rest[0]);
+      if (!id) fail('reddit thread needs a post id or reddit.com comments URL');
+      printRedditThread(await fetchRedditThread(id, { limit: opts.limit ?? REDDIT_DEFAULT_COMMENTS }), opts);
+      return 0;
+    }
+    fail('reddit needs a subcommand: search | thread');
+  } catch (err) {
+    const reason = err instanceof ChannelError ? err.message : String(err.message || err);
+    process.stdout.write(`REDDIT unavailable action=${action} reason=${reason}\n`);
+    return 1;
+  }
+  return 2;
+}
+
 async function runPapers(opts) {
   const query = opts.positional.length ? opts.positional.join(' ') : null;
   if (!query) fail('papers needs a query: research-channels.mjs papers "<query>"');
   const selected = SOURCES.filter((source) => !opts.sources || opts.sources.includes(source.id));
-  const ctx = { limit: opts.limit, mailto: opts.mailto };
+  const ctx = { limit: opts.limit ?? DEFAULT_LIMIT, mailto: opts.mailto };
 
   const settled = await Promise.allSettled(selected.map((source) => source.search(query, ctx)));
   const used = [];
@@ -525,11 +762,12 @@ async function main() {
   switch (opts.command) {
     case 'papers': return runPapers(opts);
     case 'tweet': return runTweet(opts);
+    case 'reddit': return runReddit(opts);
     case 'sources':
       for (const source of SOURCES) process.stdout.write(`${source.id}\t${source.label}\t${source.coverage}\n`);
       return 0;
     default:
-      fail(`unknown command: ${opts.command}\nknown commands: papers, tweet, sources`);
+      fail(`unknown command: ${opts.command}\nknown commands: papers, tweet, reddit, sources`);
       return 2;
   }
 }
@@ -541,4 +779,5 @@ export {
   SOURCES, parseArgs, parseArxiv, reconstructAbstract, normalizeDoi, dateFromParts,
   normalizePubdate, mergeRecords, tweetToken, tweetId, compressTweet, stripTags,
   decodeEntities, clean, truncate, formatAuthors,
+  redditPostId, compressRedditPost, flattenCommentTree,
 };
