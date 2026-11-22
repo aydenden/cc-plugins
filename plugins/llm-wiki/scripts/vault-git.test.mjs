@@ -16,7 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-import { sync, commit, subjectFromLog } from './vault-git.mjs';
+import { sync, commit, subjectFromLog, resolveAppendOnly } from './vault-git.mjs';
 
 const roots = [];
 test.after(() => roots.forEach((r) => fs.rmSync(r, { recursive: true, force: true })));
@@ -66,6 +66,38 @@ function remoteAdvance(b, name) {
   git(b, 'push');
 }
 
+/** Stand-in for lint --write-index: deterministic, so a regenerated index is observable. */
+function stubIndex(vault) {
+  fs.writeFileSync(path.join(vault, 'index.md'), '# Index\n- regenerated\n', 'utf8');
+}
+
+// --- resolveAppendOnly ---
+
+test('appends from both sides are kept, base side first', () => {
+  const base = '# Log\n\n## a\n';
+  const ours = `${base}\n## remote\n`;
+  const theirs = `${base}\n## local\n`;
+  assert.equal(resolveAppendOnly(base, ours, theirs), `${base}\n## remote\n\n## local\n`);
+});
+
+test('a rotation on one side keeps the rotated file plus the other side\'s new tail', () => {
+  const base = '# Log\n\n## old\n';
+  const rotated = '# Log\n\n이전 이력\n';
+  const appended = `${base}\n## new\n`;
+  assert.equal(resolveAppendOnly(base, rotated, appended), `${rotated}\n## new\n`);
+  assert.equal(resolveAppendOnly(base, appended, rotated), `${rotated}\n## new\n`);
+});
+
+test('a tail already present is not duplicated', () => {
+  const base = '# Log\n';
+  const both = `${base}\n## same\n`;
+  assert.equal(resolveAppendOnly(base, both, both), both);
+});
+
+test('edits that are not appends on either side are not resolved', () => {
+  assert.equal(resolveAppendOnly('# Log\n## a\n', '# Log\n## b\n', '# Log\n## c\n'), null);
+});
+
 // --- subjectFromLog ---
 
 test('commit subject comes from the last log.md entry header', () => {
@@ -113,25 +145,72 @@ test('sync fast-forwards a clean branch that is behind', () => {
   assert.ok(fs.existsSync(path.join(a, 'other.md')), 'the remote commit landed in the working tree');
 });
 
-test('sync refuses to pull over a dirty working tree', () => {
+test('sync fast-forwards past uncommitted work it does not touch', () => {
+  // The research loop leaves raw/ files uncommitted until the write cycle ends;
+  // pulling right before that cycle must still work.
   const { a, b } = makeWorld({ second: true });
   remoteAdvance(b, 'other.md');
   fs.writeFileSync(path.join(a, 'draft.md'), 'work in progress\n', 'utf8');
   const res = sync(a);
-  assert.equal(res.status, 'dirty');
-  assert.equal(res.exit, 1);
-  assert.ok(!fs.existsSync(path.join(a, 'other.md')), 'nothing was merged');
+  assert.equal(res.status, 'pulled');
+  assert.ok(fs.existsSync(path.join(a, 'other.md')));
+  assert.equal(fs.readFileSync(path.join(a, 'draft.md'), 'utf8'), 'work in progress\n', 'the draft is untouched');
 });
 
-test('sync reports divergence instead of merging', () => {
+test('sync refuses to pull over uncommitted edits the remote also changed', () => {
+  const { a, b } = makeWorld({ second: true });
+  writeLog(b, '## [2026-09-03] ingest | 원격');
+  git(b, 'commit', '-am', 'remote log');
+  git(b, 'push');
+  writeLog(a, '## [2026-09-03] ingest | 로컬 미커밋');
+  const res = sync(a);
+  assert.equal(res.status, 'dirty');
+  assert.equal(res.exit, 1);
+  assert.doesNotMatch(fs.readFileSync(path.join(a, 'log.md'), 'utf8'), /원격/, 'nothing was merged');
+  assert.match(fs.readFileSync(path.join(a, 'log.md'), 'utf8'), /로컬 미커밋/, 'the local edit survives');
+});
+
+test('sync does not rebase while the tree is dirty', () => {
   const { a, b } = makeWorld({ second: true });
   remoteAdvance(b, 'other.md');
   fs.writeFileSync(path.join(a, 'local.md'), 'local work\n', 'utf8');
   git(a, 'add', '-A');
   git(a, 'commit', '-m', 'local work');
-  const res = sync(a);
-  assert.equal(res.status, 'diverged');
+  fs.writeFileSync(path.join(a, 'draft.md'), 'wip\n', 'utf8');
+  const res = sync(a, { regenerateIndex: stubIndex });
+  assert.equal(res.status, 'dirty');
   assert.equal(res.exit, 1);
+  assert.equal(git(a, 'log', '-1', '--format=%s'), 'local work');
+});
+
+test('sync rebases local commits onto a diverged remote', () => {
+  const { a, b } = makeWorld({ second: true });
+  remoteAdvance(b, 'other.md');
+  fs.writeFileSync(path.join(a, 'local.md'), 'local work\n', 'utf8');
+  git(a, 'add', '-A');
+  git(a, 'commit', '-m', 'local work');
+  const res = sync(a, { regenerateIndex: stubIndex });
+  assert.equal(res.status, 'rebased');
+  assert.equal(res.exit, 0);
+  assert.ok(fs.existsSync(path.join(a, 'other.md')), 'the remote commit is underneath');
+  assert.equal(git(a, 'log', '-1', '--format=%s'), 'local work', 'the local commit is replayed on top');
+});
+
+test('sync stops at a real conflict and leaves no rebase in progress', () => {
+  const { a, b } = makeWorld({ second: true });
+  fs.writeFileSync(path.join(b, 'page.md'), 'their version\n', 'utf8');
+  git(b, 'add', '-A');
+  git(b, 'commit', '-m', 'theirs');
+  git(b, 'push');
+  fs.writeFileSync(path.join(a, 'page.md'), 'my version\n', 'utf8');
+  git(a, 'add', '-A');
+  git(a, 'commit', '-m', 'mine');
+  const res = sync(a, { regenerateIndex: stubIndex });
+  assert.equal(res.status, 'rebase-conflict');
+  assert.equal(res.exit, 1);
+  assert.match(res.detail, /page\.md/);
+  assert.equal(git(a, 'log', '-1', '--format=%s'), 'mine', 'the local commit is untouched');
+  assert.equal(git(a, 'status', '--porcelain'), '', 'the rebase was aborted cleanly');
 });
 
 test('sync survives an unreachable remote', () => {
@@ -167,17 +246,81 @@ test('commit is a no-op on a clean vault', () => {
   assert.equal(git(a, 'rev-parse', 'HEAD'), before);
 });
 
-test('a rejected push keeps the commit and asks for a merge decision', () => {
-  const { a, b } = makeWorld({ second: true });
+test('a rejected push rebases onto the remote and pushes again', () => {
+  const { a, b, remote } = makeWorld({ second: true });
   remoteAdvance(b, 'other.md');
   fs.writeFileSync(path.join(a, 'mine.md'), 'mine\n', 'utf8');
   writeLog(a, '## [2026-09-03] update | 로컬 작업');
 
-  const res = commit(a);
-  assert.equal(res.status, 'push-rejected');
+  const res = commit(a, { regenerateIndex: stubIndex });
+  assert.equal(res.status, 'pushed');
+  assert.equal(res.exit, 0);
+  assert.match(res.detail, /rebased/);
+  assert.match(execFileSync('git', ['-C', remote, 'log', '-1', '--format=%s'], { encoding: 'utf8' }), /로컬 작업/);
+});
+
+test('two machines appending to log.md and regenerating index.md no longer conflict', () => {
+  const { a, b, remote } = makeWorld({ second: true });
+  // The other machine finishes a cycle first: log entry + regenerated index.
+  writeLog(b, '## [2026-09-03] ingest | 다른 기기 적재');
+  fs.writeFileSync(path.join(b, 'index.md'), '# Index\n- other\n', 'utf8');
+  git(b, 'add', '-A');
+  git(b, 'commit', '-m', 'other cycle');
+  git(b, 'push');
+
+  writeLog(a, '## [2026-09-03] research | 이 기기 조사');
+  fs.writeFileSync(path.join(a, 'index.md'), '# Index\n- mine\n', 'utf8');
+
+  let regenerated = 0;
+  const res = commit(a, { regenerateIndex: (vault) => { regenerated++; stubIndex(vault); } });
+  assert.equal(res.status, 'pushed', res.detail);
+  assert.equal(regenerated, 1, 'index.md is rebuilt once after the rebase, not merged by hand');
+
+  const log = fs.readFileSync(path.join(a, 'log.md'), 'utf8');
+  assert.ok(log.indexOf('다른 기기 적재') < log.indexOf('이 기기 조사'), 'both entries survive, remote first');
+  assert.match(log, /\n\n## \[2026-09-03\] research/, 'entries stay separated by a blank line');
+  assert.equal(git(a, 'status', '--porcelain'), '');
+  assert.equal(git(a, 'rev-parse', 'HEAD'), execFileSync('git', ['-C', remote, 'rev-parse', 'main'], { encoding: 'utf8' }).trim());
+});
+
+test('a remote log rotation does not resurrect archived entries', () => {
+  const { a, b } = makeWorld({ second: true });
+  writeLog(a, '## [2026-01-01] ingest | 옛 엔트리');
+  git(a, 'add', '-A');
+  git(a, 'commit', '-m', 'old');
+  git(a, 'push');
+  git(b, 'pull', '--quiet');
+
+  // The other machine rotates: old entries move to the archive.
+  fs.writeFileSync(path.join(b, 'log-2026.md'), fs.readFileSync(path.join(b, 'log.md'), 'utf8'), 'utf8');
+  fs.writeFileSync(path.join(b, 'log.md'), '# Log\n\n이전 이력: [[log-2026]]\n', 'utf8');
+  git(b, 'add', '-A');
+  git(b, 'commit', '-m', 'rotate');
+  git(b, 'push');
+
+  writeLog(a, '## [2026-09-03] research | 회전 뒤 새 엔트리');
+  const res = commit(a, { regenerateIndex: stubIndex });
+  assert.equal(res.status, 'pushed', res.detail);
+  const log = fs.readFileSync(path.join(a, 'log.md'), 'utf8');
+  assert.doesNotMatch(log, /옛 엔트리/, 'the archived entry stays archived');
+  assert.match(log, /회전 뒤 새 엔트리/);
+});
+
+test('a conflict outside log.md and index.md is handed back with the commit intact', () => {
+  const { a, b } = makeWorld({ second: true });
+  fs.writeFileSync(path.join(b, 'page.md'), 'their version\n', 'utf8');
+  git(b, 'add', '-A');
+  git(b, 'commit', '-m', 'theirs');
+  git(b, 'push');
+
+  fs.writeFileSync(path.join(a, 'page.md'), 'my version\n', 'utf8');
+  writeLog(a, '## [2026-09-03] update | 같은 페이지 수정');
+  const res = commit(a, { regenerateIndex: stubIndex });
+  assert.equal(res.status, 'rebase-conflict');
   assert.equal(res.exit, 1);
-  assert.match(res.detail, /Pull/);
-  assert.equal(git(a, 'log', '-1', '--format=%s'), 'update(vault): 로컬 작업', 'the work is committed locally');
+  assert.match(res.detail, /page\.md/);
+  assert.equal(git(a, 'log', '-1', '--format=%s'), 'update(vault): 같은 페이지 수정', 'the work is committed locally');
+  assert.equal(git(a, 'status', '--porcelain'), '', 'no half-finished rebase is left behind');
 });
 
 test('commit without a remote still commits locally', () => {

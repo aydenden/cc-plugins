@@ -30,8 +30,9 @@ fi
 
 # The vault is shared across machines through git, so reading or writing before
 # pulling means working from a stale copy and merging by hand later (ccp-o7m).
-# vault-git decides what is safe: it fast-forwards a clean branch and only warns
-# when the tree is dirty or the branches diverged.
+# vault-git decides what is safe: it fast-forwards, rebases local commits onto
+# the remote (resolving log.md / index.md itself), and only warns when
+# uncommitted work is in the way or a rebase hits a real conflict.
 if command -v node >/dev/null 2>&1; then
   SYNC="$(node "$PLUGIN_ROOT/scripts/vault-git.mjs" sync --vault "$WIKI" 2>&1)"
   case "$SYNC" in

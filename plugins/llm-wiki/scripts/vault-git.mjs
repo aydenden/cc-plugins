@@ -8,11 +8,18 @@
  * discretion and were therefore skipped; this module makes them mechanical.
  *
  * Two entry points, one per moment:
- *   sync   — fetch, then fast-forward only when it is unambiguously safe.
- *            Called by the SessionStart hook.
+ *   sync   — fetch, then fast-forward a clean branch, or rebase local commits
+ *            onto the remote. Called by the SessionStart hook and by
+ *            /llm-wiki:research before it reads and before it writes.
  *   commit — stage everything, derive the message from the last log.md entry,
- *            push. Called by the PostToolUse hook after lint reports a clean
- *            vault.
+ *            push; a rejected push is rebased and pushed again. Called by the
+ *            PostToolUse hook after lint reports a clean vault.
+ *
+ * Every write cycle appends to log.md and regenerates index.md, so two machines
+ * always collide on exactly those two files. A rebase resolves them itself:
+ * log.md is append-only, so each side's new tail is kept (resolveAppendOnly),
+ * and index.md is derived, so it is rebuilt rather than merged. Any other
+ * conflict aborts the rebase and is handed back — that one needs a judgment.
  *
  * Dependency-free Node ESM: node: builtins plus the `git` binary. Every git
  * call runs non-interactively (GIT_TERMINAL_PROMPT=0, ssh BatchMode) and under
@@ -30,6 +37,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 // --- Constants ---
 
@@ -48,14 +56,30 @@ const LOG_ENTRY_RE = /^##\s*\[(\d{4}-\d{2}-\d{2})\]\s*([a-z]+)\s*\|\s*(.+?)\s*$/
 /** Bytes of log.md read from the end to find the last entry header. */
 const LOG_TAIL_BYTES = 8192;
 
+/** Append-only file whose rebase conflicts are resolved by keeping both tails. */
+const LOG_FILE = 'log.md';
+
+/** Derived file whose rebase conflicts are resolved by regenerating it. */
+const INDEX_FILE = 'index.md';
+
+/** Upper bound on `rebase --continue` rounds — one per replayed local commit. */
+const MAX_REBASE_STEPS = 200;
+
+const LINT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'lint.mjs');
+const LINT_TIMEOUT_MS = 60_000;
+
+/** Subject of the commit that carries an index rebuilt after a rebase. */
+const INDEX_SUBJECT = 'lint(vault): rebase 뒤 index 재생성';
+
 // --- git plumbing ---
 
 /**
  * Run one git command in the vault.
+ * `raw` keeps stdout byte-for-byte (file contents); otherwise it is trimmed.
  * @returns {{ok: boolean, out: string, err: string}} — never throws, so every
  *   caller decides for itself whether a failure is fatal.
  */
-function git(vault, args, { timeout = LOCAL_TIMEOUT_MS } = {}) {
+function git(vault, args, { timeout = LOCAL_TIMEOUT_MS, raw = false } = {}) {
   try {
     const out = execFileSync('git', ['-C', vault, ...args], {
       encoding: 'utf8',
@@ -67,7 +91,7 @@ function git(vault, args, { timeout = LOCAL_TIMEOUT_MS } = {}) {
         GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND || 'ssh -oBatchMode=yes',
       },
     });
-    return { ok: true, out: out.trim(), err: '' };
+    return { ok: true, out: raw ? out : out.trim(), err: '' };
   } catch (e) {
     return { ok: false, out: (e.stdout || '').toString().trim(), err: (e.stderr || e.message || '').toString().trim() };
   }
@@ -122,6 +146,125 @@ function divergence(vault, ref) {
   return { behind, ahead };
 }
 
+// --- rebase ---
+
+/**
+ * Merge two edits of an append-only file against their common base.
+ *
+ * Whichever side still starts with the base only appended, so its new tail is
+ * carried over onto the other side. That also covers a log rotation on one side:
+ * the rotated file is kept whole and the other side's new entries are added to
+ * it, instead of resurrecting entries the rotation archived (a union merge does
+ * exactly that — measured).
+ *
+ * @param {string} base   common ancestor
+ * @param {string} ours   upstream side (during a rebase, the commit being built on)
+ * @param {string} theirs the local commit being replayed
+ * @returns {string|null} merged text, or null when neither side is a pure append
+ */
+export function resolveAppendOnly(base, ours, theirs) {
+  if (theirs.startsWith(base)) return joinTail(ours, theirs.slice(base.length));
+  if (ours.startsWith(base)) return joinTail(theirs, ours.slice(base.length));
+  return null;
+}
+
+function joinTail(head, tail) {
+  if (!tail || head.endsWith(tail)) return head;
+  return head.endsWith('\n') || tail.startsWith('\n') ? head + tail : `${head}\n${tail}`;
+}
+
+/** Default index rebuild: the same lint run the PostToolUse hook uses. */
+function lintWriteIndex(vault) {
+  execFileSync(process.execPath, [LINT, '--vault', vault, '--write-index'], {
+    timeout: LINT_TIMEOUT_MS,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+}
+
+function rebaseInProgress(vault) {
+  const res = git(vault, ['rev-parse', '--git-path', 'rebase-merge']);
+  if (!res.ok) return false;
+  const p = path.isAbsolute(res.out) ? res.out : path.join(vault, res.out);
+  return fs.existsSync(p);
+}
+
+/** Stage `n` (1 base, 2 upstream, 3 replayed commit) of a conflicted path, or null. */
+function stage(vault, n, file) {
+  const res = git(vault, ['show', `:${n}:${file}`], { raw: true });
+  return res.ok ? res.out : null;
+}
+
+/**
+ * Resolve the conflicts of the current rebase step, if they are all ours to resolve.
+ * @returns {{ok: true, index: boolean}|{ok: false, files: string[]}}
+ */
+function resolveStep(vault) {
+  const listed = git(vault, ['diff', '--name-only', '--diff-filter=U']);
+  const files = listed.ok ? listed.out.split('\n').filter(Boolean) : [];
+  const foreign = files.filter((f) => f !== LOG_FILE && f !== INDEX_FILE);
+  if (foreign.length) return { ok: false, files: foreign };
+
+  let index = false;
+  for (const file of files) {
+    if (file === INDEX_FILE) {
+      // Any version will do: the whole file is rebuilt once the rebase ends.
+      if (!git(vault, ['checkout', '--ours', '--', file]).ok) return { ok: false, files: [file] };
+      index = true;
+    } else {
+      const [base, ours, theirs] = [1, 2, 3].map((n) => stage(vault, n, file));
+      const merged = base !== null && ours !== null && theirs !== null
+        ? resolveAppendOnly(base, ours, theirs)
+        : null;
+      if (merged === null) return { ok: false, files: [file] };
+      fs.writeFileSync(path.join(vault, file), merged, 'utf8');
+    }
+    if (!git(vault, ['add', '--', file]).ok) return { ok: false, files: [file] };
+  }
+  return { ok: true, index };
+}
+
+/**
+ * Replay local commits onto `ref`, resolving log.md and index.md along the way.
+ *
+ * Anything else that conflicts aborts the rebase, so the branch is exactly as it
+ * was before the call — never left mid-rebase for the next session to trip over.
+ *
+ * @returns {{ok: true, indexRebuilt: boolean}|{ok: false, detail: string}}
+ */
+function rebaseOnto(vault, ref, regenerateIndex) {
+  const editor = ['-c', 'core.editor=true'];
+  let res = git(vault, [...editor, 'rebase', ref]);
+  let index = false;
+
+  for (let step = 0; !res.ok && step < MAX_REBASE_STEPS; step++) {
+    if (!rebaseInProgress(vault)) return { ok: false, detail: `rebase failed (${firstLine(res.err || res.out)})` };
+    const resolved = resolveStep(vault);
+    if (!resolved.ok) {
+      git(vault, ['rebase', '--abort']);
+      return { ok: false, detail: `conflict in ${resolved.files.join(', ')}` };
+    }
+    index ||= resolved.index;
+    res = git(vault, [...editor, 'rebase', '--continue']);
+  }
+  if (!res.ok) {
+    git(vault, ['rebase', '--abort']);
+    return { ok: false, detail: `rebase did not finish (${firstLine(res.err || res.out)})` };
+  }
+
+  if (!index) return { ok: true, indexRebuilt: false };
+  try {
+    regenerateIndex(vault);
+  } catch (e) {
+    return { ok: false, detail: `rebased, but index.md could not be regenerated (${firstLine(e.message)})` };
+  }
+  if (isDirty(vault)) {
+    const added = git(vault, ['add', '-A']);
+    const made = added.ok && git(vault, ['commit', '-m', INDEX_SUBJECT]);
+    if (!made || !made.ok) return { ok: false, detail: 'rebased, but the regenerated index.md could not be committed' };
+  }
+  return { ok: true, indexRebuilt: true };
+}
+
 // --- commit message ---
 
 /**
@@ -160,12 +303,17 @@ export function subjectFromLog(vault) {
 // --- operations ---
 
 /**
- * Fetch and fast-forward, but only when the outcome is unambiguous.
+ * Fetch, then bring the branch level with the remote.
  *
- * A dirty tree or a diverged branch is reported, never resolved here: merging
- * on the user's behalf at session start is how work gets silently mangled.
+ * A branch that is only behind is fast-forwarded, past uncommitted work as long
+ * as no incoming commit touches it. A branch with local commits is rebased onto
+ * the remote (see rebaseOnto for what it resolves), but only on a clean tree.
+ * Uncommitted work is never moved or stashed: it is not this function's to touch.
+ *
+ * @param {object} [opts]
+ * @param {(vault: string) => void} [opts.regenerateIndex] index rebuild after a rebase
  */
-export function sync(vault) {
+export function sync(vault, { regenerateIndex = lintWriteIndex } = {}) {
   if (!isRepo(vault)) return { status: 'not-a-repo', detail: 'vault is not a git repository', exit: 0 };
   if (!git(vault, ['remote']).out) return { status: 'no-upstream', detail: 'vault has no remote', exit: 0 };
 
@@ -186,22 +334,36 @@ export function sync(vault) {
   }
 
   if (d.ahead > 0) {
-    return {
-      status: 'diverged',
-      detail: `${d.behind} remote and ${d.ahead} local commit(s) have diverged — merge or rebase before writing`,
-      exit: 1,
-    };
-  }
-  if (isDirty(vault)) {
-    return {
-      status: 'dirty',
-      detail: `${d.behind} remote commit(s) waiting but the working tree has uncommitted changes — commit or stash, then pull`,
-      exit: 1,
-    };
+    if (isDirty(vault)) {
+      return {
+        status: 'dirty',
+        detail: `${d.behind} remote and ${d.ahead} local commit(s) diverged but the working tree has uncommitted changes — commit or stash, then sync`,
+        exit: 1,
+      };
+    }
+    const rebased = rebaseOnto(vault, remote.ref, regenerateIndex);
+    if (!rebased.ok) {
+      return {
+        status: 'rebase-conflict',
+        detail: `${d.behind} remote and ${d.ahead} local commit(s) diverged and could not be rebased: ${rebased.detail} — resolve before writing`,
+        exit: 1,
+      };
+    }
+    return { status: 'rebased', detail: `${d.ahead} local commit(s) rebased onto ${d.behind} remote commit(s) — not pushed yet`, exit: 0 };
   }
 
+  // Uncommitted work is normal here (research leaves raw/ files until its write
+  // cycle). git refuses the fast-forward, changing nothing, exactly when an
+  // incoming commit touches one of those paths — so that is the only refusal.
   const merged = git(vault, ['merge', '--ff-only', remote.ref]);
   if (!merged.ok) {
+    if (isDirty(vault) && /overwritten|local changes|untracked working tree/i.test(`${merged.err}\n${merged.out}`)) {
+      return {
+        status: 'dirty',
+        detail: `${d.behind} remote commit(s) touch files with uncommitted changes — commit or stash those, then sync`,
+        exit: 1,
+      };
+    }
     return { status: 'pull-failed', detail: `fast-forward failed (${firstLine(merged.err)})`, exit: 1 };
   }
   return { status: 'pulled', detail: `fast-forwarded ${d.behind} commit(s) from the remote`, exit: 0 };
@@ -213,8 +375,14 @@ export function sync(vault) {
  * `git add -A` is deliberate: the unit being synchronized is the vault, not one
  * agent's edits, so anything left uncommitted here is what goes missing on the
  * next machine.
+ *
+ * A push rejected because another machine moved the branch is fetched, rebased
+ * and pushed once more; only a conflict rebaseOnto cannot resolve is handed back.
+ *
+ * @param {object} [opts]
+ * @param {(vault: string) => void} [opts.regenerateIndex] index rebuild after a rebase
  */
-export function commit(vault) {
+export function commit(vault, { regenerateIndex = lintWriteIndex } = {}) {
   if (!isRepo(vault)) return { status: 'not-a-repo', detail: 'vault is not a git repository', exit: 0 };
 
   let committed = null;
@@ -243,20 +411,43 @@ export function commit(vault) {
   }
 
   // Always name the refspec: an untracked branch has no default push target.
-  const pushed = git(vault, ['push', 'origin', `HEAD:${remote.branch}`], { timeout: NETWORK_TIMEOUT_MS });
+  const push = () => git(vault, ['push', 'origin', `HEAD:${remote.branch}`], { timeout: NETWORK_TIMEOUT_MS });
+  const label = committed || 'local commits';
+  let pushed = push();
+  let rebasedNote = '';
+
+  if (!pushed.ok && isRejected(pushed)) {
+    const fetched = git(vault, ['fetch', '--quiet'], { timeout: NETWORK_TIMEOUT_MS });
+    if (!fetched.ok) {
+      return { status: 'push-rejected', detail: `${label} — push rejected and fetch failed (${firstLine(fetched.err)}). The commit is safe locally.`, exit: 1 };
+    }
+    const rebased = rebaseOnto(vault, remote.ref, regenerateIndex);
+    if (!rebased.ok) {
+      return {
+        status: 'rebase-conflict',
+        detail: `${label} — the remote has newer commits and the rebase stopped: ${rebased.detail}. The commit is safe locally; resolve that file, then push.`,
+        exit: 1,
+      };
+    }
+    rebasedNote = rebased.indexRebuilt ? ' (rebased onto the remote, index.md regenerated)' : ' (rebased onto the remote)';
+    pushed = push();
+  }
+
   if (!pushed.ok) {
-    const err = `${pushed.err}\n${pushed.out}`;
-    // A rejected push means another machine moved the branch: that needs a merge
-    // decision, so it is handed to the agent rather than force-resolved here.
-    const rejected = /\[rejected\]|non-fast-forward|fetch first/i.test(err);
+    const rejected = isRejected(pushed);
     const detail = rejected
-      ? `${committed || 'local commits'} — push rejected, the remote has newer commits. Pull (rebase or merge), then push.`
-      : `${committed || 'local commits'} — push failed (${firstLine(err)}). The commit is safe locally.`;
+      ? `${label} — push rejected again; another machine is pushing right now. The commit is safe locally — run sync, then push.`
+      : `${label} — push failed (${firstLine(`${pushed.err}\n${pushed.out}`)}). The commit is safe locally.`;
     return { status: rejected ? 'push-rejected' : 'push-failed', detail, exit: 1 };
   }
 
   const n = d ? d.ahead : 1;
-  return { status: 'pushed', detail: `${committed || `${n} commit(s)`} — pushed to the remote`, exit: 0 };
+  return { status: 'pushed', detail: `${committed || `${n} commit(s)`} — pushed to the remote${rebasedNote}`, exit: 0 };
+}
+
+/** A rejected push means another machine moved the branch, not a broken link. */
+function isRejected(res) {
+  return /\[rejected\]|non-fast-forward|fetch first/i.test(`${res.err}\n${res.out}`);
 }
 
 // --- CLI ---

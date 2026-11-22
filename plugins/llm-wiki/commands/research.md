@@ -17,9 +17,17 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 
 조사는 서브에이전트에 라운드마다 하나씩 위임하고, **적재는 `wiki-schema` 스킬이 소유한다.** 절차가 두 벌이 되면 한쪽만 낡는다(그 비용의 실물이 구 `research-agent`였다).
 
-## 1. 오리엔테이션 (wiki-schema 규칙 1)
+## 1. 볼트 최신화 → 오리엔테이션 (wiki-schema 규칙 1)
 
-이 세션에서 아직 안 했다면: `SCHEMA.md` Read → 루트 `index.md` 전체 Read → `tail -40 log.md`.
+세션 시작 훅의 sync는 세션을 연 시점의 원격이다. 조사는 그보다 늦게 시작하고 길게 돌므로, 읽기 전에 원격을 다시 맞춘다:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/vault-git.mjs" sync --vault "$WIKI"
+```
+
+`GIT dirty` / `GIT rebase-conflict` / `GIT pull-failed`가 나오면 **조사에 들어가기 전에** 사용자에게 알리고 해소한다(wiki-schema 규칙 1). `offline`은 로컬 사본으로 진행하되 보고에 남긴다.
+
+그다음, 이 세션에서 아직 안 했다면: `SCHEMA.md` Read → 루트 `index.md` 전체 Read → `tail -40 log.md`.
 
 ## 2. 기존 페이지 먼저 확인 (wiki-schema 규칙 3)
 
@@ -128,6 +136,7 @@ Grep 전수검색은 0.02초다. 조사를 위임하기 **전에** 확인해서 
 
 루프가 끝나면:
 
+0. 조사 루프 동안 다른 기기가 push했을 수 있다. 쓰기 전에 1단계의 `vault-git.mjs sync`를 한 번 더 돌린다. 원격에서 새 커밋이 들어왔으면(`GIT pulled`/`rebased`) 아래 2의 기존 페이지 확인은 그 커밋까지 포함해 다시 한다.
 1. 질문별 답을 보고 페이지의 근거로 쓸 raw 파일만 Read한다. 전부 읽지 않는다. 답과 raw가 어긋나면 raw를 따르고 보고에 적는다 — 서브에이전트의 답은 요약일 뿐이다.
 2. 규칙 3~9를 순서대로 수행한다 — 기존 페이지 확인 → 페이지 작성·갱신(type↔디렉토리, frontmatter 8필드, summary, sources, confidence, 태그) → 교차참조 → `log.md` append → 훅이 돌린 lint 결과 처리 → 보고.
 3. `sources:`에는 페이지 내용의 근거가 된 `raw/…` 경로를 쓰고, raw가 없는 사실만 URL을 직접 적는다. 읽지 않은 raw를 흡수 처리하려고 `sources:`에 넣지 않는다 — 출처 표기가 거짓이 된다. 남은 raw는 `raw-unabsorbed` 백로그로 드러나게 두고 보고한다.

@@ -23,7 +23,7 @@ WIKI="${WIKI_PATH:-$OBSIDIAN_VAULT_PATH}"
 ② `Read $WIKI/index.md` — **전체를 읽는다.** 루트 index는 전수 카탈로그가 아니라 주제군 지도(작게 유지)이므로 항상 전량 읽어 볼트가 쓰는 어휘와 카테고리 구성을 잡는다.
 ③ `Bash: tail -40 "$WIKI/log.md"` — 최근 활동을 파악해 중복 작업을 방지한다.
 
-볼트를 원격과 맞추는 일은 세션 시작 훅(`hooks/session-start.sh`)이 한다 — 깨끗한 브랜치는 자동 fast-forward되고, 워킹트리가 더럽거나 갈라졌으면 경고만 뜬다. `GIT dirty` / `GIT diverged` / `GIT pull-failed` 경고를 봤다면 **볼트에 쓰기 전에 그것부터 해소한다** — 낡은 사본 위에 쓰면 규칙 3의 중복 검사가 원격에 이미 있는 페이지를 못 본다.
+볼트를 원격과 맞추는 일은 `scripts/vault-git.mjs sync`가 한다 — 세션 시작 훅(`hooks/session-start.sh`)이 부르고, 세션이 길어지는 `/llm-wiki:research`는 시작과 적재 직전에 한 번씩 더 부른다. 깨끗한 브랜치는 fast-forward되고, 로컬 커밋이 있으면 원격 위로 rebase된다(`log.md`·`index.md` 충돌은 스스로 푼다). `GIT dirty` / `GIT rebase-conflict` / `GIT pull-failed` 경고를 봤다면 **볼트에 쓰기 전에 그것부터 해소한다** — 낡은 사본 위에 쓰면 규칙 3의 중복 검사가 원격에 이미 있는 페이지를 못 본다.
 
 **검색은 오리엔테이션이 아니라 규칙 3의 첫 단계다.** index는 Grep 미적중 시의 폴백이자 어휘 공급원이지 1차 검색 경로가 아니다 — 상세는 [references/search-expansion.md](references/search-expansion.md).
 
@@ -129,9 +129,10 @@ lint가 통과한 사이클만 커밋된다(review·backlog 그룹은 통과로 
 
 | `GIT` 상태 | 뜻 | 할 일 |
 |---|---|---|
-| `pushed` / `committed` | 커밋(·푸시) 완료 | 보고에 한 줄 옮기고 끝 |
+| `pushed` / `committed` | 커밋(·푸시) 완료. `(rebased onto the remote…)`가 붙었으면 다른 기기 커밋 위로 자동 rebase한 것이다 | 보고에 한 줄 옮기고 끝 |
 | `nothing-to-commit` | 변경 없음 | 그대로 보고 |
-| `push-rejected` | 다른 기기가 원격을 먼저 옮겼다 | 커밋은 로컬에 안전하다. `git -C "$WIKI" pull --rebase` 후 push하고, 충돌은 규칙 8(모순 처리)로 다룬다 |
+| `rebase-conflict` | 다른 기기가 같은 파일을 고쳤다. `log.md`(양쪽 꼬리 보존)·`index.md`(재생성) 밖의 충돌이라 훅이 rebase를 취소했다 | 커밋은 로컬에 안전하고 rebase 중간 상태도 남지 않는다. 상세에 적힌 파일을 규칙 8(모순 처리)로 판단해 `git -C "$WIKI" pull --rebase`로 해소한 뒤 push한다 |
+| `push-rejected` | rebase 뒤 다시 push했는데 그 사이 또 다른 기기가 push했다 | `node "${CLAUDE_PLUGIN_ROOT}/scripts/vault-git.mjs" sync --vault "$WIKI"` 후 `git -C "$WIKI" push` |
 | `push-failed` / `commit-failed` | 네트워크·인증·잠금 실패 | 원인을 사용자에게 보고한다. 자동 재시도하지 않는다 |
 | `not-a-repo` / `no-upstream` | 볼트가 git으로 공유되지 않는다 | 조치 없음 |
 
