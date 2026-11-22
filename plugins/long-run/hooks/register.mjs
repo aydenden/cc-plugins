@@ -18,17 +18,21 @@
 import { atom, read, update } from 'claude-code';
 
 import { MOD_FLAG } from '../scripts/lib/guard-core.mjs';
-import { bandOf, bandText, compactNote, judgeUsageArgs, movesMap, parseStatus, statusLine, toggleOf } from '../scripts/lib/mod-view.mjs';
+import { bandOf, bandText, compactNote, usageArgs, movesMap, parseStatus, statusLine, toggleOf } from '../scripts/lib/mod-view.mjs';
 
 const band = atom({ plugin: 'long-run', key: 'band' }, null);
 const pushes = atom({ plugin: 'long-run', key: 'pushes' }, 0);
 
-/** 이 세션 자리에서 본 status. 세션 id 를 실어야 주인이 아닌 세션이 판정에서 빠진다. */
-async function readStatus($, cwd) {
+/**
+ * 이 세션 자리에서 본 status. 세션 id 를 실어야 주인이 아닌 세션이 판정에서 빠진다.
+ * 잰 컨텍스트를 함께 실으면 CLI 가 세션별로 남긴다 — 모델이 `status` 를 직접 불러도 «계측 불가» 가 아니게.
+ */
+async function readStatus($, usage, cwd) {
   const cli = `${$.plugin.root}/scripts/frontier-guard.mjs`;
   try {
     const sessionId = await $.session.id();
-    const { exitCode, stdout } = await $.process.run(['node', cli, 'status', '--session', sessionId], cwd ? { cwd } : undefined);
+    const args = ['node', cli, 'status', '--session', sessionId, ...usageArgs(usage)];
+    const { exitCode, stdout } = await $.process.run(args, cwd ? { cwd } : undefined);
     if (exitCode !== 0) return null;
     return parseStatus(stdout);
   } catch {
@@ -44,7 +48,7 @@ async function judge($, e) {
   try {
     const args = ['judge', '--session', e.session_id, '--transcript', e.transcript_path, ...(e.cwd ? ['--cwd', e.cwd] : [])];
     if (e.stop_hook_active === true) args.push('--active');
-    args.push(...judgeUsageArgs(await $.session.usage()));
+    args.push(...usageArgs(await $.session.usage()));
     const { exitCode, stdout } = await $.process.run(['node', `${$.plugin.root}/scripts/frontier-guard.mjs`, ...args], e.cwd ? { cwd: e.cwd } : undefined);
     return exitCode === 0 ? parseStatus(stdout) : null;
   } catch {
@@ -53,7 +57,7 @@ async function judge($, e) {
 }
 
 async function refreshStatusLine($, usage) {
-  const status = await readStatus($);
+  const status = await readStatus($, usage);
   $.ui.status(statusLine(status, usage));
   // CLI 가 한 번 실패했다고 버튼을 치우지 않는다 — 끄려는 순간이 바로 그런 때일 수 있다.
   if (status) await update($, band, () => bandOf(status));

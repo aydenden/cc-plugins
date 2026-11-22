@@ -140,7 +140,7 @@ PostToolUse 훅이 AskUserQuestion 으로 고른 답(과 단 메모)을 답 하�
 | | mod (`hooks/register.mjs`, CLI 의 `judge` 로 묻는다) | Stop hook (`frontier-guard.mjs --hook`) |
 |---|---|---|
 | 언제 판정하나 | mod 가 뜬 세션 (Claude Code v2.1.287+) | mod 가 안 뜬 세션: 구버전, 조직 정책, `--safe-mode` |
-| 컨텍스트 | 세션이 잰 값 (`$.session.usage()`, 실제 창 크기) | 트랜스크립트 꼬리의 `usage`, 창은 모델 이름의 `[1m]` 으로 추정 |
+| 컨텍스트 | 세션이 잰 값 (`$.session.usage()`, 실제 창 크기). `status`·`judge` 에 실어 세션별로 남긴다(`frontier-guard/context/<세션>.json`) — 모델이 `status` 를 직접 불러도 같은 값을 읽는다 | 남은 기록, 없으면 트랜스크립트 꼬리의 `usage`. 창은 모델 이름의 `[1m]` 으로 추정하되, 이미 20만을 넘게 담았으면 100만으로 본다 |
 | 상태줄 | `🧭 [<맵 제목>][<잡은 티켓 제목>] · 밀기 N · 막힘 N · 질문 N · 닫음 n/2 · 컨텍스트 N%/50%`. 제목은 맵 20자·티켓 40자에서 자르고, 제목이 없으면 id, 잡은 티켓이 여럿이면 `+N`. 턴 끝과 `bd update/close/create/reopen` 직후에 갱신. 모르는 값은 `?`, 2건을 닫았거나 50% 를 넘으면 `· 인계할 때`, 다른 세션이 주인이면 `🧭 [<맵 제목>] · 다른 세션이 주인` | 없음 |
 
 mod 는 맵을 미는 세션이 **압축될 때**도 끼어든다. 압축은 막지 않고(창이 넘칠 때 건너뛰면 막다른 길이
@@ -270,5 +270,5 @@ claude plugin validate .
 순수 로직만 테스트한다. 프론티어 분류·주인·판정(`lib/guard-core.mjs`), 질문 게이트(`lib/gate.mjs`), 영수증·헌장 근거·위임 보고서(`lib/delegation.mjs`), claim 토큰(`lib/claim.mjs`), 헌장과 가드의 문구 일치
 (`test/charter-wording.test.mjs`), mod 의 입력 조립과 상태줄 문구(`lib/mod-view.mjs`),
 문서 메타 대조와 §0 검사(`lib/doc-meta.mjs`), 인계 프롬프트(`lib/handoff-prompt.mjs`), 경로·키 계산(`lib/handoff-path.mjs`), 남의 스킬 설치 위치와 호출 방법(`lib/skill-locate.mjs`), bd 조회의 동시성과 «모름» 처리(`lib/read-map.mjs` — bd 는 스텁으로
-갈아 끼운다), bd 출력 꼴의 정규화와 `bd schema` 대조(`lib/bd-shape.mjs` — 버전별 실측 출력을 `test/fixtures/bd/<버전>/` 에 둔다). orca·bd 자체의 동작은 실측 대상이라 테스트하지 않는다. `hooks/register.mjs` 는 배선뿐이라 `claude plugin validate` 가 읽어 내는 hooks·calls
+갈아 끼운다), bd 출력 꼴의 정규화와 `bd schema` 대조(`lib/bd-shape.mjs` — 버전별 실측 출력을 `test/fixtures/bd/<버전>/` 에 둔다), 컨텍스트를 어디서 읽을지(`lib/context-reading.mjs` — `status` 배선은 가짜 bd 로 `test/context-cli.test.mjs` 가 본다). orca·bd 자체의 동작은 실측 대상이라 테스트하지 않는다. `hooks/register.mjs` 는 배선뿐이라 `claude plugin validate` 가 읽어 내는 hooks·calls
 목록으로 확인한다.

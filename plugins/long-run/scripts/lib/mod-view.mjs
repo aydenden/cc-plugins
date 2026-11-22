@@ -34,15 +34,20 @@ export function parseStatus(stdout) {
 }
 
 /**
- * `frontier-guard.mjs judge` 에 넘길 컨텍스트 인자. 세션이 실제 창을 알려주므로 모델 이름에서 추측하지 않는다.
- * 측정 전이면 싣지 않는다 — CLI 가 «못 쟀다» 로 판정한다. 0 을 여유로 읽히게 두지 않는다.
+ * `frontier-guard.mjs judge`·`status` 에 넘길 컨텍스트 인자. 세션이 실제 창을 알려주므로 모델 이름에서
+ * 추측하지 않는다. CLI 는 이것을 세션별로 남겨, 모델이 `status` 를 직접 불러도 같은 값을 읽는다
+ * (`lib/context-reading.mjs`).
+ *
+ * 창은 늘 싣고 채움은 있을 때만 싣는다 — 측정 전(새 세션·압축 직후)에는 채움이 없으니 CLI 가 «못 쟀다» 로
+ * 판정하고, 지난 큰 값이 남아 이른 인계를 시키지도 않는다. 0 을 여유로 읽히게 두지 않는다.
  *
  * @param {{context?: {tokens?: number, window?: number}} | null} usage
  * @returns {string[]}
  */
-export function judgeUsageArgs(usage) {
+export function usageArgs(usage) {
   const { tokens, window } = usage?.context ?? {};
-  return typeof tokens === 'number' && window > 0 ? ['--tokens', String(tokens), '--window', String(window)] : [];
+  if (!(window > 0)) return [];
+  return [...(typeof tokens === 'number' && tokens >= 0 ? ['--tokens', String(tokens)] : []), '--window', String(window)];
 }
 
 /** 상태줄에 그리는 맵 제목의 최대 글자 수. 한글은 터미널 두 칸이라 칸이 아니라 글자로 센다. */

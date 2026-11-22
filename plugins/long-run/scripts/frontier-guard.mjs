@@ -42,6 +42,7 @@
 import { execFile } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import os from 'node:os';
 import { promisify } from 'node:util';
 
 import { claimHashOf, claimTokenLine, newClaimToken, provesClaim } from './lib/claim.mjs';
@@ -66,8 +67,6 @@ import {
   awaitMarker,
   beginWave,
   clearAwaiting,
-  contextLimitOf,
-  contextTokensOf,
   countClosedSince,
   countingSince,
   countToolUses,
@@ -94,6 +93,7 @@ import {
   withAskHint,
 } from './lib/guard-core.mjs';
 import { normalizeBdOutput, schemaGaps, shapeMessage, versionOf } from './lib/bd-shape.mjs';
+import { contextFileName, readingOf, resolveContext, transcriptCandidates } from './lib/context-reading.mjs';
 import { BD_TIMEOUT_MS, bdReadLine, readMap } from './lib/read-map.mjs';
 import { repoKeyOf, repoRootOf, stateRoot } from './lib/state-root.mjs';
 
@@ -104,6 +104,16 @@ const markerPathFor = (cwd) => join(stateRoot(), 'frontier-guard', `${repoKeyOf(
 
 /** 사람의 말을 남기는 곳. worktree 당 하나고 마커와 따로 둔다 — claim 전에 한 말도, 앞 세션에 한 답도 증거여야 한다. */
 const receiptsPathFor = (cwd) => join(stateRoot(), 'frontier-guard', 'receipts', `${repoKeyOf(repoRootOf(cwd))}.json`);
+
+/** 세션이 잰 컨텍스트의 자리. 세션마다 하나 — 주인 세션의 값을 어느 길로 불려도 같이 읽는다(`lib/context-reading.mjs`). */
+const contextDir = () => join(stateRoot(), 'frontier-guard', 'context');
+const contextPathFor = (sessionId) => {
+  const name = contextFileName(sessionId);
+  return name ? join(contextDir(), name) : null;
+};
+
+/** 이보다 오래된 세션의 기록은 남길 때 치운다 — 끝난 세션의 파일이 쌓이지 않게. */
+const CONTEXT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** 위임 보고서의 자리. worktree 가 사라져도 남고, 사람이 맵 id 로 찾을 수 있게 맵 id 를 이름으로 쓴다. */
 const reportPathFor = (epic) => join(stateRoot(), 'delegation-reports', `${epic}.md`);
@@ -219,12 +229,13 @@ const gateSnapshotOf = (frontier) => ({ waiting: isWaiting(frontier), questions:
  * Stop 판정 한 번. 주인 기록·되민 기록·선언 해제까지 여기서 한다 — mod 와 node 훅이 같은 길을 탄다.
  *
  * @param {{session_id?: string, cwd?: string, transcript_path?: string, stop_hook_active?: boolean, hook_event_name?: string, tool_name?: string}} input
- * @param {{contextTokens: number, contextLimit: number, measured: boolean} | null} context 세션이 잰 값. 없으면 트랜스크립트로 잰다
+ * @param {{tokens: number | null, window: number, at: string} | null} reading mod 가 잰 값. 남긴 뒤 `measure` 가 읽는다 — 없으면 남은 기록이나 트랜스크립트로 잰다
  */
-async function judgeStop(input, context) {
+async function judgeStop(input, reading) {
   const cwd = input.cwd || process.cwd();
   const found = locateOwned(cwd, input.session_id, input.transcript_path);
   if (!found) return { block: false };
+  recordReading(input.session_id, reading);
   const { path, since } = found;
   const { children, ...read } = await readMap(found.marker.epic, bdRunner(mapCwdOf(found.marker, cwd)));
   // bd 를 읽는 동안(최대 시한까지) 사람이 일시정지할 수 있다 — 조회 전 마커로 판정하고 다시 쓰면 그 전환이 사라진다.
@@ -235,7 +246,7 @@ async function judgeStop(input, context) {
   const verdict = withAskHint(
     decide({
       marker,
-      ...(context ?? measure(input.transcript_path)),
+      ...measure(input.transcript_path, input.session_id),
       closedSinceSession: countClosedSince(children, since),
       handoffClosed: handoffClosedOf(marker),
       background,
@@ -348,18 +359,50 @@ const isStopEvent = (input) => {
 };
 
 /**
- * 트랜스크립트에서 점유를 잰다.
+ * 세션이 잰 값을 남긴다. 맵을 선언한 세션만 — mod 는 모든 세션에서 `status` 를 부르므로, 가리지 않으면
+ * 맵과 무관한 세션의 파일이 쌓인다. 🚨 판정을 돕는 기록이라 쓰기 실패가 판정을 막지 않는다.
+ */
+function recordReading(sessionId, reading) {
+  const file = contextPathFor(sessionId);
+  if (!file || !reading) return;
+  try {
+    writeMarker(file, reading);
+    const cutoff = Date.now() - CONTEXT_KEEP_MS;
+    for (const name of readdirSync(contextDir())) {
+      const other = join(contextDir(), name);
+      if (other !== file && statSync(other).mtimeMs < cutoff) rmSync(other, { force: true });
+    }
+  } catch {
+    // 남기지 못하면 다음 측정에서 다시 남긴다.
+  }
+}
+
+/**
+ * 세션 id 로 트랜스크립트를 찾는다. 모델은 자기 트랜스크립트 경로를 모르므로, `status` 를 인자 없이 불러도
+ * 자기 세션을 재게 한다. 못 찾으면 `undefined`.
+ */
+function transcriptOf(sessionId) {
+  const config = process.env.CLAUDE_CONFIG_DIR || join(os.homedir(), '.claude');
+  let dirs = [];
+  try {
+    dirs = readdirSync(join(config, 'projects'));
+  } catch {
+    return undefined;
+  }
+  return transcriptCandidates(config, dirs, sessionId).find((file) => existsSync(file));
+}
+
+/**
+ * 판정이 쓸 컨텍스트 — 세션이 잰 값, 없으면 트랜스크립트(`resolveContext`).
  *
  * 🚨 **못 쟀다는 것을 값이 아니라 `measured` 로 말한다.** 실패를 `{0, 200k}` 로만 돌려주면 판정이
  * 그것을 «0% — 여유» 로 읽는다(`guard-core.mjs` 머리말).
  */
-function measure(transcriptPath) {
-  try {
-    const { usage, model } = readTranscriptTail(readFileSync(transcriptPath, 'utf8'));
-    return { contextTokens: contextTokensOf(usage), contextLimit: contextLimitOf(model), measured: Boolean(usage) };
-  } catch {
-    return { contextTokens: 0, contextLimit: contextLimitOf(null), measured: false };
-  }
+function measure(transcriptPath, sessionId) {
+  const file = contextPathFor(sessionId);
+  const reading = file ? readJson(file) : null;
+  const { usage, model } = readTranscriptTail(readText(transcriptPath));
+  return resolveContext({ reading, usage, model });
 }
 
 const readStdin = async () => {
@@ -560,12 +603,10 @@ if (command === 'claim') {
   console.log(`[frontier-guard] ${marker.epic} 의 Stop 되밀기를 ${command === 'pause' ? '일시정지했다. 질문 게이트는 그대로다' : '다시 켰다'}.`);
 } else if (command === 'judge') {
   const args = process.argv.slice(3);
-  const tokens = Number(flagOf(args, '--tokens'));
-  const window = Number(flagOf(args, '--window'));
-  const context = tokens >= 0 && window > 0 ? { contextTokens: tokens, contextLimit: window, measured: true } : null;
+  const reading = readingOf(flagOf(args, '--tokens'), flagOf(args, '--window'), new Date().toISOString());
   const verdict = await judgeStop(
     { session_id: flagOf(args, '--session'), cwd: flagOf(args, '--cwd'), transcript_path: flagOf(args, '--transcript'), stop_hook_active: args.includes('--active'), hook_event_name: 'Stop' },
-    context
+    reading
   );
   console.log(JSON.stringify(verdict));
 } else if (command === 'clear') {
@@ -574,16 +615,21 @@ if (command === 'claim') {
 } else if (command === 'status') {
   // 세션 id 와 트랜스크립트를 주면 훅과 **같은 판정**을 돌려준다 — 훅 모드는 stdin 을 먹어 손으로 못 돌린다.
   const rest = process.argv.slice(3);
-  const at = rest.indexOf('--session');
-  const sessionId = at >= 0 ? rest[at + 1] : undefined;
-  const transcript = rest.find((_, i) => at < 0 || (i !== at && i !== at + 1));
+  // 🚨 인자 없이 불려도 자기 세션을 본다 — 모델이 SKILL 대로 `status` 만 치면 늘 «계측 불가» 였다.
+  // Claude Code 가 Bash 에 싣는 세션 id 로 세션과 트랜스크립트를 찾는다.
+  const sessionId = flagOf(rest, '--session') ?? (process.env.CLAUDE_CODE_SESSION_ID || undefined);
+  const valued = new Set(['--session', '--tokens', '--window']);
+  const transcript =
+    rest.find((arg, i) => !arg.startsWith('--') && !valued.has(rest[i - 1])) ?? (sessionId ? transcriptOf(sessionId) : undefined);
+  const reading = readingOf(flagOf(rest, '--tokens'), flagOf(rest, '--window'), new Date().toISOString());
   // cwd 가 옮겨 간 세션도 자기 맵을 본다 — 없으면 지금 위치의 마커다.
   const moved = sessionId ? locateOwned(process.cwd(), sessionId, transcript) : null;
   const markerPath = moved?.path ?? MARKER;
   const marker = moved?.marker ?? readJson(MARKER);
   const { children, ...read } = marker?.epic ? await readMap(marker.epic, bdRunner(mapCwdOf(marker, process.cwd()))) : UNREAD_MAP;
+  if (marker?.epic) recordReading(sessionId, reading);
   // 잴 근거가 없으면 «안 쟀다» 다 — 0 을 여유로 읽히게 두지 않는다.
-  const measured = transcript ? measure(transcript) : { contextTokens: 0, contextLimit: contextLimitOf(null), measured: false };
+  const measured = measure(transcript, sessionId);
   // 세션 id 가 없으면 주인 자리에서 본 판정이다. 있으면 참·거짓, 아무도 주인이 아니면 null(주인 미정).
   let owner;
   if (sessionId) {

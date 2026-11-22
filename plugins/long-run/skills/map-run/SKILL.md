@@ -116,6 +116,10 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/frontier-guard.mjs" claim {맵id}
 node "${CLAUDE_PLUGIN_ROOT}/scripts/frontier-guard.mjs" status
 ```
 
+인자 없이 불러도 이 세션의 컨텍스트를 잰다 — 세션 id 는 Claude Code 가 Bash 에 싣는 `CLAUDE_CODE_SESSION_ID` 로
+알고, 값은 mod 가 남긴 측정(없으면 트랜스크립트)이다. 출력의 `source` 가 `session`·`transcript` 면 잰 값이고,
+`measured: false`(`source: none`)일 때만 «계측 불가» 다 — 그때만 헌장의 대체 규칙으로 스스로 판정한다.
+
 마커는 **지금 위치의 worktree 별로** 갈린다(`$HOME/.claude/long-run/frontier-guard/<키>.json`,
 `LONG_RUN_STATE_ROOT` 로 옮긴다). 그래서 병렬 worktree 의 세션들은 서로를 건드리지 않고, 같은
 worktree 에서는 주인 세션 하나만 판정된다.

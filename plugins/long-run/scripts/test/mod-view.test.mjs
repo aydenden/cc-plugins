@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { HANDOFF_SKILL } from '../lib/guard-core.mjs';
-import { bandOf, bandText, compactNote, judgeUsageArgs, movesMap, parseStatus, statusLine, toggleOf } from '../lib/mod-view.mjs';
+import { bandOf, bandText, compactNote, usageArgs, movesMap, parseStatus, statusLine, toggleOf } from '../lib/mod-view.mjs';
 
 // `frontier-guard.mjs status` 가 내는 꼴 그대로다 — 프론티어는 분류된 id 로 실린다.
 const claimed = {
@@ -119,16 +119,17 @@ test('인계 문턱을 넘으면 그 사실을 붙인다', () => {
   assert.equal(statusLine(claimed, usageAt(500_000)), '🧭 [결제 모듈 이전] · 밀기 2 · 막힘 0 · 질문 0 · 컨텍스트 50%/50% · 인계할 때');
 });
 
-// --- judge 인자 ---
+// --- judge·status 인자 ---
 
 // 창 크기를 모델 이름에서 추측하지 않는다 — 세션이 실제 창을 알려준다.
-test('세션이 잰 컨텍스트를 judge 인자로 넘긴다', () => {
-  assert.deepEqual(judgeUsageArgs(usageAt(150_000, 200_000)), ['--tokens', '150000', '--window', '200000']);
+test('세션이 잰 컨텍스트를 CLI 인자로 넘긴다', () => {
+  assert.deepEqual(usageArgs(usageAt(150_000, 200_000)), ['--tokens', '150000', '--window', '200000']);
 });
 
-test('🚨 측정 전이면 싣지 않는다 — 0 을 여유로 읽히게 두지 않는다', () => {
-  assert.deepEqual(judgeUsageArgs(null), []);
-  assert.deepEqual(judgeUsageArgs({ context: { window: 1_000_000 } }), []);
+test('🚨 측정 전이면 채움은 싣지 않고 창만 싣는다 — 0 을 여유로 읽히게 두지 않는다', () => {
+  assert.deepEqual(usageArgs(null), []);
+  assert.deepEqual(usageArgs({ context: { window: 1_000_000 } }), ['--window', '1000000']);
+  assert.deepEqual(usageArgs({ context: { tokens: 5, window: 0 } }), []);
 });
 
 // --- 위임 표시 ---
