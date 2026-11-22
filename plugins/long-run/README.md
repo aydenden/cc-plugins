@@ -9,7 +9,7 @@
 | 역할 | 무엇으로 | 왜 세션을 넘나 |
 |---|---|---|
 | 목표와 남은 티켓 | bd epic 본문(맵 헌장: 목표·완료 조건·운영 규약) | DB 에 있다. 세션이 죽어도 남는다 |
-| 멈춤 막기·질문 게이트 | mod (`hooks/register.mjs`), Stop·PreToolUse·UserPromptSubmit hook (`scripts/frontier-guard.mjs`) | 플러그인에 달려 있어 어느 repo·worktree 에서 연 세션에도 붙는다 |
+| 멈춤 막기·질문 게이트 | mod (`hooks/register.mjs`), Stop·PreToolUse·UserPromptSubmit·PostToolUse hook (`scripts/frontier-guard.mjs`) | 플러그인에 달려 있어 어느 repo·worktree 에서 연 세션에도 붙는다 |
 | 다음 세션으로 넘기기 | `long-run:session-handoff` | 인계 문서 하나로 소유권을 넘긴다 |
 
 ## 설치
@@ -68,7 +68,7 @@
 | 밀 수 있는 것은 없고 질문·막힌 티켓만 남았다 | 「기다리는 질문을 모아 보고하고 멈춰라」. 같은 묶음은 한 번만 | 남긴다. 답이 오면 이어 민다 |
 | 비었는데 맵이 열려 있다 | 「서브에이전트 하나로 완료 조건을 검증하고 맵을 닫아라」. 50% 를 넘었으면 그 일을 인계 | 남긴다 |
 | 비었고 맵이 닫혔다 | 없음 (통과) | 지운다 |
-| 모른다 (bd 를 못 읽었다) | 없음 (통과). mod 가 사람에게 토스트로 알리고, 실패 사유는 상태 루트의 `logs/bd-read.log` 에 남는다 | 남긴다 |
+| 모른다 (bd 를 못 읽었거나, 읽었지만 출력 꼴을 모른다) | 없음 (통과). mod 가 사람에게 토스트로 알리고, 실패 사유는 상태 루트의 `logs/bd-read.log` 에 남는다(꼴이 다르면 `shape` 와 빠진 칸) | 남긴다 |
 
 **밀 수 있는 티켓**은 `bd ready --parent <맵>` 에 나오거나 이미 claim 된 것 중 `human` 라벨이 없는 것이다.
 `human` 라벨 티켓은 사람의 답을 기다리는 **질문**이고, `bd defer` 한 티켓은 자기 칸(`deferred`)에 두며, 나머지
@@ -97,10 +97,17 @@ PreToolUse 훅(`--gate`, 규칙은 `lib/gate.mjs`)이 주인 세션의 호출을
 | 질문에 걸린 `bd dep remove` | 질문 이후 사람의 말이 없다 |
 | `Edit`·`Write`·`NotebookEdit`(worktree 안), `git commit`·`git push` | 밀 수 있는 티켓이 없다 (웨이브 정산 중은 제외) |
 
-**사람의 답은 영수증으로 가른다.** bd 는 누가 답했는지 모른다. UserPromptSubmit 훅(`--receipt`)이 사람이 친 말을
-worktree 별로 최근 20건 남기고(인계 프롬프트와 시스템 입력은 뺀다), `answer <질문> --quote "<원문>"` 은 그 질문
+**사람의 답은 영수증으로 가른다.** bd 는 누가 답했는지 모른다. UserPromptSubmit 훅(`--receipt`)이 사람이 친 말을,
+PostToolUse 훅이 AskUserQuestion 으로 고른 답(과 단 메모)을 답 하나씩 worktree 별로 최근 20건 남기고(인계 프롬프트와 시스템 입력은 뺀다), `answer <질문> --quote "<원문>"` 은 그 질문
 이후의 말과 맞아야 닫힌다. 부분 인용은 8자 이상이고, 짧은 답(`a`)은 프롬프트 전체와 같아야 한다.
 사람이 다른 터미널에서 직접 `bd human respond` 를 치는 길은 그대로다.
+
+**bd 의 출력 꼴은 버전마다 다를 수 있다.** 판정은 내부 꼴 하나만 보고, bd 출력을 그 꼴로 맞추는 일은
+`lib/bd-shape.mjs` 가 한다(같은 버전에서도 `bd list` 와 `bd show` 의 의존 꼴이 다르다). 읽어야 할 칸이 없으면
+«의존 없음» 으로 추측하지 않고 그 조회를 «모름» 으로 떨어뜨린다. `claim` 은 설치된 bd 의 `bd schema`(1.3.0~)를
+읽는 칸과 대조해, 빠진 칸이 있으면 그 이름과 이 bd 에 있는 칸을 말하며 거부한다 — `status` 의 `bdShape` 도 같은
+대조다. 새 bd 버전을 만나면 `node scripts/test/fixtures/bd/capture.mjs <맵> <의존 있는 자식> <코멘트 있는 issue>`
+로 그 버전의 출력을 fixture 로 떠 테스트에 싣는다(글은 지우고 꼴만 남긴다).
 
 **한계.** 실수를 막는 장치이지 샌드박스가 아니다. 셸 스크립트나 `sed -i` 로 고치는 것은 잡지 못하고, 「계속해」를
 답으로 인용하는 것도 막지 못한다(인용이 bd 코멘트에 남아 감사할 수 있다). 어떤 질문을 밀어도 되는지의 판단
@@ -263,5 +270,5 @@ claude plugin validate .
 순수 로직만 테스트한다. 프론티어 분류·주인·판정(`lib/guard-core.mjs`), 질문 게이트(`lib/gate.mjs`), 영수증·헌장 근거·위임 보고서(`lib/delegation.mjs`), claim 토큰(`lib/claim.mjs`), 헌장과 가드의 문구 일치
 (`test/charter-wording.test.mjs`), mod 의 입력 조립과 상태줄 문구(`lib/mod-view.mjs`),
 문서 메타 대조와 §0 검사(`lib/doc-meta.mjs`), 인계 프롬프트(`lib/handoff-prompt.mjs`), 경로·키 계산(`lib/handoff-path.mjs`), 남의 스킬 설치 위치와 호출 방법(`lib/skill-locate.mjs`), bd 조회의 동시성과 «모름» 처리(`lib/read-map.mjs` — bd 는 스텁으로
-갈아 끼운다). orca·bd 자체의 동작은 실측 대상이라 테스트하지 않는다. `hooks/register.mjs` 는 배선뿐이라 `claude plugin validate` 가 읽어 내는 hooks·calls
+갈아 끼운다), bd 출력 꼴의 정규화와 `bd schema` 대조(`lib/bd-shape.mjs` — 버전별 실측 출력을 `test/fixtures/bd/<버전>/` 에 둔다). orca·bd 자체의 동작은 실측 대상이라 테스트하지 않는다. `hooks/register.mjs` 는 배선뿐이라 `claude plugin validate` 가 읽어 내는 hooks·calls
 목록으로 확인한다.

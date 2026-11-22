@@ -32,6 +32,10 @@ function sandbox(t) {
   guard.hook = (flag, input) =>
     spawnSync(process.execPath, [GUARD, flag], { cwd, encoding: 'utf8', input: JSON.stringify({ cwd, ...input }), env: { ...process.env, LONG_RUN_STATE_ROOT: state } });
   guard.marker = () => JSON.parse(readFileSync(markerFile(), 'utf8'));
+  guard.receipts = () => {
+    const dir = join(state, 'frontier-guard', 'receipts');
+    return JSON.parse(readFileSync(join(dir, readdirSync(dir)[0]), 'utf8'));
+  };
   guard.setMarker = (body) => writeFileSync(markerFile(), JSON.stringify(body));
   return guard;
 }
@@ -92,6 +96,24 @@ test('🚨 사람이 말하면 대기 표지가 지워지고, 프로그램이 �
 
   guard.hook('--receipt', { session_id: 'owner', prompt: '승인' });
   assert.equal(guard.marker().awaiting, undefined);
+});
+
+test('🚨 AskUserQuestion 으로 고른 답도 영수증이 되고 대기 표지를 지운다', (t) => {
+  const guard = sandbox(t);
+  guard('claim', 'map-x');
+  guard.setMarker({ ...guard.marker(), session: { id: 'owner', since: 'x' } });
+  guard('wait', '배너 칸 결정');
+
+  const asked = 'ait-1.30 배너 칸 코드를 어떻게 할까요?';
+  guard.hook('--receipt', {
+    session_id: 'owner',
+    hook_event_name: 'PostToolUse',
+    tool_name: 'AskUserQuestion',
+    tool_input: { questions: [{ question: asked }] },
+    tool_response: { questions: [{ question: asked }], answers: { [asked]: '빼고 낸다 (추천)' } },
+  });
+  assert.equal(guard.marker().awaiting, undefined);
+  assert.deepEqual(guard.receipts().map((r) => r.text), ['빼고 낸다 (추천)']);
 });
 
 test('다시 claim 하면 대기 표지가 풀린다 — 앞 세션의 질문이 새 세션을 놓아주면 안 된다', (t) => {

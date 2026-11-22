@@ -1,0 +1,153 @@
+[
+  {
+    "id": "ccp-2ps.21",
+    "title": "<title>",
+    "description": "<description>",
+    "acceptance_criteria": "<acceptance_criteria>",
+    "status": "closed",
+    "priority": 1,
+    "issue_type": "task",
+    "assignee": "<person>",
+    "owner": "<person>",
+    "created_at": "2026-10-11T02:08:36Z",
+    "created_by": "<person>",
+    "updated_at": "2026-10-11T02:12:04Z",
+    "started_at": "2026-10-11T02:11:36Z",
+    "closed_at": "2026-10-11T02:12:04Z",
+    "close_reason": "<close_reason>",
+    "labels": [
+      "long-run:map"
+    ],
+    "dependencies": [
+      {
+        "id": "ccp-2ps.19",
+        "title": "<title>",
+        "description": "<description>",
+        "acceptance_criteria": "<acceptance_criteria>",
+        "status": "closed",
+        "priority": 1,
+        "issue_type": "task",
+        "assignee": "<person>",
+        "owner": "<person>",
+        "created_at": "2026-10-11T02:08:34Z",
+        "created_by": "<person>",
+        "updated_at": "2026-10-11T02:10:48Z",
+        "started_at": "2026-10-11T02:10:47Z",
+        "closed_at": "2026-10-11T02:10:48Z",
+        "close_reason": "<close_reason>",
+        "labels": [
+          "long-run:map"
+        ],
+        "dependency_type": "blocks"
+      },
+      {
+        "id": "ccp-2ps",
+        "title": "<title>",
+        "description": "<description>",
+        "notes": "<notes>",
+        "status": "closed",
+        "priority": 1,
+        "issue_type": "epic",
+        "owner": "<person>",
+        "created_at": "2026-10-11T01:09:46Z",
+        "created_by": "<person>",
+        "updated_at": "2026-10-11T12:46:51Z",
+        "closed_at": "2026-10-11T12:46:51Z",
+        "close_reason": "<close_reason>",
+        "labels": [
+          "long-run:map"
+        ],
+        "dependency_type": "parent-child"
+      },
+      {
+        "id": "ccp-2ps.17",
+        "title": "<title>",
+        "description": "<description>",
+        "acceptance_criteria": "<acceptance_criteria>",
+        "status": "closed",
+        "priority": 1,
+        "issue_type": "task",
+        "assignee": "<person>",
+        "owner": "<person>",
+        "created_at": "2026-10-11T02:08:32Z",
+        "created_by": "<person>",
+        "updated_at": "2026-10-11T02:10:45Z",
+        "started_at": "2026-10-11T02:09:16Z",
+        "closed_at": "2026-10-11T02:10:45Z",
+        "close_reason": "<close_reason>",
+        "labels": [
+          "long-run:map"
+        ],
+        "dependency_type": "blocks"
+      },
+      {
+        "id": "ccp-2ps.18",
+        "title": "<title>",
+        "description": "<description>",
+        "acceptance_criteria": "<acceptance_criteria>",
+        "status": "closed",
+        "priority": 1,
+        "issue_type": "task",
+        "assignee": "<person>",
+        "owner": "<person>",
+        "created_at": "2026-10-11T02:08:33Z",
+        "created_by": "<person>",
+        "updated_at": "2026-10-11T02:10:47Z",
+        "started_at": "2026-10-11T02:10:46Z",
+        "closed_at": "2026-10-11T02:10:47Z",
+        "close_reason": "<close_reason>",
+        "labels": [
+          "long-run:map"
+        ],
+        "dependency_type": "blocks"
+      },
+      {
+        "id": "ccp-2ps.13",
+        "title": "<title>",
+        "description": "<description>",
+        "acceptance_criteria": "<acceptance_criteria>",
+        "status": "closed",
+        "priority": 1,
+        "issue_type": "task",
+        "assignee": "<person>",
+        "owner": "<person>",
+        "created_at": "2026-10-11T01:11:55Z",
+        "created_by": "<person>",
+        "updated_at": "2026-10-11T02:02:33Z",
+        "started_at": "2026-10-11T02:01:42Z",
+        "closed_at": "2026-10-11T02:02:33Z",
+        "close_reason": "<close_reason>",
+        "labels": [
+          "long-run:map"
+        ],
+        "dependency_type": "discovered-from"
+      },
+      {
+        "id": "ccp-2ps.20",
+        "title": "<title>",
+        "description": "<description>",
+        "acceptance_criteria": "<acceptance_criteria>",
+        "status": "closed",
+        "priority": 1,
+        "issue_type": "task",
+        "assignee": "<person>",
+        "owner": "<person>",
+        "created_at": "2026-10-11T02:08:35Z",
+        "created_by": "<person>",
+        "updated_at": "2026-10-11T02:10:49Z",
+        "started_at": "2026-10-11T02:10:49Z",
+        "closed_at": "2026-10-11T02:10:49Z",
+        "close_reason": "<close_reason>",
+        "labels": [
+          "long-run:map"
+        ],
+        "dependency_type": "blocks"
+      }
+    ],
+    "parent": "ccp-2ps",
+    "dependent_count": 0,
+    "dependency_count": 6,
+    "comment_count": 0,
+    "revision": "-450882092395588710"
+  }
+]

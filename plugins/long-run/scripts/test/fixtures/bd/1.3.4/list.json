@@ -1,0 +1,286 @@
+[
+  {
+    "id": "ccp-2ps.21",
+    "title": "<title>",
+    "description": "<description>",
+    "acceptance_criteria": "<acceptance_criteria>",
+    "status": "closed",
+    "priority": 1,
+    "issue_type": "task",
+    "assignee": "<person>",
+    "owner": "<person>",
+    "created_at": "2026-10-11T02:08:36Z",
+    "created_by": "<person>",
+    "updated_at": "2026-10-11T02:12:04Z",
+    "started_at": "2026-10-11T02:11:36Z",
+    "closed_at": "2026-10-11T02:12:04Z",
+    "close_reason": "<close_reason>",
+    "labels": [
+      "long-run:map"
+    ],
+    "dependencies": [
+      {
+        "issue_id": "ccp-2ps.21",
+        "depends_on_id": "ccp-2ps.19",
+        "type": "blocks",
+        "created_at": "2026-10-11T02:08:39Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      },
+      {
+        "issue_id": "ccp-2ps.21",
+        "depends_on_id": "ccp-2ps",
+        "type": "parent-child",
+        "created_at": "2026-10-11T02:08:36Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      },
+      {
+        "issue_id": "ccp-2ps.21",
+        "depends_on_id": "ccp-2ps.17",
+        "type": "blocks",
+        "created_at": "2026-10-11T02:08:37Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      },
+      {
+        "issue_id": "ccp-2ps.21",
+        "depends_on_id": "ccp-2ps.18",
+        "type": "blocks",
+        "created_at": "2026-10-11T02:08:38Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      },
+      {
+        "issue_id": "ccp-2ps.21",
+        "depends_on_id": "ccp-2ps.13",
+        "type": "discovered-from",
+        "created_at": "2026-10-11T02:08:36Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      },
+      {
+        "issue_id": "ccp-2ps.21",
+        "depends_on_id": "ccp-2ps.20",
+        "type": "blocks",
+        "created_at": "2026-10-11T02:08:40Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      }
+    ],
+    "dependency_count": 4,
+    "dependent_count": 0,
+    "comment_count": 0,
+    "parent": "ccp-2ps"
+  },
+  {
+    "id": "ccp-2ps.20",
+    "title": "<title>",
+    "description": "<description>",
+    "acceptance_criteria": "<acceptance_criteria>",
+    "status": "closed",
+    "priority": 1,
+    "issue_type": "task",
+    "assignee": "<person>",
+    "owner": "<person>",
+    "created_at": "2026-10-11T02:08:35Z",
+    "created_by": "<person>",
+    "updated_at": "2026-10-11T02:10:49Z",
+    "started_at": "2026-10-11T02:10:49Z",
+    "closed_at": "2026-10-11T02:10:49Z",
+    "close_reason": "<close_reason>",
+    "labels": [
+      "long-run:map"
+    ],
+    "dependencies": [
+      {
+        "issue_id": "ccp-2ps.20",
+        "depends_on_id": "ccp-2ps",
+        "type": "parent-child",
+        "created_at": "2026-10-11T02:08:35Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      },
+      {
+        "issue_id": "ccp-2ps.20",
+        "depends_on_id": "ccp-2ps.13",
+        "type": "discovered-from",
+        "created_at": "2026-10-11T02:08:35Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      }
+    ],
+    "dependency_count": 0,
+    "dependent_count": 1,
+    "comment_count": 0,
+    "parent": "ccp-2ps"
+  },
+  {
+    "id": "ccp-2ps.19",
+    "title": "<title>",
+    "description": "<description>",
+    "acceptance_criteria": "<acceptance_criteria>",
+    "status": "closed",
+    "priority": 1,
+    "issue_type": "task",
+    "assignee": "<person>",
+    "owner": "<person>",
+    "created_at": "2026-10-11T02:08:34Z",
+    "created_by": "<person>",
+    "updated_at": "2026-10-11T02:10:48Z",
+    "started_at": "2026-10-11T02:10:47Z",
+    "closed_at": "2026-10-11T02:10:48Z",
+    "close_reason": "<close_reason>",
+    "labels": [
+      "long-run:map"
+    ],
+    "dependencies": [
+      {
+        "issue_id": "ccp-2ps.19",
+        "depends_on_id": "ccp-2ps",
+        "type": "parent-child",
+        "created_at": "2026-10-11T02:08:34Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      },
+      {
+        "issue_id": "ccp-2ps.19",
+        "depends_on_id": "ccp-2ps.13",
+        "type": "discovered-from",
+        "created_at": "2026-10-11T02:08:34Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      }
+    ],
+    "dependency_count": 0,
+    "dependent_count": 1,
+    "comment_count": 0,
+    "parent": "ccp-2ps"
+  },
+  {
+    "id": "ccp-2ps.18",
+    "title": "<title>",
+    "description": "<description>",
+    "acceptance_criteria": "<acceptance_criteria>",
+    "status": "closed",
+    "priority": 1,
+    "issue_type": "task",
+    "assignee": "<person>",
+    "owner": "<person>",
+    "created_at": "2026-10-11T02:08:33Z",
+    "created_by": "<person>",
+    "updated_at": "2026-10-11T02:10:47Z",
+    "started_at": "2026-10-11T02:10:46Z",
+    "closed_at": "2026-10-11T02:10:47Z",
+    "close_reason": "<close_reason>",
+    "labels": [
+      "long-run:map"
+    ],
+    "dependencies": [
+      {
+        "issue_id": "ccp-2ps.18",
+        "depends_on_id": "ccp-2ps.13",
+        "type": "discovered-from",
+        "created_at": "2026-10-11T02:08:33Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      },
+      {
+        "issue_id": "ccp-2ps.18",
+        "depends_on_id": "ccp-2ps",
+        "type": "parent-child",
+        "created_at": "2026-10-11T02:08:33Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      }
+    ],
+    "dependency_count": 0,
+    "dependent_count": 1,
+    "comment_count": 0,
+    "parent": "ccp-2ps"
+  },
+  {
+    "id": "ccp-2ps.17",
+    "title": "<title>",
+    "description": "<description>",
+    "acceptance_criteria": "<acceptance_criteria>",
+    "status": "closed",
+    "priority": 1,
+    "issue_type": "task",
+    "assignee": "<person>",
+    "owner": "<person>",
+    "created_at": "2026-10-11T02:08:32Z",
+    "created_by": "<person>",
+    "updated_at": "2026-10-11T02:10:45Z",
+    "started_at": "2026-10-11T02:09:16Z",
+    "closed_at": "2026-10-11T02:10:45Z",
+    "close_reason": "<close_reason>",
+    "labels": [
+      "long-run:map"
+    ],
+    "dependencies": [
+      {
+        "issue_id": "ccp-2ps.17",
+        "depends_on_id": "ccp-2ps.13",
+        "type": "discovered-from",
+        "created_at": "2026-10-11T02:08:32Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      },
+      {
+        "issue_id": "ccp-2ps.17",
+        "depends_on_id": "ccp-2ps",
+        "type": "parent-child",
+        "created_at": "2026-10-11T02:08:32Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      }
+    ],
+    "dependency_count": 0,
+    "dependent_count": 1,
+    "comment_count": 0,
+    "parent": "ccp-2ps"
+  },
+  {
+    "id": "ccp-2ps.16",
+    "title": "<title>",
+    "description": "<description>",
+    "acceptance_criteria": "<acceptance_criteria>",
+    "status": "closed",
+    "priority": 1,
+    "issue_type": "task",
+    "assignee": "<person>",
+    "owner": "<person>",
+    "created_at": "2026-10-11T02:00:55Z",
+    "created_by": "<person>",
+    "updated_at": "2026-10-11T02:01:41Z",
+    "started_at": "2026-10-11T02:01:02Z",
+    "closed_at": "2026-10-11T02:01:41Z",
+    "close_reason": "<close_reason>",
+    "labels": [
+      "long-run:map"
+    ],
+    "dependencies": [
+      {
+        "issue_id": "ccp-2ps.16",
+        "depends_on_id": "ccp-2ps.12",
+        "type": "discovered-from",
+        "created_at": "2026-10-11T02:00:55Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      },
+      {
+        "issue_id": "ccp-2ps.16",
+        "depends_on_id": "ccp-2ps",
+        "type": "parent-child",
+        "created_at": "2026-10-11T02:00:55Z",
+        "created_by": "<person>",
+        "metadata": "{}"
+      }
+    ],
+    "dependency_count": 0,
+    "dependent_count": 1,
+    "comment_count": 0,
+    "parent": "ccp-2ps"
+  }
+]

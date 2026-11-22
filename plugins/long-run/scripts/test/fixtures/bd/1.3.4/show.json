@@ -1,0 +1,24 @@
+[
+  {
+    "id": "ccp-2ps",
+    "title": "<title>",
+    "description": "<description>",
+    "notes": "<notes>",
+    "status": "closed",
+    "priority": 1,
+    "issue_type": "epic",
+    "owner": "<person>",
+    "created_at": "2026-10-11T01:09:46Z",
+    "created_by": "<person>",
+    "updated_at": "2026-10-11T12:46:51Z",
+    "closed_at": "2026-10-11T12:46:51Z",
+    "close_reason": "<close_reason>",
+    "labels": [
+      "long-run:map"
+    ],
+    "dependent_count": 24,
+    "dependency_count": 0,
+    "comment_count": 0,
+    "revision": "5266720242861620398"
+  }
+]

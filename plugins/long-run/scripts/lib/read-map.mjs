@@ -20,12 +20,13 @@ const REASON_MAX = 200;
 /**
  * bd 조회 로그의 한 줄. «모름» 은 시한 초과인지 잠금인지 말해 주지 않아, 실패의 원인을 여기서만 볼 수 있다.
  *
- * @param {{at: string, args: string[], ms: number, error?: {killed?: boolean, code?: number | string, stderr?: string, message?: string}}} read
+ * @param {{at: string, args: string[], ms: number, error?: {killed?: boolean, shape?: boolean, code?: number | string, stderr?: string, message?: string}}} read
+ *   `shape` 은 bd 가 답했지만 그 꼴을 못 읽은 것(`bd-shape.mjs`)
  * @returns {string | null} 남길 것이 없으면 null
  */
 export function bdReadLine({ at, args, ms, error }) {
   if (!error && ms < BD_SLOW_MS) return null;
-  const kind = !error ? 'slow' : error.killed ? 'timeout' : error.code !== undefined ? `exit-${error.code}` : 'error';
+  const kind = !error ? 'slow' : error.shape ? 'shape' : error.killed ? 'timeout' : error.code !== undefined ? `exit-${error.code}` : 'error';
   const reason = String(error?.stderr || (error && !error.killed ? error.message : '') || '').replace(/\s+/g, ' ').trim().slice(0, REASON_MAX);
   return `${at} ${kind} ${ms}ms bd ${args.join(' ')}${reason ? ` — ${reason}` : ''}\n`;
 }

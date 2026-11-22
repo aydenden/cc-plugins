@@ -2,7 +2,8 @@
  * 사람의 답과 위임 답변을 가르는 순수 로직 — 영수증, 헌장 근거, 보고서.
  *
  * ## 사람의 답
- * bd 는 누가 답했는지 모른다(작성자는 git user). 그래서 UserPromptSubmit 이 사람이 친 말을 영수증으로 남기고,
+ * bd 는 누가 답했는지 모른다(작성자는 git user). 그래서 UserPromptSubmit 이 사람이 친 말을, PostToolUse 가
+ * AskUserQuestion 으로 고른 답을 영수증으로 남기고,
  * 질문을 닫으려면 그 질문 이후 영수증의 **원문을 인용**해야 한다. 「계속해」 를 답으로 인용하는 것까지 기계가
  * 막지는 못하지만, 인용이 bd 코멘트에 남아 감사할 수 있다.
  *
@@ -30,6 +31,35 @@ const squeeze = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
 export function isHumanPrompt(text) {
   const t = squeeze(text);
   return t.length > 0 && !t.startsWith('[세션 인계]') && !t.startsWith('<');
+}
+
+/** 결과 문장의 `"질문"="답"` 짝 — 답 객체가 안 실려 온 AskUserQuestion 결과의 꼴(세션 기록 실측). */
+const ANSWER_PAIR = /"((?:[^"\\]|\\.)*)"="((?:[^"\\]|\\.)*)"/g;
+const unescape = (text) => text.replace(/\\(.)/g, '$1');
+
+const objectOf = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : null);
+
+/**
+ * 이 훅 입력에서 사람의 말. UserPromptSubmit 의 프롬프트와, PostToolUse 로 받은 AskUserQuestion 의 답이다.
+ * 사람이 선택지로 답하면 프롬프트가 아니라 도구 결과로 들어와 UserPromptSubmit 이 뜨지 않는다 — 그 답을
+ * 영수증으로 안 남기면 질문을 닫을 길이 없다. 답 하나(와 사람이 단 메모)가 영수증 하나다 — 그래야 `A`
+ * 같은 짧은 라벨도 전체 일치로 인용된다.
+ *
+ * @param {{tool_name?: string, prompt?: string, tool_input?: object, tool_response?: unknown}} input
+ * @returns {string[]}
+ */
+export function receiptTextsOf(input) {
+  if (input?.tool_name !== 'AskUserQuestion') return isHumanPrompt(input?.prompt) ? [input.prompt] : [];
+  const answers = objectOf(input.tool_response?.answers) ?? objectOf(input.tool_input?.answers);
+  if (!answers) {
+    const said = typeof input.tool_response === 'string' ? input.tool_response : '';
+    return [...said.matchAll(ANSWER_PAIR)].map((m) => unescape(m[2])).filter((t) => squeeze(t));
+  }
+  const notes = objectOf(input.tool_response?.annotations) ?? objectOf(input.tool_input?.annotations) ?? {};
+  return Object.entries(answers).flatMap(([question, answer]) => {
+    const said = Array.isArray(answer) ? answer.join(', ') : String(answer ?? '');
+    return [said, String(notes[question]?.notes ?? '')].filter((t) => squeeze(t));
+  });
 }
 
 /** 영수증을 덧붙인다. */

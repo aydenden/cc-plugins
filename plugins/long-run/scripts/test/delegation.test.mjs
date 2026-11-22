@@ -13,6 +13,7 @@ import {
   MAX_RECEIPTS,
   parseDelegatedAnswer,
   quoteProves,
+  receiptTextsOf,
   renderDelegationReport,
   spokeSince,
 } from '../lib/delegation.mjs';
@@ -39,6 +40,53 @@ test('인계 프롬프트와 시스템 입력은 사람의 말이 아니다', ()
   assert.equal(isHumanPrompt('[세션 인계] 이전 세션이…'), false);
   assert.equal(isHumanPrompt('<task-notification>'), false);
   assert.equal(isHumanPrompt('   '), false);
+});
+
+// --- 영수증의 출처 ---
+
+const ASKED = 'ait-1.30 배너 칸 코드를 어떻게 할까요?';
+
+test('사람이 친 프롬프트는 그대로 영수증이 되고, 프로그램이 넣은 입력은 안 된다', () => {
+  assert.deepEqual(receiptTextsOf({ hook_event_name: 'UserPromptSubmit', prompt: '140 a' }), ['140 a']);
+  assert.deepEqual(receiptTextsOf({ hook_event_name: 'UserPromptSubmit', prompt: '[세션 인계] 이어받아라' }), []);
+});
+
+test('🚨 AskUserQuestion 의 답도 사람의 말이다 — 고른 답 하나가 영수증 하나다(세션 기록 5건이 이것으로 거부됐다)', () => {
+  const input = {
+    hook_event_name: 'PostToolUse',
+    tool_name: 'AskUserQuestion',
+    tool_input: { questions: [{ question: ASKED }] },
+    tool_response: { questions: [{ question: ASKED }], answers: { [ASKED]: '빼고 낸다 (추천)', '두 번째 질문?': 'A' } },
+  };
+  assert.deepEqual(receiptTextsOf(input), ['빼고 낸다 (추천)', 'A']);
+});
+
+test('고른 답에 사람이 단 메모도 영수증이다', () => {
+  const input = {
+    tool_name: 'AskUserQuestion',
+    tool_response: { answers: { [ASKED]: '빼고 낸다 (추천)' }, annotations: { [ASKED]: { notes: '광고는 v2 에서 다시 붙인다' } } },
+  };
+  assert.deepEqual(receiptTextsOf(input), ['빼고 낸다 (추천)', '광고는 v2 에서 다시 붙인다']);
+});
+
+test('답이 tool_input 에 실려 오거나 여러 개 골랐어도 읽는다', () => {
+  assert.deepEqual(receiptTextsOf({ tool_name: 'AskUserQuestion', tool_input: { answers: { [ASKED]: ['가', '나'] } } }), ['가, 나']);
+});
+
+test('답 객체가 없고 결과가 문장이면 "질문"="답" 꼴을 읽는다', () => {
+  const tool_response = `Your questions have been answered: "${ASKED}"="빼고 낸다 (추천)", "다음?"="일단 pc써야해서 조금 있다가 돌리자 ". You can now continue.`;
+  assert.deepEqual(receiptTextsOf({ tool_name: 'AskUserQuestion', tool_response }), ['빼고 낸다 (추천)', '일단 pc써야해서 조금 있다가 돌리자 ']);
+});
+
+test('답이 없는 AskUserQuestion(거절·취소)은 영수증이 없다', () => {
+  assert.deepEqual(receiptTextsOf({ tool_name: 'AskUserQuestion', tool_response: { answers: {} } }), []);
+  assert.deepEqual(receiptTextsOf({ tool_name: 'AskUserQuestion', tool_response: 'The user declined' }), []);
+});
+
+test('AskUserQuestion 의 답은 질문 이후 영수증으로 인용이 증명된다 — 짧은 라벨도 답 전체와 같으면 된다', () => {
+  const texts = receiptTextsOf({ tool_name: 'AskUserQuestion', tool_response: { answers: { [ASKED]: 'A' } } });
+  const list = texts.reduce((acc, text) => addReceipt(acc, T1, text), null);
+  assert.equal(quoteProves(list, 'A', T0), true);
 });
 
 test('영수증은 개수를 넘으면 오래된 것부터 버린다', () => {

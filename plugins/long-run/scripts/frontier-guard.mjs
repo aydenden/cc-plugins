@@ -29,7 +29,7 @@
  *                                                           Stop 판정 한 번(마커 기록 포함). mod 가 부른다
  *   node frontier-guard.mjs --hook                          Stop hook 모드(stdin JSON)
  *   node frontier-guard.mjs --gate                          PreToolUse 모드 — 답을 기다리는 동안 진행을 거부한다
- *   node frontier-guard.mjs --receipt                       UserPromptSubmit 모드 — 사람의 말을 영수증으로 남긴다
+ *   node frontier-guard.mjs --receipt                       UserPromptSubmit·PostToolUse(AskUserQuestion) 모드 — 사람의 말을 영수증으로 남긴다
  *   node frontier-guard.mjs --refresh                       PostToolUse 모드 — 맵을 움직인 명령 뒤 게이트 스냅샷을 고친다
  *
  * 마커는 **worktree 별로** 갈라 두고(`lib/state-root.mjs`), 그 안에서 판정되는 것은 **claim 한 주인
@@ -54,9 +54,9 @@ import {
   delegationEndText,
   delegationSpansOf,
   delegationStartText,
-  isHumanPrompt,
   parseDelegatedAnswer,
   quoteProves,
+  receiptTextsOf,
   renderDelegationReport,
   spokeSince,
 } from './lib/delegation.mjs';
@@ -93,6 +93,7 @@ import {
   waveCarriedBy,
   withAskHint,
 } from './lib/guard-core.mjs';
+import { normalizeBdOutput, schemaGaps, shapeMessage, versionOf } from './lib/bd-shape.mjs';
 import { BD_TIMEOUT_MS, bdReadLine, readMap } from './lib/read-map.mjs';
 import { repoKeyOf, repoRootOf, stateRoot } from './lib/state-root.mjs';
 
@@ -161,14 +162,30 @@ const bdRunner = (cwd) => async (args) => {
       timeout: BD_TIMEOUT_MS,
       maxBuffer: 64 * 1024 * 1024,
     });
-    const rows = JSON.parse(stdout);
+    // 꼴을 못 읽은 출력은 실패다 — 빈 칸을 «없음» 으로 읽으면 판정이 말없이 틀린다(`lib/bd-shape.mjs`).
+    const shaped = normalizeBdOutput(args, JSON.parse(stdout));
+    if (shaped.gaps) throw Object.assign(new Error(`빠진 칸: ${shaped.gaps.join(', ')}`), { shape: true });
     logBdRead({ args, ms: Date.now() - started });
-    return rows;
+    return shaped.rows;
   } catch (error) {
     logBdRead({ args, ms: Date.now() - started, error });
     throw error;
   }
 };
+
+/**
+ * 이 bd 의 schema 를 이 플러그인이 읽는 칸과 대조한다. bd 둘을 부르는 데 0.1초 남짓이라 캐시하지 않는다.
+ *
+ * @returns {Promise<{version: string | null, gaps: string[] | null, schema: object | null}>} `gaps` 가 `null` 이면 대조 못 함
+ */
+async function bdShapeOf(cwd) {
+  const text = async (args) => (await execFileAsync('bd', args, { cwd, encoding: 'utf8', timeout: BD_TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024 })).stdout;
+  const version = versionOf(await text(['version']).catch(() => ''));
+  const schema = await text(['schema'])
+    .then(JSON.parse)
+    .catch(() => null);
+  return { version, gaps: schemaGaps(schema), schema };
+}
 
 const UNREAD_MAP = { frontier: null, epicOpen: true, epicTitle: null, claimed: null, children: null, delegated: null };
 
@@ -359,6 +376,9 @@ if (command === 'claim') {
     console.error('usage: frontier-guard.mjs claim <epic>');
     process.exit(1);
   }
+  // 가드를 걸기 전에 이 bd 를 읽을 수 있는지 본다 — 못 읽는 꼴로 걸면 가드가 말없이 틀리게 민다.
+  const shape = await bdShapeOf(process.cwd());
+  if (shape.gaps?.length) refuse(shapeMessage(shape));
   // 주인 칸을 비우고 새 토큰의 해시만 남긴다 — 앞 주인은 이 순간 풀리고, 토큰 줄이 이 세션의
   // 트랜스크립트에 남아 다음 Stop 에서 이 세션이 주인이 된다(`ownership`).
   const token = newClaimToken();
@@ -375,6 +395,7 @@ if (command === 'claim') {
   });
   console.log(`[frontier-guard] ${argument} 를 미는 세션으로 선언했다. 맵이 닫힐 때까지 이 세션의 멈춤만 막는다 — 같은 worktree 의 다른 세션은 판정되지 않는다.`);
   if (!ticketLimit) console.log('[frontier-guard] 이 맵은 닫은 티켓 수로 인계를 되밀지 않는다 — 컨텍스트 축만 본다.');
+  if (shape.gaps === null) console.log(`[frontier-guard] bd ${shape.version ?? '(버전 모름)'} 의 schema 를 못 읽어 출력 꼴을 미리 대조하지 못했다(bd schema 는 1.3.0~). 읽을 때마다 행 단위로 본다.`);
   console.log(`[frontier-guard] 마커: ${MARKER}`);
   console.log(claimTokenLine(token));
 } else if (command === 'epic') {
@@ -581,8 +602,11 @@ if (command === 'claim') {
     stalled: false,
   });
   const handoff = { closedTickets: handoffClosed, ratio: HANDOFF_RATIO };
+  // `frontier` 가 null 일 때 bd 를 못 읽은 것인지, 읽었지만 꼴이 다른 것인지 여기서 가른다.
+  const { schema, ...bdShape } = await bdShapeOf(mapCwdOf(marker ?? {}, process.cwd()));
+  if (bdShape.gaps?.length) bdShape.message = shapeMessage({ ...bdShape, schema });
   console.log(
-    JSON.stringify({ markerPath, worktree: marker?.worktree ?? repoRootOf(), marker, owner, ...read, ...measured, closedSinceSession, handoff, verdict }, null, 2)
+    JSON.stringify({ markerPath, worktree: marker?.worktree ?? repoRootOf(), marker, owner, ...read, ...measured, closedSinceSession, handoff, bdShape, verdict }, null, 2)
   );
 } else if (command === '--hook') {
   try {
@@ -607,17 +631,20 @@ if (command === 'claim') {
     const input = JSON.parse((await readStdin()) || '{}');
     const cwd = input.cwd || process.cwd();
     const found = locateOwned(cwd, input.session_id, input.transcript_path);
-    if (isHumanPrompt(input.prompt)) {
+    const said = receiptTextsOf(input);
+    if (said.length) {
       const path = receiptsPathFor(found ? mapCwdOf(found.marker, cwd) : cwd);
-      writeMarker(path, addReceipt(readJson(path), new Date().toISOString(), input.prompt));
+      const at = new Date().toISOString();
+      writeMarker(path, said.reduce((list, text) => addReceipt(list, at, text), readJson(path)));
       if (found?.marker.awaiting) writeMarker(found.path, clearAwaiting(found.marker));
     }
     const questions = found?.marker.gate?.questions ?? [];
-    if (questions.length) {
+    if (questions.length && (said.length || input.tool_name !== 'AskUserQuestion')) {
       const route = found.marker.delegation
         ? '위임 중이다 — 헌장으로 판정되는 질문은 `frontier-guard.mjs delegate-answer` 로 답한다.'
-        : '이 말이 그 답이면 원문을 인용해 `frontier-guard.mjs answer <질문> --quote "<원문>"` 로 닫고, 답이 아니면 추측으로 닫지 않는다.';
-      console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: `맵 ${found.marker.epic} 에 답을 기다리는 질문이 있다(${questions.join(', ')}). ${route}` } }));
+        : '이 말이 그 답이면 원문을 인용해 `frontier-guard.mjs answer <질문> --quote "<원문>"` 로 닫고(선택지로 받은 답은 고른 답 그대로), 답이 아니면 추측으로 닫지 않는다.';
+      const hookEventName = input.hook_event_name === 'PostToolUse' ? 'PostToolUse' : 'UserPromptSubmit';
+      console.log(JSON.stringify({ hookSpecificOutput: { hookEventName, additionalContext: `맵 ${found.marker.epic} 에 답을 기다리는 질문이 있다(${questions.join(', ')}). ${route}` } }));
     }
   } catch {
     // 영수증을 못 남겼다고 사람의 입력을 막지 않는다.

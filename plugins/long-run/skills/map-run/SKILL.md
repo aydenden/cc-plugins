@@ -162,7 +162,8 @@ bd dep add {그 답을 기다리는 티켓} {질문id}
 질문을 직접 닫는 `bd close`·`bd human respond`. 밀 수 있는 티켓이 하나도 안 남으면 가드가 되밀어 **기다리는 질문을
 모아 보고하게** 하고(같은 묶음은 한 번만), 그다음 멈춤은 통과시킨다.
 
-**사람이 답하면** 그 말의 원문을 인용해 닫는다. 질문이 닫히면 막힌 티켓이 풀리고, 답은 헌장의 「확정된
+**사람이 답하면** 그 말의 원문을 인용해 닫는다. AskUserQuestion 으로 받은 답이면 고른 선택지 라벨(직접 친 글이면
+그 글)을 그대로 인용한다. 질문이 닫히면 막힌 티켓이 풀리고, 답은 헌장의 「확정된
 결정」에 근거까지 옮긴다. 답이 아닌 말(「계속해」)을 답으로 인용하지 않는다:
 
 ```bash
@@ -339,6 +340,9 @@ bd close {맵id} --reason "{완료 조건 줄마다의 관측. 다음 맵의 출
   (상태줄에는 `밀기 ? · 막힘 ? · 질문 ?`). 실패 사유와 소요 시간은 상태 루트의 `logs/bd-read.log` 에 쌓인다. 이때 게이트는 거부하지 못한다. bd 가 돌아오면 다음 멈춤부터 다시 판정한다. 동시 조회 셋 중
   하나만 시한에 걸려도 `null` 이 되므로, bd 가 그 worktree 에서 단독으로 답하는데 `status` 만 `null` 이면
   환경을 고치기 전에 `status` 를 한 번 더 돌린다 — 첫 회만 `null` 이고 다음 회에 서는 경우가 있다
+- **bd 를 바꾸면 claim 이 먼저 본다.** `claim` 이 설치된 bd 의 `bd schema` 에 가드가 읽는 칸이 없다며 거부하면 그 bd 로는
+  가드가 틀리게 민다 — 메시지의 빠진 칸을 사용자에게 알리고 멈춘다. 손으로 판정을 흉내 내며 밀지 않는다. `bd-read.log` 에
+  `shape` 줄이 쌓이는 것도 같은 고장이다(schema 에는 있지만 그 명령의 출력에 칸이 없다)
 - 🚨 **닫은 티켓 수도 bd 가 답해야 센다.** `status` 의 `closedSinceSession` 이 `null` 이면 가드는 인계
   시점을 되밀지 못하므로 **세션이 스스로 센다** — 되미는 문구도 그렇게 말한다
 - **판정되는 것은 주인 세션뿐이다.** 맵을 미는 세션이 갑자기 안 막히면 `status --session <id>` 의
@@ -356,5 +360,5 @@ bd close {맵id} --reason "{완료 조건 줄마다의 관측. 다음 맵의 출
 ## Improvement rule
 
 맵을 밀며 발견한 마찰은 소유한 곳에 그 자리에서 반영한다 — 헌장 형식은 `assets/map-charter.md`,
-판정 축과 되미는 문구는 `scripts/lib/guard-core.mjs`, 게이트 규칙은 `scripts/lib/gate.mjs`, 위임 규칙은 `scripts/lib/delegation.mjs`, 인계 문서 형식은 `long-run:session-handoff` 의
+판정 축과 되미는 문구는 `scripts/lib/guard-core.mjs`, 게이트 규칙은 `scripts/lib/gate.mjs`, bd 출력 꼴은 `scripts/lib/bd-shape.mjs`, 위임 규칙은 `scripts/lib/delegation.mjs`, 인계 문서 형식은 `long-run:session-handoff` 의
 `references/handoff-doc.md`. 절차 자체가 바뀌면 사용자와 합의한 뒤 이 SKILL.md 를 고친다.

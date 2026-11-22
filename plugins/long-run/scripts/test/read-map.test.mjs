@@ -23,6 +23,11 @@ test('🚨 시한 초과와 다른 실패를 가른다 — 원인을 못 가르�
   assert.equal(bdReadLine({ at: AT, args: ['show', 'm'], ms: 30, error: new SyntaxError('bad json') }), `${AT} error 30ms bd show m — bad json\n`);
 });
 
+test('🚨 bd 가 답했지만 꼴을 못 읽은 것은 shape 로 가른다 — 시한·잠금과 고칠 곳이 다르다', () => {
+  const error = Object.assign(new Error('빠진 칸: dependency.depends_on_id'), { shape: true });
+  assert.equal(bdReadLine({ at: AT, args: ['list'], ms: 40, error }), `${AT} shape 40ms bd list — 빠진 칸: dependency.depends_on_id\n`);
+});
+
 test('실패 사유는 한 줄로, 길이를 잘라 남긴다', () => {
   const line = bdReadLine({ at: AT, args: ['show'], ms: 1, error: { code: 1, stderr: `a\n${'b'.repeat(500)}` } });
   assert.equal(line.split('\n').length, 2);

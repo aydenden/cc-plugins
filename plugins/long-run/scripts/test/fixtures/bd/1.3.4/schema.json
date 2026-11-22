@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "types": {
+    "dependency": {
+      "required": [
+        "issue_id",
+        "depends_on_id",
+        "type",
+        "created_at"
+      ],
+      "properties": {
+        "id": {},
+        "issue_id": {},
+        "depends_on_id": {},
+        "type": {},
+        "created_at": {},
+        "created_by": {},
+        "metadata": {},
+        "thread_id": {}
+      }
+    },
+    "issue": {
+      "required": [
+        "id",
+        "title",
+        "priority",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {},
+        "title": {},
+        "description": {},
+        "design": {},
+        "acceptance_criteria": {},
+        "notes": {},
+        "spec_id": {},
+        "status": {},
+        "priority": {},
+        "issue_type": {},
+        "is_blocked": {},
+        "assignee": {},
+        "owner": {},
+        "estimated_minutes": {},
+        "created_at": {},
+        "created_by": {},
+        "updated_at": {},
+        "started_at": {},
+        "closed_at": {},
+        "close_reason": {},
+        "closed_by_session": {},
+        "lease_expires_at": {},
+        "heartbeat_at": {},
+        "lease_granted_node": {},
+        "due_at": {},
+        "defer_until": {},
+        "external_ref": {},
+        "source_system": {},
+        "metadata": {},
+        "compaction_level": {},
+        "compacted_at": {},
+        "compacted_at_commit": {},
+        "original_size": {},
+        "labels": {},
+        "dependencies": {},
+        "comments": {},
+        "sender": {},
+        "ephemeral": {},
+        "no_history": {},
+        "wisp_type": {},
+        "storage_class": {},
+        "pinned": {},
+        "is_template": {},
+        "bonded_from": {},
+        "await_type": {},
+        "await_id": {},
+        "timeout": {},
+        "waiters": {},
+        "source_formula": {},
+        "source_location": {},
+        "mol_type": {},
+        "work_type": {},
+        "event_kind": {},
+        "actor": {},
+        "target": {},
+        "payload": {}
+      }
+    }
+  }
+}
